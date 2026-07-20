@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLM Survey Desktop CAD Editor</title>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Panel -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-box">
+                    <span class="logo-text">SLM</span>
+                    <span class="logo-badge">CAD v2.0</span>
+                </div>
+                <h1 class="app-title">Survey Desktop Editor</h1>
+            </div>
+
+            <!-- File Import Section -->
+            <div class="sidebar-card upload-section">
+                <h3 class="section-title">Workspace Data</h3>
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-icon">📂</div>
+                    <p class="drop-text">Drag & Drop .json file here</p>
+                    <p class="drop-subtext">or</p>
+                    <label class="btn btn-primary file-label">
+                        Browse File
+                        <input type="file" id="fileInput" accept=".json" style="display: none;">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Survey Info (Loaded dynamically) -->
+            <div class="sidebar-card info-section hidden" id="infoCard">
+                <h3 class="section-title">Survey Details</h3>
+                <div class="info-grid">
+                    <div class="info-row"><span class="lbl">Title:</span><span class="val" id="infoTitle">-</span></div>
+                    <div class="info-row"><span class="lbl">Lineman:</span><span class="val" id="infoLineman">-</span></div>
+                    <div class="info-row"><span class="lbl">Mobile:</span><span class="val" id="infoMobile">-</span></div>
+                    <div class="info-row"><span class="lbl">Status:</span><span class="val" id="infoStatus">-</span></div>
+                </div>
+            </div>
+
+            <!-- CAD Elements Sidebar Stencils List -->
+            <div class="sidebar-card tools-section hidden" id="toolsCard">
+                <h3 class="section-title">CAD Elements & Templates</h3>
+                
+                <div class="select-tool-container" style="margin-bottom: 12px;">
+                    <button class="btn-tool w-100 active" id="toolSelect" style="flex-direction: row; gap: 10px; justify-content: center; padding: 10px;" title="Select and Resize placed items">
+                        <span class="icon" style="font-size: 16px;">🖱️</span> Select & Resize Mode
+                    </button>
+                </div>
+
+                <div class="stencils-grid">
+                    <div class="stencil-item" draggable="true" data-type="road" title="Drag irregular winding road onto canvas or map">
+                        <span class="icon">🛣️</span>
+                        <div class="meta">
+                            <span class="name">Irregular Road</span>
+                            <span class="desc">Asphalt winding road</span>
+                        </div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="river" title="Drag wavy river path onto canvas or map">
+                        <span class="icon">〰️</span>
+                        <div class="meta">
+                            <span class="name">Winding River</span>
+                            <span class="desc">Soft-blue winding river</span>
+                        </div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="pond" title="Drag irregular pond with water onto canvas or map">
+                        <span class="icon">💧</span>
+                        <div class="meta">
+                            <span class="name">Irregular Pond</span>
+                            <span class="desc">Water pond shape</span>
+                        </div>
+                    </div>
+                    
+                    <div class="divider-sm"></div>
+                    
+                    <div class="stencil-item" draggable="true" data-type="tree" title="Drag Tree landmark onto canvas or map">
+                        <span class="icon">🌲</span>
+                        <div class="meta"><span class="name">Tree</span><span class="desc">Point Landmark</span></div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="temple" title="Drag Temple landmark onto canvas or map">
+                        <span class="icon">🛕</span>
+                        <div class="meta"><span class="name">Temple</span><span class="desc">Point Landmark</span></div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="mosque" title="Drag Mosque landmark onto canvas or map">
+                        <span class="icon">🕌</span>
+                        <div class="meta"><span class="name">Mosque</span><span class="desc">Point Landmark</span></div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="school" title="Drag School landmark onto canvas or map">
+                        <span class="icon">🏫</span>
+                        <div class="meta"><span class="name">School</span><span class="desc">Point Landmark</span></div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="house" title="Drag Household landmark onto canvas or map">
+                        <span class="icon">🏠</span>
+                        <div class="meta"><span class="name">Household</span><span class="desc">Point Landmark</span></div>
+                    </div>
+                    <div class="stencil-item" draggable="true" data-type="text" title="Drag Text Label template onto canvas or map">
+                        <span class="icon">✏️</span>
+                        <div class="meta"><span class="name">Text Label</span><span class="desc">Custom annotation text</span></div>
+                    </div>
+                </div>
+
+                <div class="annotation-help" id="annotationHelp" style="margin-top: 12px;">
+                    Drag elements onto map/grid canvas, or click them to place. Use "Select & Resize" mode to move, rotate, and resize items.
+                </div>
+            </div>
+
+            <!-- Active Item Selection Card -->
+            <div class="sidebar-card selection-section hidden" id="selectionCard">
+                <h3 class="section-title" style="color: var(--primary-color);">✏️ Edit Selection</h3>
+                <div class="form-group-sm">
+                    <label class="form-lbl-sm" id="selectionTypeLabel">Selected Item</label>
+                    <input type="text" class="form-input" id="selectionLabel" placeholder="Item Name/Label">
+                </div>
+                
+                <!-- Dynamic slider for resizing width, size, radius -->
+                <div class="form-group-sm" style="margin-top: 10px;" id="selectionSizeGroup">
+                    <label class="form-lbl-sm" id="selectionSizeLabel">Size / Width</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="range" style="flex: 1;" id="selectionSizeSlider" min="5" max="150" step="1">
+                        <span id="selectionSizeValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">24m</span>
+                    </div>
+                </div>
+
+                <!-- Rotation slider for elements alignment -->
+                <div class="form-group-sm" style="margin-top: 10px;" id="selectionRotateGroup">
+                    <label class="form-lbl-sm">Rotation Angle</label>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <input type="range" style="flex: 1;" id="selectionRotateSlider" min="0" max="360" step="5">
+                        <span id="selectionRotateValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">0°</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 8px; margin-top: 12px;">
+                    <button class="btn btn-danger w-100" style="padding: 6px 12px; font-size: 11px;" id="btnDeleteSelection">🗑️ Delete</button>
+                    <button class="btn btn-tonal w-100" style="padding: 6px 12px; font-size: 11px; color: var(--text-on-dark);" id="btnDeselect">✕ Close</button>
+                </div>
+            </div>
+
+            <!-- Actions Panel -->
+            <div class="sidebar-card actions-section hidden" id="actionsCard">
+                <h3 class="section-title">Export / Save</h3>
+                <button class="btn btn-tonal w-100" id="btnSaveJson">
+                    <span>💾</span> Save Workspace (.json)
+                </button>
+                <button class="btn btn-success w-100 mt-2" id="btnPrintPdf">
+                    <span>🖨️</span> Print CAD PDF
+                </button>
+            </div>
+            
+            <div class="sidebar-footer">
+                SLM ToolBox Utility CAD Engine
+            </div>
+        </aside>
+
+        <!-- Main Workspace Area -->
+        <main class="main-content">
+            <!-- Header Toolbar -->
+            <header class="workspace-header">
+                <div class="view-toggle-container">
+                    <button class="btn-toggle active" id="btnViewMap">🗺️ Geographical Map</button>
+                    <button class="btn-toggle" id="btnViewGrid">📏 Schematic Grid Editor</button>
+                </div>
+                <div class="stats-chip hidden" id="statsChip">
+                    <span id="statPoles">0 Poles</span> · <span id="statSpans">0 Spans</span> · <span id="statLength">0.0 m</span>
+                </div>
+            </header>
+
+            <!-- Viewer Containers -->
+            <div class="viewer-viewport">
+                <!-- Leaflet Map View -->
+                <div id="mapView" class="view-pane active"></div>
+
+                <!-- Schematic Grid Canvas View -->
+                <div id="canvasView" class="view-pane">
+                    <div class="canvas-wrapper">
+                        <!-- Floating controls inside the canvas -->
+                        <div class="canvas-actions-bar">
+                            <button class="btn-circle-action" id="btnZoomIn" title="Zoom In">+</button>
+                            <button class="btn-circle-action" id="btnZoomOut" title="Zoom Out">-</button>
+                            <button class="btn-circle-action" id="btnResetView" title="Reset Layout">🔄</button>
+                            <span class="divider"></span>
+                            <button class="btn-circle-action danger" id="btnClearAnnotations" title="Wipe custom markings">🗑️ Clear Annotations</button>
+                        </div>
+                        <canvas id="sldCanvas" width="1600" height="1100"></canvas>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Edit Attribute Modal Dialog -->
+    <div class="modal-overlay hidden" id="editModal">
+        <div class="modal-card">
+            <h3 class="modal-title">Edit Asset Attributes</h3>
+            <div class="form-group">
+                <label class="form-lbl">Pole / Asset Name</label>
+                <input type="text" class="form-input" id="editLabel">
+            </div>
+            <div class="form-group">
+                <label class="form-lbl">Structure Configuration</label>
+                <select class="form-input" id="editStructure">
+                    <option value="1P">1P (Single Phase)</option>
+                    <option value="2P">2P (Two Phase)</option>
+                    <option value="3P">3P (Three Phase)</option>
+                    <option value="4P">4P (H-Pole/Four Pole)</option>
+                    <option value="DTR">DTR (Transformer Pole)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-lbl">Pole Material</label>
+                <select class="form-input" id="editMaterial">
+                    <option value="PCC-9M">PCC-9M</option>
+                    <option value="PCC-8M">PCC-8M</option>
+                    <option value="SPUN-POLE">SPUN-POLE</option>
+                    <option value="W-BEAM">W-BEAM</option>
+                    <option value="RAIL-POLE">RAIL-POLE</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-lbl">Lineman Remarks</label>
+                <textarea class="form-input text-area" id="editRemarks" rows="2"></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-text" id="modalCancel">Cancel</button>
+                <button class="btn btn-primary" id="modalSave">Save Attributes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Text Dialog -->
+    <div class="modal-overlay hidden" id="textModal">
+        <div class="modal-card">
+            <h3 class="modal-title">Add Text Label</h3>
+            <div class="form-group">
+                <label class="form-lbl">Label Text</label>
+                <input type="text" class="form-input" id="textInput" placeholder="e.g. Narmada River, NH-12, etc.">
+            </div>
+            <div class="form-group">
+                <label class="form-lbl">Text Size</label>
+                <select class="form-input" id="textSizeInput">
+                    <option value="12">Small (12px)</option>
+                    <option value="15" selected>Medium (15px)</option>
+                    <option value="18">Large (18px)</option>
+                    <option value="24">Heading (24px)</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-text" id="textModalCancel">Cancel</button>
+                <button class="btn btn-primary" id="textModalConfirm">Place Label</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

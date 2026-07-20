@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/surveyMapFragment">
+
+    <fragment
+        android:id="@+id/surveyMapFragment"
+        android:name="com.blackgrapes.slmtoolbox.ui.survey.SurveyMapFragment"
+        android:label="@string/survey_title"
+        tools:layout="@layout/fragment_survey_map">
+        <action
+            android:id="@+id/action_survey_to_sld_preview"
+            app:destination="@id/sldPreviewFragment" />
+        <action
+            android:id="@+id/action_survey_to_my_sld"
+            app:destination="@id/mySldFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/sldPreviewFragment"
+        android:name="com.blackgrapes.slmtoolbox.ui.preview.SldPreviewFragment"
+        android:label="@string/sld_preview"
+        tools:layout="@layout/fragment_sld_preview">
+        <argument
+            android:name="surveyId"
+            app:argType="long" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/mySldFragment"
+        android:name="com.blackgrapes.slmtoolbox.ui.preview.MySldFragment"
+        android:label="@string/my_sld"
+        tools:layout="@layout/fragment_my_sld" />
+</navigation>

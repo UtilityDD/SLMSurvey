@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="36"
+    android:viewportHeight="36">
+    <!-- Center Dot -->
+    <path
+        android:fillColor="@color/accent"
+        android:pathData="M18,17.25A0.75,0.75 0,1 1,17.25 18,0.75 0.75,0 0,1 18,17.25Z"/>
+    <!-- Reticle Circle -->
+    <path
+        android:strokeColor="@color/accent"
+        android:strokeWidth="1.5"
+        android:pathData="M18,11 A7,7 0,1 0,25 18,7 7,0 0,0 18,11 Z"/>
+    <!-- Crosshairs -->
+    <path
+        android:strokeColor="@color/accent"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M18,5 L18,10 M18,26 L18,31 M5,18 L10,18 M26,18 L31,18"/>
+</vector>
