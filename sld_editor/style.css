@@ -37,7 +37,7 @@ body {
 /* App Layout Grid */
 .app-container {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 260px 1fr;
     height: 100vh;
     width: 100vw;
 }
@@ -46,10 +46,10 @@ body {
 .sidebar {
     background-color: var(--sidebar-bg);
     color: var(--text-on-dark);
-    padding: 24px;
+    padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 14px;
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
@@ -278,15 +278,26 @@ body {
     font-size: 18px;
 }
 
-/* Stencils Drawer Grid */
+.select-tool-container {
+    margin-bottom: 10px;
+}
+
+.btn-tool.icon-only {
+    width: 100%;
+    flex-direction: row;
+    justify-content: center;
+    padding: 8px;
+}
+
+/* Compact icon-only stencil grid */
 .stencils-grid {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
-    margin-top: 10px;
-    max-height: 480px;
-    overflow-y: auto;
-    padding-right: 4px;
+    margin-top: 4px;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
 }
 
 /* Custom scrollbar for stencils drawer */
@@ -302,20 +313,22 @@ body {
 }
 
 .stencil-item {
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 10px;
-    padding: 8px 12px;
+    padding: 10px 0;
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
+    gap: 0;
     cursor: grab;
     user-select: none;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    min-height: 48px;
 }
 
 .stencil-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.08);
     border-color: var(--primary-color);
     transform: translateY(-1px);
 }
@@ -324,35 +337,27 @@ body {
     cursor: grabbing;
 }
 
+.stencil-item.selected {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.35);
+}
+
 .stencil-item .icon {
     font-size: 22px;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 28px;
+    min-width: auto;
+    line-height: 1;
 }
 
 .stencil-item .meta {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.stencil-item .name {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-on-dark);
-}
-
-.stencil-item .desc {
-    font-size: 9px;
-    color: var(--text-muted-dark);
+    display: none;
 }
 
 .divider-sm {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.08);
-    margin: 4px 0;
+    display: none;
 }
 
 .form-group-sm {
@@ -377,6 +382,7 @@ body {
     padding: 6px;
     border-radius: 6px;
     line-height: 14px;
+    margin-top: 10px;
 }
 
 /* Sidebar Footer */
@@ -708,9 +714,108 @@ body {
 }
 
 /* Leaflet Custom Marker Icons styling */
-.custom-map-icon {
-    background: transparent;
-    border: none;
+.custom-map-icon,
+.custom-road-icon,
+.custom-river-icon,
+.custom-pond-icon,
+.custom-landmark-icon,
+.custom-text-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.map-shape-wrap {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    will-change: transform;
+}
+
+.map-shape-root {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.map-shape-img {
+    width: 100%;
+    height: 100%;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    pointer-events: none;
+}
+
+/* Shared name label — always horizontal, centered below the symbol */
+.map-item-label {
+    position: absolute;
+    top: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255, 255, 255, 0.96);
+    padding: 2px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-family: var(--font-body);
+    font-size: 9px;
+    font-weight: 700;
+    color: #334155;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    pointer-events: none;
+    line-height: 1.2;
+    z-index: 5;
+}
+
+/* Click selection ring on map items */
+.leaflet-marker-icon.map-item-selected {
+    z-index: 1000 !important;
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.55));
+}
+
+.leaflet-marker-icon.map-item-selected .map-shape-img,
+.leaflet-marker-icon.map-item-selected .map-pole-icon {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+.leaflet-marker-icon.map-item-selected .map-pole-icon {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+.leaflet-marker-icon.map-item-selected .emoji,
+.leaflet-marker-icon.map-item-selected .map-text-annotation {
+    outline: 2px solid #3b82f6;
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+/* Smooth geographic resize while zooming / using size slider */
+.leaflet-marker-icon.map-shape-marker,
+.leaflet-marker-icon.custom-road-icon,
+.leaflet-marker-icon.custom-river-icon,
+.leaflet-marker-icon.custom-pond-icon {
+    transition: width 0.1s ease-out, height 0.1s ease-out, margin 0.1s ease-out;
+}
+
+/* During map zoom animation, size must track instantly with geographic scale */
+.leaflet-zoom-anim .leaflet-marker-icon.map-shape-marker,
+.leaflet-zoom-anim .leaflet-marker-icon.custom-road-icon,
+.leaflet-zoom-anim .leaflet-marker-icon.custom-river-icon,
+.leaflet-zoom-anim .leaflet-marker-icon.custom-pond-icon {
+    transition: none !important;
+}
+
+.map-shape-label {
+    display: none;
 }
 
 .map-pole-icon {
@@ -746,35 +851,36 @@ body {
     color: var(--primary-color);
 }
 
-/* Landmark and Text Annotations on Leaflet Map */
-.custom-landmark-icon, .custom-text-icon {
-    background: transparent;
-    border: none;
-}
-
-.map-landmark-icon {
+.map-landmark-root {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
 }
 
-.map-landmark-icon .emoji {
+.map-landmark-root .emoji {
     font-size: 22px;
+    line-height: 1;
+}
+
+.map-landmark-root .map-item-label {
+    position: static;
+    transform: none;
+    margin-top: 2px;
 }
 
 .map-landmark-icon .lbl {
-    font-family: var(--font-body);
-    font-size: 9px;
-    font-weight: bold;
-    color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid var(--border-color);
-    padding: 1px 4px;
-    border-radius: 4px;
-    margin-top: 2px;
-    white-space: nowrap;
-    box-shadow: var(--shadow-sm);
+    display: none;
+}
+
+.map-text-root {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
 }
 
 .map-text-annotation {

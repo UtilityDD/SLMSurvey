@@ -3,19 +3,289 @@
  * Core Application Logic
  */
 
-// Custom Irregular Shape SVG Assets
-const SVG_ROAD = `data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10,35 C30,10 70,80 90,45" fill="none" stroke="%23cbd5e1" stroke-width="24" stroke-linecap="round"/><path d="M10,35 C30,10 70,80 90,45" fill="none" stroke="%2364748b" stroke-width="20" stroke-linecap="round"/><path d="M10,35 C30,10 70,80 90,45" fill="none" stroke="white" stroke-width="1.5" stroke-dasharray="6,6" stroke-linecap="round"/></svg>`;
-const SVG_RIVER = `data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><path d="M10,80 C30,40 50,60 90,20" fill="none" stroke="%2393c5fd" stroke-width="20" stroke-linecap="round"/><path d="M10,80 C30,40 50,60 90,20" fill="none" stroke="%2360a5fa" stroke-width="16" stroke-linecap="round"/></svg>`;
-const SVG_POND = `data:image/svg+xml;utf8,<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="g" cx="50%25" cy="50%25" r="50%25"><stop offset="0%25" stop-color="%23bae6fd"/><stop offset="100%25" stop-color="%2393c5fd"/></radialGradient></defs><path d="M15,40 C25,15 50,20 85,35 C95,65 70,80 30,85 C5,65 15,40 Z" fill="url(%23g)" stroke="%233b82f6" stroke-width="2.5"/></svg>`;
+// Google Maps–style CAD symbols (soft road / water colors)
+function svgDataUrl(svgMarkup) {
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgMarkup);
+}
+
+// Pale asphalt road with soft curb + dashed center (Maps road look)
+const SVG_ROAD = svgDataUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+        <path d="M8,62 C28,28 42,88 60,58 C78,28 92,78 112,52" fill="none" stroke="#c8c4bc" stroke-width="22" stroke-linecap="round"/>
+        <path d="M8,62 C28,28 42,88 60,58 C78,28 92,78 112,52" fill="none" stroke="#f5f3ef" stroke-width="16" stroke-linecap="round"/>
+        <path d="M8,62 C28,28 42,88 60,58 C78,28 92,78 112,52" fill="none" stroke="#ffffff" stroke-width="1.4" stroke-dasharray="5 7" stroke-linecap="round" opacity="0.9"/>
+    </svg>`
+);
+// Soft Maps water ribbon (muted cyan, no neon)
+const SVG_RIVER = svgDataUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+        <path d="M6,95 C22,70 30,78 48,55 C66,32 78,42 96,22 C104,14 110,18 114,28"
+              fill="none" stroke="#7eb6d4" stroke-width="18" stroke-linecap="round" opacity="0.45"/>
+        <path d="M6,95 C22,70 30,78 48,55 C66,32 78,42 96,22 C104,14 110,18 114,28"
+              fill="none" stroke="#aadaff" stroke-width="12" stroke-linecap="round"/>
+        <path d="M6,95 C22,70 30,78 48,55 C66,32 78,42 96,22 C104,14 110,18 114,28"
+              fill="none" stroke="#c5e7f8" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+    </svg>`
+);
+// Soft Maps lake / pond (flat #aadaff water fill)
+const SVG_POND = svgDataUrl(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+        <path d="M22,58 C26,28 48,22 68,30 C92,40 102,52 98,72 C94,94 72,102 48,96 C24,90 18,78 22,58 Z"
+              fill="#aadaff" stroke="#8ec4e0" stroke-width="1.5"/>
+        <path d="M38,52 C44,40 58,38 70,44" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.35"/>
+    </svg>`
+);
 
 const imgCache = {};
 function initImageCache() {
-    imgCache.road = new Image();
-    imgCache.road.src = SVG_ROAD;
-    imgCache.river = new Image();
-    imgCache.river.src = SVG_RIVER;
-    imgCache.pond = new Image();
-    imgCache.pond.src = SVG_POND;
+    const onReady = () => {
+        if (surveyData) drawCanvas();
+    };
+    ['road', 'river', 'pond'].forEach((key) => {
+        const img = new Image();
+        img.onload = onReady;
+        img.src = key === 'road' ? SVG_ROAD : key === 'river' ? SVG_RIVER : SVG_POND;
+        imgCache[key] = img;
+    });
+}
+
+/** Canvas fallback matching Google Maps soft road / water look. */
+function drawShapeSymbol(type, w, h) {
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (type === 'road') {
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.42, h * 0.05);
+        ctx.bezierCurveTo(-w * 0.2, -h * 0.28, -w * 0.05, h * 0.28, w * 0.05, -h * 0.02);
+        ctx.bezierCurveTo(w * 0.2, -h * 0.32, w * 0.28, h * 0.22, w * 0.42, -h * 0.05);
+        ctx.lineWidth = Math.max(4, Math.min(w, h) * 0.22);
+        ctx.strokeStyle = '#c8c4bc';
+        ctx.stroke();
+        ctx.lineWidth = Math.max(3, Math.min(w, h) * 0.16);
+        ctx.strokeStyle = '#f5f3ef';
+        ctx.stroke();
+        ctx.setLineDash([5, 7]);
+        ctx.lineWidth = Math.max(1, Math.min(w, h) * 0.02);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.stroke();
+        ctx.setLineDash([]);
+    } else if (type === 'river') {
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.42, h * 0.35);
+        ctx.bezierCurveTo(-w * 0.2, h * 0.05, -w * 0.05, h * 0.15, w * 0.05, -h * 0.05);
+        ctx.bezierCurveTo(w * 0.2, -h * 0.28, w * 0.28, -h * 0.15, w * 0.42, -h * 0.32);
+        ctx.lineWidth = Math.max(5, Math.min(w, h) * 0.2);
+        ctx.strokeStyle = 'rgba(126,182,212,0.45)';
+        ctx.stroke();
+        ctx.lineWidth = Math.max(3, Math.min(w, h) * 0.13);
+        ctx.strokeStyle = '#aadaff';
+        ctx.stroke();
+        ctx.lineWidth = Math.max(1.5, Math.min(w, h) * 0.05);
+        ctx.strokeStyle = 'rgba(197,231,248,0.75)';
+        ctx.stroke();
+    } else if (type === 'pond') {
+        const r = Math.min(w, h) / 2;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.65, -r * 0.05);
+        ctx.bezierCurveTo(-r * 0.55, -r * 0.55, -r * 0.1, -r * 0.7, r * 0.2, -r * 0.5);
+        ctx.bezierCurveTo(r * 0.65, -r * 0.28, r * 0.8, -r * 0.05, r * 0.7, r * 0.3);
+        ctx.bezierCurveTo(r * 0.55, r * 0.7, r * 0.1, r * 0.8, -r * 0.25, r * 0.65);
+        ctx.bezierCurveTo(-r * 0.7, r * 0.5, -r * 0.75, r * 0.2, -r * 0.65, -r * 0.05);
+        ctx.closePath();
+        ctx.fillStyle = '#aadaff';
+        ctx.fill();
+        ctx.strokeStyle = '#8ec4e0';
+        ctx.lineWidth = Math.max(1, r * 0.04);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+/** True geographic scale: meters → map pixels at current zoom (scales with zoom). */
+function mapDisplayPixels(meters, zoom) {
+    const z = zoom != null ? zoom : (map ? map.getZoom() : 15);
+    return Math.max(6, metersToPixels(meters, z));
+}
+
+function shapeSvgForKind(kind) {
+    if (kind === 'road') return SVG_ROAD;
+    if (kind === 'river') return SVG_RIVER;
+    return SVG_POND;
+}
+
+function mapShapeIconHtml(svgUrl, angle, label) {
+    const labelHtml = label
+        ? `<span class="map-item-label">${escapeHtml(label)}</span>`
+        : '';
+    return `<div class="map-shape-root">
+        <div class="map-shape-wrap" style="transform: rotate(${angle || 0}deg);">
+            <div class="map-shape-img" style="background-image:url('${svgUrl}');"></div>
+        </div>
+        ${labelHtml}
+    </div>`;
+}
+
+function mapLandmarkIconHtml(emoji, size, label) {
+    const labelHtml = label
+        ? `<span class="map-item-label">${escapeHtml(label)}</span>`
+        : '';
+    return `<div class="map-landmark-root">
+        <span class="emoji" style="font-size:${size}px">${emoji}</span>
+        ${labelHtml}
+    </div>`;
+}
+
+function mapTextIconHtml(text, size) {
+    return `<div class="map-text-root">
+        <span class="map-text-annotation" style="font-size:${size || 15}px">${escapeHtml(text)}</span>
+    </div>`;
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+/** Bottom offset for a label below a rotated rectangle (meters → canvas px). */
+function shapeLabelOffset(w, h, angleDeg) {
+    const rad = ((angleDeg || 0) * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad));
+    const sin = Math.abs(Math.sin(rad));
+    return (w * sin + h * cos) / 2 + 6;
+}
+
+/** Draw a centered pill label just below an item on the schematic canvas. */
+function drawAnnotationLabel(ctx, x, y, text, offsetY) {
+    if (!text || !String(text).trim()) return;
+    const label = String(text).trim();
+    ctx.save();
+    ctx.font = 'bold 10px Inter';
+    const tw = ctx.measureText(label).width;
+    const padX = 6;
+    const padY = 3;
+    const boxW = tw + padX * 2;
+    const boxH = 14;
+    const boxX = x - boxW / 2;
+    const boxY = y + offsetY;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.rect(boxX, boxY, boxW, boxH);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#334155';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x, boxY + boxH / 2);
+    ctx.restore();
+}
+
+/** Track every selectable map marker for highlight updates. */
+let selectableMarkerRefs = [];
+
+function registerSelectableMarker(marker, type, data) {
+    selectableMarkerRefs.push({ marker, type, data });
+}
+
+function updateMapSelectionHighlights() {
+    selectableMarkerRefs.forEach((ref) => {
+        const el = ref.marker.getElement();
+        if (!el) return;
+        const selected = activeSelection
+            && activeSelection.type === ref.type
+            && activeSelection.data === ref.data;
+        el.classList.toggle('map-item-selected', !!selected);
+    });
+}
+
+/** Shape markers tracked so zoom/resize can update size without full map rebuild. */
+let shapeMarkerRefs = [];
+let shapeZoomRaf = null;
+
+function shapePixelSize(kind, data, zoom) {
+    if (kind === 'pond') {
+        const d = mapDisplayPixels((data.radius || 25) * 2, zoom);
+        return [d, d];
+    }
+    const w = mapDisplayPixels(data.width || 60, zoom);
+    const h = mapDisplayPixels(data.height || 60, zoom);
+    return [w, h];
+}
+
+function buildShapeDivIcon(kind, data, zoom) {
+    const [wPx, hPx] = shapePixelSize(kind, data, zoom);
+    const angle = kind === 'pond' ? 0 : (data.angle || 0);
+    return L.divIcon({
+        html: mapShapeIconHtml(shapeSvgForKind(kind), angle, data.label),
+        className: `custom-${kind}-icon map-shape-marker`,
+        iconSize: [wPx, hPx],
+        iconAnchor: [wPx / 2, hPx / 2]
+    });
+}
+
+function refreshShapeMarkerIcons() {
+    if (!map || !shapeMarkerRefs.length) return;
+    const zoom = map.getZoom();
+    shapeMarkerRefs.forEach((ref) => {
+        const [wPx, hPx] = shapePixelSize(ref.kind, ref.data, zoom);
+        const el = ref.marker.getElement();
+        if (el) {
+            el.style.width = `${wPx}px`;
+            el.style.height = `${hPx}px`;
+            el.style.marginLeft = `${-wPx / 2}px`;
+            el.style.marginTop = `${-hPx / 2}px`;
+            const wrap = el.querySelector('.map-shape-wrap');
+            if (wrap) {
+                const angle = ref.kind === 'pond' ? 0 : (ref.data.angle || 0);
+                wrap.style.transform = `rotate(${angle}deg)`;
+            }
+            const labelEl = el.querySelector('.map-item-label');
+            if (ref.data.label) {
+                if (labelEl) {
+                    labelEl.textContent = ref.data.label;
+                } else {
+                    const root = el.querySelector('.map-shape-root');
+                    if (root) {
+                        const span = document.createElement('span');
+                        span.className = 'map-item-label';
+                        span.textContent = ref.data.label;
+                        root.appendChild(span);
+                    }
+                }
+            } else if (labelEl) {
+                labelEl.remove();
+            }
+            if (ref.marker.options.icon && ref.marker.options.icon.options) {
+                ref.marker.options.icon.options.iconSize = [wPx, hPx];
+                ref.marker.options.icon.options.iconAnchor = [wPx / 2, hPx / 2];
+            }
+        } else {
+            ref.marker.setIcon(buildShapeDivIcon(ref.kind, ref.data, zoom));
+        }
+    });
+}
+
+function scheduleShapeZoomRefresh() {
+    if (shapeZoomRaf) cancelAnimationFrame(shapeZoomRaf);
+    shapeZoomRaf = requestAnimationFrame(() => {
+        shapeZoomRaf = null;
+        refreshShapeMarkerIcons();
+    });
+}
+
+function bindMapZoomSync() {
+    if (!map || map._shapeZoomBound) return;
+    map._shapeZoomBound = true;
+    // Continuous zoom: keep geographic size in sync while pinching / scrolling
+    map.on('zoom', scheduleShapeZoomRefresh);
+    map.on('zoomend', refreshShapeMarkerIcons);
 }
 
 // Application State
@@ -321,6 +591,8 @@ function formatDistance(metres, unit, decimals) {
     }
 
     return `${converted.toFixed(decimals)} ${unitStr}`;
+}
+
 /* ==========================================================================
    Map View Rendering (Leaflet)
    ========================================================================== */
@@ -337,6 +609,7 @@ function renderMap() {
 
         // Bind Leaflet Map Clicks
         map.on('click', onMapClick);
+        bindMapZoomSync();
     }
 
     // Clear old map layer markers
@@ -344,6 +617,8 @@ function renderMap() {
     mapPolylines.forEach(p => map.removeLayer(p));
     mapMarkers = [];
     mapPolylines = [];
+    shapeMarkerRefs = [];
+    selectableMarkerRefs = [];
 
     if (nodes.length === 0) return;
 
@@ -374,6 +649,11 @@ function renderMap() {
             openEditModal(node);
         });
 
+        marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            selectAnnotation('node', node);
+        });
+
         // Save position updates on drag finish
         marker.on('dragend', (e) => {
             const newPos = e.target.getLatLng();
@@ -395,6 +675,7 @@ function renderMap() {
         `);
 
         mapMarkers.push(marker);
+        registerSelectableMarker(marker, 'node', node);
     });
 
     // Draw connection polylines
@@ -429,20 +710,10 @@ function renderMap() {
     });
 
     // Draw irregular Roads on geographical map (using rotated scaled SVG)
+    const zoom = map.getZoom();
     annotations.roads.forEach(road => {
         const p = [road.lat, road.lng];
-        const wPx = metersToPixels(road.width || 40, map.getZoom());
-        const hPx = metersToPixels(road.height || 40, map.getZoom());
-
-        const icon = L.divIcon({
-            html: `<div style="width: 100%; height: 100%; transform: rotate(${road.angle || 0}deg); display: flex; align-items: center; justify-content: center; position: relative;">
-                    <img src="${SVG_ROAD}" style="width: 100%; height: 100%; object-fit: fill;" />
-                    ${road.label ? `<span class="lbl" style="position: absolute; bottom: -16px; background: rgba(255,255,255,0.95); padding: 1px 5px; border: 1px solid %23cbd5e1; border-radius: 4px; font-size: 9px; font-weight: bold; color: %23334155; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">${road.label}</span>` : ''}
-                  </div>`,
-            className: 'custom-road-icon',
-            iconSize: [wPx, hPx],
-            iconAnchor: [wPx / 2, hPx / 2]
-        });
+        const icon = buildShapeDivIcon('road', road, zoom);
 
         const marker = L.marker(p, {
             icon: icon,
@@ -457,10 +728,8 @@ function renderMap() {
         });
 
         marker.on('click', (e) => {
-            if (selectedTool === 'select') {
-                L.DomEvent.stopPropagation(e);
-                selectAnnotation('road', road);
-            }
+            L.DomEvent.stopPropagation(e);
+            selectAnnotation('road', road);
         });
 
         marker.on('dblclick', (e) => {
@@ -475,23 +744,14 @@ function renderMap() {
         });
 
         mapMarkers.push(marker);
+        shapeMarkerRefs.push({ marker, kind: 'road', data: road });
+        registerSelectableMarker(marker, 'road', road);
     });
 
     // Draw winding Rivers on geographical map (using rotated scaled SVG)
     annotations.rivers.forEach(river => {
         const p = [river.lat, river.lng];
-        const wPx = metersToPixels(river.width || 40, map.getZoom());
-        const hPx = metersToPixels(river.height || 40, map.getZoom());
-
-        const icon = L.divIcon({
-            html: `<div style="width: 100%; height: 100%; transform: rotate(${river.angle || 0}deg); display: flex; align-items: center; justify-content: center; position: relative;">
-                    <img src="${SVG_RIVER}" style="width: 100%; height: 100%; object-fit: fill;" />
-                    ${river.label ? `<span class="lbl" style="position: absolute; bottom: -16px; background: rgba(255,255,255,0.95); padding: 1px 5px; border: 1px solid %23cbd5e1; border-radius: 4px; font-size: 9px; font-weight: bold; color: %23334155; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">${river.label}</span>` : ''}
-                  </div>`,
-            className: 'custom-river-icon',
-            iconSize: [wPx, hPx],
-            iconAnchor: [wPx / 2, hPx / 2]
-        });
+        const icon = buildShapeDivIcon('river', river, zoom);
 
         const marker = L.marker(p, {
             icon: icon,
@@ -506,10 +766,8 @@ function renderMap() {
         });
 
         marker.on('click', (e) => {
-            if (selectedTool === 'select') {
-                L.DomEvent.stopPropagation(e);
-                selectAnnotation('river', river);
-            }
+            L.DomEvent.stopPropagation(e);
+            selectAnnotation('river', river);
         });
 
         marker.on('dblclick', (e) => {
@@ -524,24 +782,15 @@ function renderMap() {
         });
 
         mapMarkers.push(marker);
+        shapeMarkerRefs.push({ marker, kind: 'river', data: river });
+        registerSelectableMarker(marker, 'river', river);
     });
 
     // Draw point Landmarks & irregular Ponds on geographical map
     annotations.landmarks.forEach(lan => {
         let marker = null;
         if (lan.type === 'pond') {
-            const wPx = metersToPixels((lan.radius || 20) * 2, map.getZoom());
-            const hPx = metersToPixels((lan.radius || 20) * 2, map.getZoom());
-
-            const icon = L.divIcon({
-                html: `<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative;">
-                        <img src="${SVG_POND}" style="width: 100%; height: 100%; object-fit: fill;" />
-                        ${lan.label ? `<span class="lbl" style="position: absolute; bottom: -16px; background: rgba(255,255,255,0.95); padding: 1px 5px; border: 1px solid %23cbd5e1; border-radius: 4px; font-size: 9px; font-weight: bold; color: %23334155; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">${lan.label}</span>` : ''}
-                      </div>`,
-                className: 'custom-pond-icon',
-                iconSize: [wPx, hPx],
-                iconAnchor: [wPx / 2, hPx / 2]
-            });
+            const icon = buildShapeDivIcon('pond', lan, zoom);
 
             marker = L.marker([lan.lat, lan.lng], {
                 icon: icon,
@@ -549,11 +798,11 @@ function renderMap() {
             }).addTo(map);
 
             marker.on('click', (e) => {
-                if (selectedTool === 'select') {
-                    L.DomEvent.stopPropagation(e);
-                    selectAnnotation('landmark', lan);
-                }
+                L.DomEvent.stopPropagation(e);
+                selectAnnotation('landmark', lan);
             });
+            shapeMarkerRefs.push({ marker, kind: 'pond', data: lan });
+            registerSelectableMarker(marker, 'landmark', lan);
         } else {
             let emoji = '📍';
             switch (lan.type) {
@@ -566,13 +815,10 @@ function renderMap() {
 
             const size = lan.size || 24;
             const icon = L.divIcon({
-                html: `<div class="map-landmark-icon" style="font-size: ${size}px;">
-                        <span class="emoji">${emoji}</span>
-                        ${lan.label ? `<span class="lbl">${lan.label}</span>` : ''}
-                      </div>`,
+                html: mapLandmarkIconHtml(emoji, size, lan.label),
                 className: 'custom-landmark-icon',
-                iconSize: [60, size + 16],
-                iconAnchor: [30, size / 2]
+                iconSize: [72, size + (lan.label ? 22 : 10)],
+                iconAnchor: [36, size / 2 + 2]
             });
 
             marker = L.marker([lan.lat, lan.lng], {
@@ -581,11 +827,10 @@ function renderMap() {
             }).addTo(map);
 
             marker.on('click', (e) => {
-                if (selectedTool === 'select') {
-                    L.DomEvent.stopPropagation(e);
-                    selectAnnotation('landmark', lan);
-                }
+                L.DomEvent.stopPropagation(e);
+                selectAnnotation('landmark', lan);
             });
+            registerSelectableMarker(marker, 'landmark', lan);
         }
 
         marker.on('dragend', (e) => {
@@ -612,12 +857,10 @@ function renderMap() {
     // Draw text Annotations on geographical map
     annotations.texts.forEach(ann => {
         const icon = L.divIcon({
-            html: `<div class="map-text-annotation" style="font-size: ${ann.size || 15}px;">
-                    ${ann.text}
-                  </div>`,
+            html: mapTextIconHtml(ann.text, ann.size),
             className: 'custom-text-icon',
-            iconSize: [120, 24],
-            iconAnchor: [60, 12]
+            iconSize: [140, (ann.size || 15) + 12],
+            iconAnchor: [70, (ann.size || 15) / 2 + 2]
         });
 
         const marker = L.marker([ann.lat, ann.lng], {
@@ -633,10 +876,8 @@ function renderMap() {
         });
 
         marker.on('click', (e) => {
-            if (selectedTool === 'select') {
-                L.DomEvent.stopPropagation(e);
-                selectAnnotation('text', ann);
-            }
+            L.DomEvent.stopPropagation(e);
+            selectAnnotation('text', ann);
         });
 
         marker.on('dblclick', (e) => {
@@ -650,11 +891,13 @@ function renderMap() {
         });
 
         mapMarkers.push(marker);
+        registerSelectableMarker(marker, 'text', ann);
     });
 
     // Zoom map view to contain the workspace poles
     const bounds = L.latLngBounds(latLngs);
     map.fitBounds(bounds, { padding: [40, 40] });
+    updateMapSelectionHighlights();
 }
 
 function onMapClick(e) {
@@ -668,8 +911,11 @@ function onMapClick(e) {
         
         // Reset active stencil styling
         const items = document.querySelectorAll('.stencil-item');
-        items.forEach(el => el.style.borderColor = '');
+        items.forEach(el => el.classList.remove('selected'));
+        return;
     }
+
+    clearSelection();
 }
 
 function clearMapDrawingHelpers() {
@@ -820,13 +1066,13 @@ function initToolbarEvents() {
             
             // Clear styling highlights from stencil items
             const items = document.querySelectorAll('.stencil-item');
-            items.forEach(el => el.style.borderColor = '');
+            items.forEach(el => el.classList.remove('selected'));
             
             btnSelect.classList.add('active');
             clearSelection();
             
             const help = document.getElementById('annotationHelp');
-            help.textContent = 'Drag elements onto map/grid canvas, or click them to place. Use "Select & Resize" mode to move, rotate, and resize items.';
+            help.textContent = 'Drag or click a symbol to place. Hover for name.';
         });
     }
 
@@ -994,8 +1240,10 @@ function initCanvasEvents() {
 
             if (clickedNode) {
                 draggedNode = clickedNode;
+                selectAnnotation('node', clickedNode);
             } else {
                 // If clicked empty grid, initiate panning
+                clearSelection();
                 isPanning = true;
                 startPanX = e.clientX - panX;
                 startPanY = e.clientY - panY;
@@ -1277,15 +1525,21 @@ function drawCanvas() {
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate((road.angle || 0) * Math.PI / 180);
-        ctx.drawImage(imgCache.road, -wPx / 2, -hPx / 2, wPx, hPx);
+        if (imgCache.road && imgCache.road.complete && imgCache.road.naturalWidth > 0) {
+            ctx.drawImage(imgCache.road, -wPx / 2, -hPx / 2, wPx, hPx);
+        } else {
+            drawShapeSymbol('road', wPx, hPx);
+        }
         ctx.restore();
 
         if (road.label && road.label.trim()) {
-            ctx.fillStyle = '#475569';
-            ctx.font = 'bold 10px Inter';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(road.label, p.x, p.y + hPx / 2 + 4);
+            drawAnnotationLabel(
+                ctx,
+                p.x,
+                p.y,
+                road.label,
+                shapeLabelOffset(wPx, hPx, road.angle || 0)
+            );
         }
     });
 
@@ -1298,15 +1552,21 @@ function drawCanvas() {
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate((river.angle || 0) * Math.PI / 180);
-        ctx.drawImage(imgCache.river, -wPx / 2, -hPx / 2, wPx, hPx);
+        if (imgCache.river && imgCache.river.complete && imgCache.river.naturalWidth > 0) {
+            ctx.drawImage(imgCache.river, -wPx / 2, -hPx / 2, wPx, hPx);
+        } else {
+            drawShapeSymbol('river', wPx, hPx);
+        }
         ctx.restore();
 
         if (river.label && river.label.trim()) {
-            ctx.fillStyle = '#475569';
-            ctx.font = 'bold 10px Inter';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(river.label, p.x, p.y + hPx / 2 + 4);
+            drawAnnotationLabel(
+                ctx,
+                p.x,
+                p.y,
+                river.label,
+                shapeLabelOffset(wPx, hPx, river.angle || 0)
+            );
         }
     });
 
@@ -1430,15 +1690,15 @@ function drawCanvas() {
             const rPx = metersToCanvasPixels(lan.radius || 20);
             ctx.save();
             ctx.translate(p.x, p.y);
-            ctx.drawImage(imgCache.pond, -rPx, -rPx, rPx * 2, rPx * 2);
+            if (imgCache.pond && imgCache.pond.complete && imgCache.pond.naturalWidth > 0) {
+                ctx.drawImage(imgCache.pond, -rPx, -rPx, rPx * 2, rPx * 2);
+            } else {
+                drawShapeSymbol('pond', rPx * 2, rPx * 2);
+            }
             ctx.restore();
 
             if (lan.label && lan.label.trim()) {
-                ctx.fillStyle = '#475569';
-                ctx.font = 'bold 10px Inter';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'top';
-                ctx.fillText(lan.label, p.x, p.y + rPx + 4);
+                drawAnnotationLabel(ctx, p.x, p.y, lan.label, rPx + 4);
             }
             return;
         }
@@ -1459,14 +1719,56 @@ function drawCanvas() {
         ctx.fillText(emoji, p.x, p.y);
 
         if (lan.label && lan.label.trim()) {
-            ctx.fillStyle = '#475569';
-            ctx.font = 'bold 10px Inter';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            ctx.fillText(lan.label, p.x, p.y + size / 2 + 4);
+            drawAnnotationLabel(ctx, p.x, p.y, lan.label, size / 2 + 6);
         }
     });
 
+    drawSelectionHighlight();
+
+    ctx.restore();
+}
+
+function drawSelectionHighlight() {
+    if (!activeSelection) return;
+
+    const { type, data } = activeSelection;
+    ctx.save();
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+
+    if (type === 'node') {
+        ctx.beginPath();
+        ctx.arc(data.x, data.y, 22, 0, Math.PI * 2);
+        ctx.stroke();
+    } else if (type === 'road' || type === 'river') {
+        const p = latLngToSchematic(data.lat, data.lng);
+        const wPx = metersToCanvasPixels(data.width || 40);
+        const hPx = metersToCanvasPixels(data.height || 40);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(((data.angle || 0) * Math.PI) / 180);
+        ctx.strokeRect(-wPx / 2 - 4, -hPx / 2 - 4, wPx + 8, hPx + 8);
+    } else if (type === 'landmark') {
+        const p = latLngToSchematic(data.lat, data.lng);
+        if (data.type === 'pond') {
+            const rPx = metersToCanvasPixels(data.radius || 20);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, rPx + 4, 0, Math.PI * 2);
+            ctx.stroke();
+        } else {
+            const size = data.size || 24;
+            ctx.strokeRect(p.x - size / 2 - 4, p.y - size / 2 - 4, size + 8, size + 8);
+        }
+    } else if (type === 'text') {
+        const p = latLngToSchematic(data.lat, data.lng);
+        const fontSize = data.size || 15;
+        const text = data.text || '';
+        ctx.font = `bold ${fontSize}px Outfit`;
+        const tw = ctx.measureText(text).width;
+        ctx.strokeRect(p.x - tw / 2 - 6, p.y - fontSize / 2 - 4, tw + 12, fontSize + 8);
+    }
+
+    ctx.setLineDash([]);
     ctx.restore();
 }
 
@@ -1689,6 +1991,8 @@ function selectAnnotation(type, data) {
     let typeName = type.charAt(0).toUpperCase() + type.slice(1);
     if (type === 'landmark') {
         typeName = data.type === 'pond' ? 'Pond Shape' : `Landmark (${data.type})`;
+    } else if (type === 'node') {
+        typeName = `Pole (${data.structure})`;
     }
     typeLabel.textContent = `Selected ${typeName}`;
     labelInput.value = data.label || data.text || '';
@@ -1697,7 +2001,10 @@ function selectAnnotation(type, data) {
     sizeGroup.classList.remove('hidden');
     rotateGroup.classList.add('hidden');
 
-    if (type === 'road' || type === 'river') {
+    if (type === 'node') {
+        sizeGroup.classList.add('hidden');
+        rotateGroup.classList.add('hidden');
+    } else if (type === 'road' || type === 'river') {
         sizeLabel.textContent = 'Scale/Width (meters)';
         slider.min = 10;
         slider.max = 200;
@@ -1729,6 +2036,9 @@ function selectAnnotation(type, data) {
     } else {
         sizeGroup.classList.add('hidden');
     }
+
+    updateMapSelectionHighlights();
+    drawCanvas();
 }
 
 function clearSelection() {
@@ -1737,6 +2047,8 @@ function clearSelection() {
     if (selectionCard) {
         selectionCard.classList.add('hidden');
     }
+    updateMapSelectionHighlights();
+    drawCanvas();
 }
 
 function initSelectionEvents() {
@@ -1753,10 +2065,19 @@ function initSelectionEvents() {
         const { type, data } = activeSelection;
         if (type === 'text') {
             data.text = labelInput.value;
+            renderMap();
+        } else if (type === 'node') {
+            data.label = labelInput.value;
+            renderMap();
         } else {
             data.label = labelInput.value;
+            if (type === 'road' || type === 'river' || (type === 'landmark' && data.type === 'pond')) {
+                refreshShapeMarkerIcons();
+                updateMapSelectionHighlights();
+            } else {
+                renderMap();
+            }
         }
-        renderMap();
         drawCanvas();
     });
 
@@ -1769,17 +2090,20 @@ function initSelectionEvents() {
             data.width = val;
             data.height = val; // proportional scale
             valDisplay.textContent = `${val}m`;
+            refreshShapeMarkerIcons();
         } else if (type === 'landmark' && data.type === 'pond') {
             data.radius = val;
             valDisplay.textContent = `${val}m`;
+            refreshShapeMarkerIcons();
         } else if (type === 'landmark') {
             data.size = val;
             valDisplay.textContent = `${val}px`;
+            renderMap();
         } else if (type === 'text') {
             data.size = val;
             valDisplay.textContent = `${val}px`;
+            renderMap();
         }
-        renderMap();
         drawCanvas();
     });
 
@@ -1790,7 +2114,7 @@ function initSelectionEvents() {
             const val = parseInt(rotateSlider.value);
             data.angle = val;
             rotateVal.textContent = `${val}°`;
-            renderMap();
+            refreshShapeMarkerIcons();
             drawCanvas();
         }
     });
@@ -1828,12 +2152,11 @@ function initStencilDragListeners() {
         item.addEventListener('dragstart', (e) => {
             const type = item.getAttribute('data-type');
             e.dataTransfer.setData('text/plain', type);
-            // Highlight stencil
-            item.style.borderColor = 'var(--primary-color)';
+            item.classList.add('selected');
         });
 
         item.addEventListener('dragend', () => {
-            item.style.borderColor = '';
+            item.classList.remove('selected');
         });
 
         // Click to add template directly to center of layout
@@ -1842,12 +2165,11 @@ function initStencilDragListeners() {
             
             // Set clicked stencil state to enable click-to-place on map/canvas
             selectedStencilType = type;
-            items.forEach(el => el.style.borderColor = '');
-            item.style.borderColor = 'var(--primary-color)';
+            items.forEach(el => el.classList.remove('selected'));
+            item.classList.add('selected');
             
-            // Show notification help bubble
             const help = document.getElementById('annotationHelp');
-            help.textContent = `Click anywhere on the map/grid canvas to place the ${type.toUpperCase()}, or drag it directly!`;
+            help.textContent = `Click map/canvas to place ${type}, or drag the symbol.`;
         });
     });
 
@@ -1897,13 +2219,13 @@ function addStencilAnnotation(type, lat, lng) {
     let placedItem = null;
 
     if (type === 'road') {
-        placedItem = { id, lat, lng, width: 60, height: 60, angle: 0, label: '' };
+        placedItem = { id, lat, lng, width: 80, height: 80, angle: 0, label: '' };
         annotations.roads.push(placedItem);
     } else if (type === 'river') {
-        placedItem = { id, lat, lng, width: 60, height: 60, angle: 0, label: '' };
+        placedItem = { id, lat, lng, width: 90, height: 90, angle: 0, label: '' };
         annotations.rivers.push(placedItem);
     } else if (type === 'pond') {
-        placedItem = { id, lat, lng, type: 'pond', radius: 25, label: '' };
+        placedItem = { id, lat, lng, type: 'pond', radius: 40, label: '' };
         annotations.landmarks.push(placedItem);
     } else if (type === 'text') {
         placedItem = { lat, lng, text: 'Text Label', size: 16 };

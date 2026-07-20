@@ -49,67 +49,46 @@
 
             <!-- CAD Elements Sidebar Stencils List -->
             <div class="sidebar-card tools-section hidden" id="toolsCard">
-                <h3 class="section-title">CAD Elements & Templates</h3>
+                <h3 class="section-title">CAD Symbols</h3>
                 
-                <div class="select-tool-container" style="margin-bottom: 12px;">
-                    <button class="btn-tool w-100 active" id="toolSelect" style="flex-direction: row; gap: 10px; justify-content: center; padding: 10px;" title="Select and Resize placed items">
-                        <span class="icon" style="font-size: 16px;">🖱️</span> Select & Resize Mode
+                <div class="select-tool-container">
+                    <button class="btn-tool icon-only active" id="toolSelect" title="Select & Resize">
+                        <span class="icon">🖱️</span>
                     </button>
                 </div>
 
                 <div class="stencils-grid">
-                    <div class="stencil-item" draggable="true" data-type="road" title="Drag irregular winding road onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="road" title="Road">
                         <span class="icon">🛣️</span>
-                        <div class="meta">
-                            <span class="name">Irregular Road</span>
-                            <span class="desc">Asphalt winding road</span>
-                        </div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="river" title="Drag wavy river path onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="river" title="River">
                         <span class="icon">〰️</span>
-                        <div class="meta">
-                            <span class="name">Winding River</span>
-                            <span class="desc">Soft-blue winding river</span>
-                        </div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="pond" title="Drag irregular pond with water onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="pond" title="Pond">
                         <span class="icon">💧</span>
-                        <div class="meta">
-                            <span class="name">Irregular Pond</span>
-                            <span class="desc">Water pond shape</span>
-                        </div>
                     </div>
-                    
-                    <div class="divider-sm"></div>
-                    
-                    <div class="stencil-item" draggable="true" data-type="tree" title="Drag Tree landmark onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="tree" title="Tree">
                         <span class="icon">🌲</span>
-                        <div class="meta"><span class="name">Tree</span><span class="desc">Point Landmark</span></div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="temple" title="Drag Temple landmark onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="temple" title="Temple">
                         <span class="icon">🛕</span>
-                        <div class="meta"><span class="name">Temple</span><span class="desc">Point Landmark</span></div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="mosque" title="Drag Mosque landmark onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="mosque" title="Mosque">
                         <span class="icon">🕌</span>
-                        <div class="meta"><span class="name">Mosque</span><span class="desc">Point Landmark</span></div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="school" title="Drag School landmark onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="school" title="School">
                         <span class="icon">🏫</span>
-                        <div class="meta"><span class="name">School</span><span class="desc">Point Landmark</span></div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="house" title="Drag Household landmark onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="house" title="House">
                         <span class="icon">🏠</span>
-                        <div class="meta"><span class="name">Household</span><span class="desc">Point Landmark</span></div>
                     </div>
-                    <div class="stencil-item" draggable="true" data-type="text" title="Drag Text Label template onto canvas or map">
+                    <div class="stencil-item" draggable="true" data-type="text" title="Text Label">
                         <span class="icon">✏️</span>
-                        <div class="meta"><span class="name">Text Label</span><span class="desc">Custom annotation text</span></div>
                     </div>
                 </div>
 
-                <div class="annotation-help" id="annotationHelp" style="margin-top: 12px;">
-                    Drag elements onto map/grid canvas, or click them to place. Use "Select & Resize" mode to move, rotate, and resize items.
+                <div class="annotation-help" id="annotationHelp">
+                    Drag or click a symbol to place. Hover for name.
                 </div>
             </div>
 
