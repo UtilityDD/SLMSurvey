@@ -17,8 +17,10 @@ import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.SlmApp
 import com.blackgrapes.slmtoolbox.databinding.FragmentMySldBinding
 import com.blackgrapes.slmtoolbox.databinding.ItemMySldWorkspaceBinding
+import com.blackgrapes.slmtoolbox.domain.LanguagePreferences
 import com.blackgrapes.slmtoolbox.domain.SurveyShareSummary
 import com.blackgrapes.slmtoolbox.domain.model.Survey
+import com.blackgrapes.slmtoolbox.ui.export.ExportHelper
 import com.blackgrapes.slmtoolbox.ui.export.ShareHelper
 import com.blackgrapes.slmtoolbox.ui.survey.SurveyViewModel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -30,6 +32,7 @@ class MySldFragment : Fragment() {
     private val binding get() = _binding!!
     private var workspaces: List<Survey> = emptyList()
     private var adapter: WorkspaceHistoryAdapter? = null
+    private var languageReady = false
 
     private val viewModel: SurveyViewModel by activityViewModels {
         SurveyViewModel.Factory((requireActivity().application as SlmApp).repository)
@@ -46,10 +49,12 @@ class MySldFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
+        setupLanguageChips()
 
         adapter = WorkspaceHistoryAdapter(
             onOpen = { openWorkspace(it) },
             onShareSummary = { shareSummary(it) },
+            onShareJson = { shareJson(it) },
             onLongPress = { confirmDelete(it) }
         )
         binding.sldList.adapter = adapter
@@ -62,6 +67,26 @@ class MySldFragment : Fragment() {
                     binding.emptyText.isVisible = saved.isEmpty()
                 }
             }
+        }
+    }
+
+    private fun setupLanguageChips() {
+        val current = LanguagePreferences.getCode(requireContext())
+        binding.chipLangEn.isChecked = current == LanguagePreferences.EN
+        binding.chipLangBn.isChecked = current == LanguagePreferences.BN
+        binding.chipLangHi.isChecked = current == LanguagePreferences.HI
+        languageReady = true
+
+        binding.languageChipGroup.setOnCheckedStateChangeListener { _, checkedIds ->
+            if (!languageReady || checkedIds.isEmpty()) return@setOnCheckedStateChangeListener
+            val code = when (checkedIds.first()) {
+                R.id.chipLangBn -> LanguagePreferences.BN
+                R.id.chipLangHi -> LanguagePreferences.HI
+                else -> LanguagePreferences.EN
+            }
+            if (code == LanguagePreferences.getCode(requireContext())) return@setOnCheckedStateChangeListener
+            LanguagePreferences.setCode(requireContext(), code)
+            Toast.makeText(requireContext(), R.string.language_applied, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -81,6 +106,36 @@ class MySldFragment : Fragment() {
             text = text,
             title = "${survey.title} — Survey Summary"
         )
+    }
+
+    private fun shareJson(survey: Survey) {
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewModel.setProcessing(true, getString(R.string.export_processing_json))
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
+                val jsonFile = ExportHelper.exportJsonWorkspace(requireContext(), survey, seriesMeta)
+                if (jsonFile != null) {
+                    ShareHelper.shareFiles(
+                        context = requireContext(),
+                        files = listOf(jsonFile),
+                        title = getString(R.string.share_workspace_json),
+                        caption = "SLM Workspace JSON for Desktop Editor: ${survey.title}",
+                        mimeType = "application/json"
+                    )
+                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Exception) {
+                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            } finally {
+                viewModel.setProcessing(false)
+            }
+        }
     }
 
     private fun confirmDelete(survey: Survey) {
@@ -103,6 +158,7 @@ class MySldFragment : Fragment() {
     private class WorkspaceHistoryAdapter(
         private val onOpen: (Survey) -> Unit,
         private val onShareSummary: (Survey) -> Unit,
+        private val onShareJson: (Survey) -> Unit,
         private val onLongPress: (Survey) -> Unit
     ) : BaseAdapter() {
 
@@ -140,6 +196,7 @@ class MySldFragment : Fragment() {
 
             binding.btnOpen.setOnClickListener { onOpen(survey) }
             binding.btnShareSummary.setOnClickListener { onShareSummary(survey) }
+            binding.btnShareJson.setOnClickListener { onShareJson(survey) }
             binding.root.setOnClickListener { onOpen(survey) }
             binding.root.setOnLongClickListener {
                 onLongPress(survey)

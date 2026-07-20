@@ -31,6 +31,6 @@
     <fragment
         android:id="@+id/mySldFragment"
         android:name="com.blackgrapes.slmtoolbox.ui.preview.MySldFragment"
-        android:label="@string/my_sld"
+        android:label="@string/my_maps"
         tools:layout="@layout/fragment_my_sld" />
 </navigation>

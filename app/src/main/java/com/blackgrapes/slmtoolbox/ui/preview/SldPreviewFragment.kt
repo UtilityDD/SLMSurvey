@@ -59,7 +59,7 @@ class SldPreviewFragment : Fragment() {
         binding.btnShareSummary.setOnClickListener { shareSurveySummary() }
         binding.btnShareCsv.setOnClickListener { shareGpsCsv() }
         binding.btnSharePng.setOnClickListener { sharePreviewPng() }
-        binding.btnExport.setOnClickListener { exportAndShare() }
+        binding.btnExport.setOnClickListener { shareJsonWorkspace() }
         binding.btnSaveSld.setOnClickListener { saveToMySld() }
         binding.btnPrevPage.setOnClickListener {
             if (pageIndex > 0) {
@@ -158,22 +158,6 @@ class SldPreviewFragment : Fragment() {
         }
     }
 
-    private fun exportAndShare() {
-        val options = arrayOf(
-            getString(R.string.export_option_workspace)
-        )
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.export_options_title))
-            .setMessage(getString(R.string.export_desktop_hint))
-            .setItems(options) { _, which ->
-                when (which) {
-                    0 -> shareJsonWorkspace()
-                }
-            }
-            .setNegativeButton(R.string.cancel, null)
-            .show()
-    }
-
     private fun sharePreviewPng() {
         val survey = viewModel.survey.value ?: return
         if (survey.assets.isEmpty()) {
@@ -252,29 +236,28 @@ class SldPreviewFragment : Fragment() {
 
     private fun shareJsonWorkspace() {
         val survey = viewModel.survey.value ?: return
-        viewModel.setProcessing(true, "Exporting Workspace...")
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewModel.setProcessing(true, getString(R.string.export_processing_json))
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
                 val jsonFile = ExportHelper.exportJsonWorkspace(requireContext(), survey, seriesMeta)
                 if (jsonFile != null) {
-                    val jsonUri = androidx.core.content.FileProvider.getUriForFile(
-                        requireContext(),
-                        "${requireContext().packageName}.fileprovider",
-                        jsonFile
+                    ShareHelper.shareFiles(
+                        context = requireContext(),
+                        files = listOf(jsonFile),
+                        title = getString(R.string.share_workspace_json),
+                        caption = "SLM Workspace JSON for Desktop Editor: ${survey.title}",
+                        mimeType = "application/json"
                     )
-                    val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                        type = "application/json"
-                        putExtra(android.content.Intent.EXTRA_STREAM, jsonUri)
-                        putExtra(android.content.Intent.EXTRA_SUBJECT, "${survey.title} Workspace")
-                        putExtra(android.content.Intent.EXTRA_TEXT, "SLM Workspace JSON file for survey: ${survey.title}")
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    requireContext().startActivity(android.content.Intent.createChooser(intent, "Share Workspace JSON"))
+                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
             } finally {
                 viewModel.setProcessing(false)

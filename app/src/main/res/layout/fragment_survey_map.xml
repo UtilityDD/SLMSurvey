@@ -83,6 +83,16 @@
                 android:contentDescription="@string/gps_status_bad"
                 android:src="@android:drawable/presence_invisible" />
 
+            <TextView
+                android:id="@+id/tvGpsAccuracy"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:text="GPS —"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
             <!-- Satellite signal chip: icon + count badge, clickable for details -->
             <LinearLayout
                 android:id="@+id/satelliteChip"
@@ -217,13 +227,15 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnMySld"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="0dp"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:text="@string/my_sld"
-                android:textAllCaps="false" />
+                android:contentDescription="@string/my_maps"
+                app:icon="@drawable/ic_my_maps"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/primary" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSaveWorkspace"
@@ -240,7 +252,7 @@
                 android:id="@+id/btnPreviewSld"
                 android:layout_width="0dp"
                 android:layout_height="48dp"
-                android:layout_weight="1.1"
+                android:layout_weight="1"
                 android:text="@string/sld_preview"
                 android:textAllCaps="false" />
         </LinearLayout>

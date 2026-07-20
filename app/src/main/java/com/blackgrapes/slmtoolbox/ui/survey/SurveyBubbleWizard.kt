@@ -48,6 +48,15 @@ class SurveyBubbleWizard : DialogFragment() {
     private var wantTapping: Boolean? = null
     private var feederName: String? = null
     private var sourceSubstation: String? = null
+    /** When branching from an existing network, voltage is a line property and cannot change. */
+    private var voltageLocked: Boolean = false
+    /** Line voltage/status for mid-span insert (NEAR_LINE). */
+    private var lineVoltage: VoltageLevel? = null
+    private var lineStatus: WorkStatus? = null
+    /** Status of the pole we are tapping from (locks continue status when Proposed). */
+    private var sourcePoleStatus: WorkStatus? = null
+    /** Skip the redundant "Action near line" menu and go straight to insert steps. */
+    private var directInsert: Boolean = false
 
     var onPlace: ((PlacementDraft) -> Unit)? = null
     var onEdit: ((SurveyAsset) -> Unit)? = null
@@ -63,6 +72,13 @@ class SurveyBubbleWizard : DialogFragment() {
         editing = requireArguments().getParcelableCompat(ARG_ASSET)
         sourceAssetId = requireArguments().getLong(ARG_SOURCE_ID, -1L).takeIf { it > 0 }
         splitConnectionId = requireArguments().getLong(ARG_SPLIT_ID, -1L).takeIf { it > 0 }
+        voltageLocked = requireArguments().getBoolean(ARG_VOLTAGE_LOCKED, false)
+        feederName = requireArguments().getString(ARG_FEEDER_NAME)?.takeIf { it.isNotBlank() }
+        sourceSubstation = requireArguments().getString(ARG_SOURCE_SS)?.takeIf { it.isNotBlank() }
+        requireArguments().getString(ARG_LINE_VOLTAGE)?.let { lineVoltage = VoltageLevel.fromLabel(it) }
+        requireArguments().getString(ARG_LINE_STATUS)?.let { lineStatus = WorkStatus.fromLabel(it) }
+        requireArguments().getString(ARG_SOURCE_STATUS)?.let { sourcePoleStatus = WorkStatus.fromLabel(it) }
+        directInsert = requireArguments().getBoolean(ARG_DIRECT_INSERT, false)
         val lockedVoltage = requireArguments().getString(ARG_LOCKED_VOLTAGE)
         val lockedStatus = requireArguments().getString(ARG_LOCKED_STATUS)
         val lockedMaterial = requireArguments().getString(ARG_LOCKED_MATERIAL)
@@ -87,6 +103,11 @@ class SurveyBubbleWizard : DialogFragment() {
             )
         }
         candidatePoles = requireArguments().getParcelableArrayListCompat(ARG_CANDIDATES).orEmpty()
+        // Prefill locked voltage for tapping-from-existing (passed as ARG_LOCKED_VOLTAGE alone).
+        if (mode == Mode.TAPPING_BRANCH && lockedVoltage != null && lockedSeries == null) {
+            voltage = VoltageLevel.fromLabel(lockedVoltage)
+            voltageLocked = true
+        }
     }
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -128,6 +149,14 @@ class SurveyBubbleWizard : DialogFragment() {
                 conductor = editing!!.conductor
                 push(Step.EDIT_MENU)
             }
+            mode == Mode.NEAR_LINE && directInsert -> {
+                // Chosen "Insert on line" already — skip second menu; ask Existing/Proposed next.
+                voltage = lineVoltage
+                    ?: candidatePoles.firstOrNull()?.voltage
+                    ?: VoltageLevel.KV_11
+                voltageLocked = true
+                push(Step.STATUS)
+            }
             mode == Mode.NEAR_LINE -> push(Step.LINE_ACTION_CHOICE)
             lockedSeries != null -> {
                 val series = lockedSeries!!
@@ -137,6 +166,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     val preset = PresetPreferences.get(requireContext())
                     val (v, s, m) = preset.continueAfterDtr()
                     voltage = v
+                    // Status locked from previous pole / series tip — never re-ask.
                     status = series.status
                     material = m
                     structure = s
@@ -156,8 +186,17 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             mode == Mode.TAPPING_BRANCH -> {
-                voltage = lockedSeries?.voltage ?: VoltageLevel.KV_11
-                push(Step.STATUS)
+                // Branch from existing network: voltage locked to source line.
+                voltage = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+                voltageLocked = true
+                // If tapping from a Proposed pole (e.g. after inserting Proposed on Existing line),
+                // inherit Proposed automatically — never re-ask Existing/Proposed.
+                if (sourcePoleStatus == WorkStatus.PROPOSED) {
+                    status = WorkStatus.PROPOSED
+                    advanceAfterStatusChoice()
+                } else {
+                    push(Step.STATUS)
+                }
             }
             PresetPreferences.isEnabled(requireContext()) && editing == null && mode == Mode.NEW_NETWORK -> {
                 applyPresetForNewNetwork()
@@ -190,32 +229,32 @@ class SurveyBubbleWizard : DialogFragment() {
             Step.LINE_ACTION_CHOICE -> {
                 binding.bubbleTitle.text = getString(R.string.bubble_near_line_title)
                 binding.bubbleSubtitle.text = getString(R.string.bubble_near_line_hint)
-                
-                // Option 1: Split line
+
+                // Option 1: Insert joint into line — voltage locked; always ask Existing/Proposed
                 addChoice(getString(R.string.choice_split_line)) {
-                    voltage = candidatePoles.firstOrNull()?.voltage ?: VoltageLevel.KV_11
-                    status = candidatePoles.firstOrNull()?.status ?: WorkStatus.PROPOSED
+                    voltage = lineVoltage
+                        ?: candidatePoles.firstOrNull()?.voltage
+                        ?: VoltageLevel.KV_11
+                    status = null
+                    voltageLocked = true
                     push(Step.STATUS)
                     render()
                 }
-                
-                // Option 2: Tap from nearby poles
+
+                // Option 2: Branch from an endpoint pole (voltage locked; always ask Existing/Proposed)
                 candidatePoles.forEach { pole ->
                     addChoice(getString(R.string.choice_tap_from, pole.sequence)) {
-                        sourceAssetId = pole.id
-                        onSelectSource?.invoke(pole)
-                        voltage = pole.voltage
-                        mode = Mode.TAPPING_BRANCH
-                        push(Step.STATUS)
+                        beginBranchFrom(pole)
                         render()
                     }
                 }
-                
+
                 // Option 3: New network
                 addChoice(getString(R.string.choice_new_network)) {
                     mode = Mode.NEW_NETWORK
                     splitConnectionId = null
                     sourceAssetId = null
+                    voltageLocked = false
                     if (PresetPreferences.isEnabled(requireContext())) {
                         applyPresetForNewNetwork()
                         push(Step.PRESET_SUMMARY)
@@ -237,19 +276,26 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.STATUS -> {
+                // Continue series must never re-ask status — inherit from previous pole.
+                if (mode == Mode.CONTINUE_SERIES || lockedSeries != null) {
+                    status = lockedSeries?.status ?: status ?: WorkStatus.PROPOSED
+                    advanceAfterStatusChoice()
+                    render()
+                    return
+                }
                 binding.bubbleTitle.text = getString(R.string.bubble_status, voltage!!.label)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_status_hint)
+                binding.bubbleSubtitle.text = when {
+                    splitConnectionId != null ->
+                        getString(R.string.bubble_status_insert_hint)
+                    voltageLocked || mode == Mode.TAPPING_BRANCH ->
+                        getString(R.string.bubble_status_branch_hint)
+                    else ->
+                        getString(R.string.bubble_status_hint)
+                }
                 WorkStatus.entries.forEach { option ->
                     addChoice(option.label) {
                         status = option
-                        when (voltage) {
-                            VoltageLevel.LT -> {
-                                material = PoleMaterial.PCC_8M
-                                structure = PoleStructure.P1
-                                push(Step.CONDUCTOR)
-                            }
-                            else -> push(Step.MATERIAL)
-                        }
+                        advanceAfterStatusChoice()
                         render()
                     }
                 }
@@ -363,12 +409,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 binding.bubbleSubtitle.text = getString(R.string.bubble_source_hint)
                 candidatePoles.forEach { pole ->
                     addChoice("#${pole.sequence} ${pole.voltage.label}") {
-                        sourceAssetId = pole.id
-                        onSelectSource?.invoke(pole)
-                        voltage = pole.voltage
-                        lockedSeries = null
-                        mode = Mode.TAPPING_BRANCH
-                        push(Step.STATUS)
+                        beginBranchFrom(pole)
                         render()
                     }
                 }
@@ -443,14 +484,82 @@ class SurveyBubbleWizard : DialogFragment() {
 
     private fun summaryLine(): String = buildString {
         append(voltage?.label ?: "")
+        if (voltageLocked) append(" (locked)")
         append(" · ")
         append(status?.label ?: "")
+        if (mode == Mode.CONTINUE_SERIES || lockedSeries != null) append(" (auto)")
         append(" · ")
         append(material?.label ?: "")
         append(" · ")
         append(structure?.label ?: "")
         append(" · ")
         append(conductor ?: "")
+        if (mode == Mode.TAPPING_BRANCH && voltage != VoltageLevel.LT) {
+            append("\n")
+            append("Feeder: ").append(feederName ?: "—").append(" · ")
+            append("SS: ").append(sourceSubstation ?: "—")
+        }
+    }
+
+    /** Start a new series from an existing pole; voltage inherits from that line. */
+    private fun beginBranchFrom(pole: SurveyAsset) {
+        sourceAssetId = pole.id
+        // Do not selectTapPole here — that would arm CONTINUE of the Existing series.
+        voltage = pole.voltage
+        sourcePoleStatus = pole.status
+        status = null
+        lockedSeries = null
+        splitConnectionId = null
+        mode = Mode.TAPPING_BRANCH
+        voltageLocked = true
+        if (pole.status == WorkStatus.PROPOSED) {
+            status = WorkStatus.PROPOSED
+            advanceAfterStatusChoice()
+        } else {
+            push(Step.STATUS)
+        }
+    }
+
+    /**
+     * After Existing/Proposed is chosen:
+     * - Branch/tap with presets: apply preset material/structure/conductor (keep chosen status + locked voltage).
+     * - Insert on line with presets: same (split keeps voltage lock).
+     * - Without presets: continue normal material / conductor steps.
+     */
+    private fun advanceAfterStatusChoice() {
+        val v = voltage ?: return
+        val branchOrInsert =
+            mode == Mode.TAPPING_BRANCH ||
+                sourceAssetId != null ||
+                splitConnectionId != null
+        if (branchOrInsert && PresetPreferences.isEnabled(requireContext())) {
+            applyPresetFieldsForBranch(v)
+            push(Step.PLACE_ROLE)
+            return
+        }
+        when (v) {
+            VoltageLevel.LT -> {
+                material = PoleMaterial.PCC_8M
+                structure = PoleStructure.P1
+                push(Step.CONDUCTOR)
+            }
+            else -> push(Step.MATERIAL)
+        }
+    }
+
+    /** Apply preset pole specs for a branch; status stays user-chosen, voltage stays locked. */
+    private fun applyPresetFieldsForBranch(v: VoltageLevel) {
+        val preset = PresetPreferences.get(requireContext())
+        val materials = NetworkCatalog.materialsFor(v)
+        val structures = NetworkCatalog.structuresFor(v)
+        val conductors = NetworkCatalog.conductorsFor(v)
+        material = preset.material.takeIf { it in materials } ?: NetworkCatalog.defaultMaterial(v)
+        structure = preset.structure.takeIf { it in structures } ?: NetworkCatalog.defaultStructure(v)
+        conductor = preset.conductor.takeIf { it in conductors } ?: conductors.first()
+        if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
+        if (sourceSubstation.isNullOrBlank()) {
+            sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
+        }
     }
 
     private fun finishPlace(role: PoleRole) {
@@ -544,12 +653,16 @@ class SurveyBubbleWizard : DialogFragment() {
         sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
     }
 
-    /** Returns true when this is a new (not continuing) 33kV or 11kV series that needs feeder info. */
+    /**
+     * Feeder/SS are required only for a brand-new standalone 33/11kV series.
+     * Branches from an existing network inherit feeder/SS and must not re-ask.
+     */
     private fun needsFeederInfo(): Boolean {
         val v = voltage ?: return false
         if (v == VoltageLevel.LT) return false
-        // Only ask for a brand-new series, not when continuing an existing one
-        return lockedSeries == null && mode != Mode.CONTINUE_SERIES
+        if (mode == Mode.TAPPING_BRANCH || sourceAssetId != null) return false
+        if (mode == Mode.CONTINUE_SERIES || lockedSeries != null) return false
+        return true
     }
 
     private fun showFeederInputs(show: Boolean) {
@@ -572,6 +685,13 @@ class SurveyBubbleWizard : DialogFragment() {
         private const val ARG_LOCKED_SERIES = "locked_series"
         private const val ARG_LOCKED_START_STRUCTURE = "locked_start_structure"
         private const val ARG_CANDIDATES = "candidates"
+        private const val ARG_VOLTAGE_LOCKED = "voltage_locked"
+        private const val ARG_FEEDER_NAME = "feeder_name"
+        private const val ARG_SOURCE_SS = "source_ss"
+        private const val ARG_LINE_VOLTAGE = "line_voltage"
+        private const val ARG_LINE_STATUS = "line_status"
+        private const val ARG_SOURCE_STATUS = "source_status"
+        private const val ARG_DIRECT_INSERT = "direct_insert"
 
         fun forNew(lat: Double, lng: Double): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
@@ -603,11 +723,43 @@ class SurveyBubbleWizard : DialogFragment() {
                 )
             }
 
+        /**
+         * Start a branch from [source].
+         * Voltage is locked to the source line; feeder/SS are inherited for 11/33kV.
+         * If [source] is Proposed, status is auto Proposed (no re-ask).
+         */
+        fun forTapping(
+            lat: Double,
+            lng: Double,
+            source: SurveyAsset,
+            feederName: String = "",
+            sourceSubstation: String = ""
+        ): SurveyBubbleWizard =
+            SurveyBubbleWizard().apply {
+                arguments = bundleOf(
+                    ARG_LAT to lat,
+                    ARG_LNG to lng,
+                    ARG_MODE to Mode.TAPPING_BRANCH.name,
+                    ARG_SOURCE_ID to source.id,
+                    ARG_LOCKED_VOLTAGE to source.voltage.label,
+                    ARG_VOLTAGE_LOCKED to true,
+                    ARG_SOURCE_STATUS to source.status.label,
+                    ARG_FEEDER_NAME to feederName,
+                    ARG_SOURCE_SS to sourceSubstation
+                )
+            }
+
         fun forNearLine(
             lat: Double,
             lng: Double,
             candidates: List<SurveyAsset>,
-            splitId: Long?
+            splitId: Long?,
+            lineVoltage: VoltageLevel? = null,
+            lineStatus: WorkStatus? = null,
+            feederName: String = "",
+            sourceSubstation: String = "",
+            /** When true, skip the "Action near line" menu and start insert immediately. */
+            directInsert: Boolean = false
         ): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
                 arguments = Bundle().apply {
@@ -615,6 +767,11 @@ class SurveyBubbleWizard : DialogFragment() {
                     putDouble(ARG_LNG, lng)
                     putString(ARG_MODE, Mode.NEAR_LINE.name)
                     putLong(ARG_SPLIT_ID, splitId ?: -1L)
+                    putString(ARG_LINE_VOLTAGE, lineVoltage?.label)
+                    putString(ARG_LINE_STATUS, lineStatus?.label)
+                    putString(ARG_FEEDER_NAME, feederName)
+                    putString(ARG_SOURCE_SS, sourceSubstation)
+                    putBoolean(ARG_DIRECT_INSERT, directInsert)
                     putParcelableArrayList(
                         ARG_CANDIDATES,
                         ArrayList(candidates.map { it.toParcelable() })

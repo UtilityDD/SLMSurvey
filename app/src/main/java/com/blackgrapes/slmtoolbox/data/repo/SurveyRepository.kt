@@ -128,7 +128,8 @@ class SurveyRepository(private val dao: SurveyDao) {
         surveyId: Long,
         from: SurveyAsset,
         to: SurveyAsset,
-        spanLengthM: String?
+        spanLengthM: String?,
+        statusOverride: com.blackgrapes.slmtoolbox.domain.model.WorkStatus? = null
     ): Long? {
         if (!FieldRules.canConnect(from.type) || !FieldRules.canConnect(to.type)) return null
         if (from.id == to.id) return null
@@ -137,7 +138,7 @@ class SurveyRepository(private val dao: SurveyDao) {
             fromAssetId = from.id,
             toAssetId = to.id,
             voltage = to.voltage,
-            status = to.status,
+            status = statusOverride ?: to.status,
             spanLengthM = spanLengthM ?: to.spanLengthM
         )
         val id = dao.insertConnection(connection.toEntity())

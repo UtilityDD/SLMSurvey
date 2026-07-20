@@ -13,6 +13,7 @@ import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
 import com.blackgrapes.slmtoolbox.domain.model.VoltageLevel
+import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -50,6 +51,13 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
     private val _selectedTapPoleId = MutableStateFlow<Long?>(null)
     val selectedTapPoleId: StateFlow<Long?> = _selectedTapPoleId.asStateFlow()
 
+    /**
+     * After inserting a joint on an Existing line, the next + should start a Proposed
+     * branch from that joint (not continue the Existing series).
+     */
+    private val _pendingProposedBranchFromId = MutableStateFlow<Long?>(null)
+    val pendingProposedBranchFromId: StateFlow<Long?> = _pendingProposedBranchFromId.asStateFlow()
+
     private val _isProcessing = MutableStateFlow(false)
     val isProcessing: StateFlow<Boolean> = _isProcessing.asStateFlow()
 
@@ -80,7 +88,7 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         viewModelScope.launch {
             while (true) {
                 _blinkState.value = !_blinkState.value
-                delay(500)
+                delay(800)
             }
         }
     }
@@ -106,12 +114,14 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         viewModelScope.launch {
             undoStack.clear()
             _selectedTapPoleId.value = null
+            _pendingProposedBranchFromId.value = null
             surveyId.value = repository.createSurvey("Field Survey").id
         }
     }
 
     fun openWorkspace(workspaceId: Long) {
         _selectedTapPoleId.value = null
+        _pendingProposedBranchFromId.value = null
         undoStack.clear()
         surveyId.value = workspaceId
     }
@@ -123,6 +133,7 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             repository.saveWorkspace(id, name)
             undoStack.clear()
             _selectedTapPoleId.value = null
+            _pendingProposedBranchFromId.value = null
             surveyId.value = repository.createSurvey("Field Survey").id
         } finally {
             setProcessing(false)
@@ -143,7 +154,27 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
 
     fun clearTapPole() {
         _selectedTapPoleId.value = null
+        _pendingProposedBranchFromId.value = null
     }
+
+    /** Arm next + to open a Proposed branch from [asset] (after Existing mid-line insert). */
+    fun armProposedBranch(asset: SurveyAsset) {
+        if (com.blackgrapes.slmtoolbox.domain.FieldRules.canConnect(asset.type)) {
+            _selectedTapPoleId.value = asset.id
+            _pendingProposedBranchFromId.value = asset.id
+        }
+    }
+
+    /** Consume and clear pending Proposed-branch arming; returns the source pole if armed. */
+    fun consumePendingProposedBranch(): SurveyAsset? {
+        val id = _pendingProposedBranchFromId.value ?: return null
+        _pendingProposedBranchFromId.value = null
+        val asset = survey.value?.assets?.firstOrNull { it.id == id }
+        _selectedTapPoleId.value = null
+        return asset
+    }
+
+    fun hasPendingProposedBranch(): Boolean = _pendingProposedBranchFromId.value != null
 
     fun selectedTapPole(): SurveyAsset? {
         val id = _selectedTapPoleId.value ?: return null
@@ -154,13 +185,13 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         selectedTapPole()?.let { tap ->
             val sid = tap.seriesId ?: return NetworkCatalog.seriesConfigFrom(tap)
             val assets = survey.value?.assets.orEmpty()
-            return NetworkCatalog.seriesConfigFromSeries(assets, sid)
+            return NetworkCatalog.seriesConfigFromSeries(assets, sid, tipAsset = tap)
                 ?: NetworkCatalog.seriesConfigFrom(tap)
         }
         val tip = activeOpenTip() ?: return null
         val sid = tip.seriesId ?: return NetworkCatalog.seriesConfigFrom(tip)
         val assets = survey.value?.assets.orEmpty()
-        return NetworkCatalog.seriesConfigFromSeries(assets, sid)
+        return NetworkCatalog.seriesConfigFromSeries(assets, sid, tipAsset = tip)
             ?: NetworkCatalog.seriesConfigFrom(tip)
     }
 
@@ -226,7 +257,21 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                             deviceAccuracyM = evidence.deviceAccuracyM,
                             deviceFixTimestamp = evidence.deviceFixTimestamp,
                             distanceFromDeviceM = evidence.distanceFromDeviceM,
-                            isMockLocation = evidence.isMockLocation
+                            isMockLocation = evidence.isMockLocation,
+                            satsUsedInFix = evidence.satsUsedInFix
+                        )
+
+                        // Split span by actual ground distances A→P and P→B.
+                        // If the original span had a recorded length (e.g. 50 m), keep that total
+                        // and allocate proportionally so the two parts always sum to it.
+                        val (spanAp, spanPb) = splitSpanLengths(
+                            originalSpanM = conn.spanLengthM,
+                            fromLat = fromAsset.latitude,
+                            fromLng = fromAsset.longitude,
+                            midLat = draft.latitude,
+                            midLng = draft.longitude,
+                            toLat = toAsset.latitude,
+                            toLng = toAsset.longitude
                         )
                         
                         val newAssetId = repository.addAsset(SurveyAsset(
@@ -235,11 +280,12 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                             latitude = draft.latitude,
                             longitude = draft.longitude,
                             voltage = conn.voltage,
-                            status = conn.status,
+                            status = draft.status,
                             type = NetworkCatalog.assetTypeFor(draft.structure),
                             poleRole = PoleRole.CONTINUE,
                             poleMaterial = draft.material.label,
                             conductor = draft.conductor,
+                            spanLengthM = spanAp,
                             structure = draft.structure.label,
                             seriesId = fromAsset.seriesId,
                             deviceLatitude = evidence.deviceLatitude,
@@ -265,13 +311,22 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                         
                         val created = repository.getSurvey(id)?.assets?.firstOrNull { it.id == newAssetId }
                         if (created != null) {
-                            // Link A -> P
-                            repository.connectAssets(id, fromAsset, created, null)
-                            // Link P -> B
-                            repository.connectAssets(id, created, toAsset, null)
-                            
-                            // Auto select for branching
-                            selectTapPole(created)
+                            // Pole status (draft) is independent of line status (original conn).
+                            // Spans use actual A→P / P→B distances (sum preserved when original had a length).
+                            repository.connectAssets(
+                                id, fromAsset, created, spanAp, statusOverride = conn.status
+                            )
+                            repository.connectAssets(
+                                id, created, toAsset, spanPb, statusOverride = conn.status
+                            )
+
+                            // After insert on Existing line → next + can start a new branch.
+                            // Insert on Proposed line → continue that series.
+                            if (conn.status == WorkStatus.EXISTING) {
+                                armProposedBranch(created)
+                            } else {
+                                selectTapPole(created)
+                            }
                         }
                         return
                     }
@@ -280,7 +335,8 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
 
             val tapSourceId = _selectedTapPoleId.value
             _selectedTapPoleId.value = null
-            
+            _pendingProposedBranchFromId.value = null
+
             val tapSource = tapSourceId?.let { tapId ->
                 current?.assets?.firstOrNull { it.id == tapId }
             } ?: draft.sourceAssetId?.let { sourceId ->
@@ -306,9 +362,17 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             }
             val locked = if (continuingSeries) {
                 draft.seriesId?.let { sid ->
-                    NetworkCatalog.seriesConfigFromSeries(current?.assets.orEmpty(), sid)
+                    NetworkCatalog.seriesConfigFromSeries(
+                        current?.assets.orEmpty(),
+                        sid,
+                        tipAsset = connectionSource
+                    )
                 } ?: connectionSource?.seriesId?.let { sid ->
-                    NetworkCatalog.seriesConfigFromSeries(current?.assets.orEmpty(), sid)
+                    NetworkCatalog.seriesConfigFromSeries(
+                        current?.assets.orEmpty(),
+                        sid,
+                        tipAsset = connectionSource
+                    )
                 } ?: connectionSource?.let { NetworkCatalog.seriesConfigFrom(it) }
             } else {
                 null
@@ -317,13 +381,21 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             val dtrLtContinue = continuingSeries &&
                 locked?.startStructure == PoleStructure.DTR &&
                 draft.voltage == VoltageLevel.LT
+            // Voltage is a line property: tapping inherits source voltage and cannot change it.
             val voltage = when {
                 dtrLtContinue -> draft.voltage
                 locked != null -> locked.voltage
                 isTappingBranch -> tapSource!!.voltage
                 else -> draft.voltage
             }
-            val status = locked?.status ?: draft.status
+            // Continuing a series: status is locked to the previous pole (auto Proposed after Proposed).
+            // New branch/tap: status comes from the wizard choice.
+            val status = when {
+                continuingSeries && connectionSource != null -> connectionSource.status
+                isTappingBranch -> draft.status
+                locked != null -> locked.status
+                else -> draft.status
+            }
             val material = when {
                 dtrLtContinue -> draft.material
                 locked != null -> locked.material
@@ -350,7 +422,8 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                 deviceAccuracyM = evidence.deviceAccuracyM,
                 deviceFixTimestamp = evidence.deviceFixTimestamp,
                 distanceFromDeviceM = evidence.distanceFromDeviceM,
-                isMockLocation = evidence.isMockLocation
+                isMockLocation = evidence.isMockLocation,
+                satsUsedInFix = evidence.satsUsedInFix
             )
 
             val assetId = repository.addAsset(
@@ -396,17 +469,25 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                 }
             }
 
-            // Persist feeder metadata for new 33kV/11kV series
-            if (effectiveRole == PoleRole.START &&
-                voltage != VoltageLevel.LT &&
-                (draft.feederName.isNotBlank() || draft.sourceSubstation.isNotBlank())
-            ) {
-                repository.saveSeriesMeta(
-                    surveyId = id,
-                    seriesId = seriesId,
-                    feederName = draft.feederName,
-                    sourceSubstation = draft.sourceSubstation
-                )
+            // Persist feeder metadata for new 33kV/11kV series.
+            // Branches from existing inherit parent feeder/SS (unchanged).
+            // Connecting span status follows the new pole (Proposed line from Existing pole = dotted).
+            if (effectiveRole == PoleRole.START && voltage != VoltageLevel.LT) {
+                val parentMeta = if (isTappingBranch) {
+                    tapSource?.seriesId?.let { repository.getSeriesMeta(it) }
+                } else {
+                    null
+                }
+                val feeder = draft.feederName.ifBlank { parentMeta?.feederName.orEmpty() }
+                val ss = draft.sourceSubstation.ifBlank { parentMeta?.sourceSubstation.orEmpty() }
+                if (feeder.isNotBlank() || ss.isNotBlank()) {
+                    repository.saveSeriesMeta(
+                        surveyId = id,
+                        seriesId = seriesId,
+                        feederName = feeder,
+                        sourceSubstation = ss
+                    )
+                }
             }
         } finally {
             setProcessing(false)
@@ -462,6 +543,9 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             if (_selectedTapPoleId.value == asset.id) {
                 _selectedTapPoleId.value = null
             }
+            if (_pendingProposedBranchFromId.value == asset.id) {
+                _pendingProposedBranchFromId.value = null
+            }
             repository.deleteAsset(asset)
         }
     }
@@ -469,6 +553,7 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
     fun clearDrawing() {
         val id = surveyId.value ?: return
         _selectedTapPoleId.value = null
+        _pendingProposedBranchFromId.value = null
         undoStack.clear()
         viewModelScope.launch {
             repository.clearDrawing(id)
@@ -499,8 +584,43 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         return results[0].toDouble()
     }
 
+    /**
+     * Split an original span into A→mid and mid→B using actual pole-to-pole distances.
+     * When the original connection had a recorded length, the two parts are scaled so they
+     * always sum exactly to that length (e.g. 50 m → 18 m + 32 m).
+     */
+    private fun splitSpanLengths(
+        originalSpanM: String?,
+        fromLat: Double,
+        fromLng: Double,
+        midLat: Double,
+        midLng: Double,
+        toLat: Double,
+        toLng: Double
+    ): Pair<String, String> {
+        val ap = measuredSpanMetres(fromLat, fromLng, midLat, midLng)
+        val pb = measuredSpanMetres(midLat, midLng, toLat, toLng)
+        val measuredTotal = ap + pb
+        val stored = originalSpanM?.toDoubleOrNull()?.takeIf { it > 0 }
+            ?: measuredSpanMetres(fromLat, fromLng, toLat, toLng).takeIf { it > 0 }
+
+        if (stored != null && measuredTotal > 0.01) {
+            val totalRounded = stored.roundToInt().coerceAtLeast(0)
+            val apRounded = (stored * (ap / measuredTotal)).roundToInt()
+                .coerceIn(0, totalRounded)
+            val pbRounded = (totalRounded - apRounded).coerceAtLeast(0)
+            return apRounded.toString() to pbRounded.toString()
+        }
+
+        return ap.roundToInt().coerceAtLeast(0).toString() to
+            pb.roundToInt().coerceAtLeast(0).toString()
+    }
+
     suspend fun getSeriesMetaForSurvey(surveyId: Long) =
         repository.getSeriesMetaForSurvey(surveyId)
+
+    suspend fun getSeriesMeta(seriesId: Long) =
+        repository.getSeriesMeta(seriesId)
 
     class Factory(private val repository: SurveyRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

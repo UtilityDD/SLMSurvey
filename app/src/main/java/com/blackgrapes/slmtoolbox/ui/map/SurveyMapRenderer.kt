@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.location.Location
+import android.util.LruCache
 import androidx.core.content.ContextCompat
 import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.domain.SurveyMetrics
@@ -25,8 +26,11 @@ import org.maplibre.android.maps.MapLibreMap
 
 object SurveyMapRenderer {
 
+    private val markerCache = object : LruCache<String, Bitmap>(96) {}
+    private val spanLabelCache = object : LruCache<Int, Bitmap>(48) {}
+
     /**
-     * Renders the survey onto the map. 
+     * Renders the survey onto the map.
      * Returns a map of Asset ID to Marker for targeted updates.
      */
     fun render(
@@ -129,10 +133,13 @@ object SurveyMapRenderer {
             }.build()
             map.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80))
         }
-        
+
         return assetMarkers
     }
 
+    /**
+     * Fewer, longer dashes — same proposed look with far fewer polylines.
+     */
     private fun addDottedLine(
         map: MapLibreMap,
         from: LatLng,
@@ -140,13 +147,11 @@ object SurveyMapRenderer {
         distanceMetres: Double,
         color: Int
     ) {
-        // Optimized dotted line: larger dash gap and smaller segment count to prevent UI lag
-        // 4.0m dash gap provides a good balance between "dots" and performance.
-        val dashGap = 4.0 
-        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 60)
+        val dashGap = 8.0
+        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 20)
         for (index in 0 until segmentCount) {
             val startFraction = index.toDouble() / segmentCount
-            val endFraction = (startFraction + 0.4 / segmentCount).coerceAtMost(1.0)
+            val endFraction = (startFraction + 0.45 / segmentCount).coerceAtMost(1.0)
             map.addPolyline(
                 PolylineOptions()
                     .add(
@@ -178,43 +183,28 @@ object SurveyMapRenderer {
         isBlinking: Boolean = false,
         isSnapped: Boolean = false
     ): Bitmap {
-        // Fixed size to prevent layout jumps during blinking
+        val structure = asset.poleStructure ?: PoleStructure.P1
+        val key = listOf(
+            asset.voltage.name,
+            asset.status.name,
+            structure.name,
+            selected,
+            isBlinking,
+            isSnapped,
+            asset.locationVerified
+        ).joinToString("|")
+        markerCache.get(key)?.let { return it }
+
         val size = 104
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        
-        // Blink colors: use a pulsing border instead of a whole color change for less "odd" look
+
         val baseColor = colorFor(asset.voltage, context)
-        val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = baseColor
-            style = Paint.Style.FILL
-        }
-        
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isBlinking) {
-                Color.YELLOW
-            } else if (!asset.locationVerified) {
-                Color.RED
-            } else {
-                Color.WHITE
-            }
-            style = Paint.Style.STROKE
-            strokeWidth = 5f
-            if (!asset.locationVerified && !isBlinking && !selected) {
-                pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
-            }
-        }
-        
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textAlign = Paint.Align.CENTER
-            textSize = if ((asset.poleStructure ?: PoleStructure.P1) == PoleStructure.DTR) 22f else 26f
-            isFakeBoldText = true
-        }
-        
+        val isProposed = asset.status == WorkStatus.PROPOSED
+        val radius = 34f
         val cx = size / 2f
         val cy = size / 2f
-        
+
         if (selected || isBlinking || isSnapped) {
             val ringColor = when {
                 isSnapped && isBlinking -> Color.parseColor("#00E676")
@@ -230,22 +220,57 @@ object SurveyMapRenderer {
             }
             canvas.drawCircle(cx, cy, 48f, ring)
         }
-        
-        val radius = 34f
-        canvas.drawCircle(cx, cy, radius, fill)
-        canvas.drawCircle(cx, cy, radius, stroke)
-        
-        val label = asset.poleStructure?.label ?: "1P"
-        canvas.drawText(label, cx, cy + 9f, textPaint)
-        
-        if (asset.status == WorkStatus.PROPOSED && !selected && !isBlinking) {
-            val dash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = ContextCompat.getColor(context, R.color.proposed_dash)
-                style = Paint.Style.STROKE
-                strokeWidth = 4f
+
+        if (isProposed) {
+            val hollowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.FILL
             }
-            canvas.drawCircle(cx, cy, 44f, dash)
+            canvas.drawCircle(cx, cy, radius, hollowFill)
+            val hollowStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = baseColor
+                style = Paint.Style.STROKE
+                strokeWidth = 7f
+            }
+            canvas.drawCircle(cx, cy, radius, hollowStroke)
+            if (!asset.locationVerified && !isBlinking) {
+                val unverified = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.RED
+                    style = Paint.Style.STROKE
+                    strokeWidth = 3f
+                    pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
+                }
+                canvas.drawCircle(cx, cy, radius + 6f, unverified)
+            }
+        } else {
+            val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = baseColor
+                style = Paint.Style.FILL
+            }
+            val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = when {
+                    isBlinking -> Color.YELLOW
+                    !asset.locationVerified -> Color.RED
+                    else -> Color.WHITE
+                }
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+                if (!asset.locationVerified && !isBlinking && !selected) {
+                    pathEffect = android.graphics.DashPathEffect(floatArrayOf(8f, 6f), 0f)
+                }
+            }
+            canvas.drawCircle(cx, cy, radius, fill)
+            canvas.drawCircle(cx, cy, radius, stroke)
         }
+
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (isProposed) baseColor else Color.WHITE
+            textAlign = Paint.Align.CENTER
+            textSize = if (structure == PoleStructure.DTR) 22f else 26f
+            isFakeBoldText = true
+        }
+        canvas.drawText(structure.label, cx, cy + 9f, textPaint)
+        markerCache.put(key, bitmap)
         return bitmap
     }
 
@@ -270,7 +295,9 @@ object SurveyMapRenderer {
     }
 
     private fun createSpanLabelBitmap(spanMetres: Double): Bitmap {
-        val label = "${spanMetres.toInt()} m"
+        val metres = spanMetres.toInt()
+        spanLabelCache.get(metres)?.let { return it }
+        val label = "$metres m"
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
             textSize = 28f
@@ -293,10 +320,13 @@ object SurveyMapRenderer {
         canvas.drawRoundRect(1f, 1f, width - 1f, height - 1f, 10f, 10f, background)
         canvas.drawRoundRect(1f, 1f, width - 1f, height - 1f, 10f, 10f, border)
         canvas.drawText(label, width / 2f, 34f, textPaint)
+        spanLabelCache.put(metres, bitmap)
         return bitmap
     }
 
     fun createMyLocationMarkerBitmap(context: Context, isBlinking: Boolean): Bitmap {
+        val key = "myloc|$isBlinking"
+        markerCache.get(key)?.let { return it }
         val size = 64
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
@@ -314,6 +344,7 @@ object SurveyMapRenderer {
         val cy = size / 2f
         canvas.drawCircle(cx, cy, 18f, paint)
         canvas.drawCircle(cx, cy, 18f, stroke)
+        markerCache.put(key, bitmap)
         return bitmap
     }
 }

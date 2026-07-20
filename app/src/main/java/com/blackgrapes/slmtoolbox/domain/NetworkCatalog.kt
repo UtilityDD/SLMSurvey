@@ -101,23 +101,44 @@ object NetworkCatalog {
         )
     }
 
-    /** Prefer series START asset so DTR→LT pattern is detected correctly. */
-    fun seriesConfigFromSeries(assets: List<SurveyAsset>, seriesId: Long): SeriesConfig? {
+    /**
+     * Build locked series config for CONTINUE.
+     * Voltage / material / conductor / DTR start come from the series START pole.
+     * Status comes from the open tip (previous pole): once Proposed, all continues stay Proposed.
+     */
+    fun seriesConfigFromSeries(
+        assets: List<SurveyAsset>,
+        seriesId: Long,
+        tipAsset: SurveyAsset? = null
+    ): SeriesConfig? {
         val inSeries = assets.filter { it.seriesId == seriesId }
         if (inSeries.isEmpty()) return null
         val start = inSeries.firstOrNull {
             it.poleRole == com.blackgrapes.slmtoolbox.domain.model.PoleRole.START
         } ?: inSeries.minByOrNull { it.sequence } ?: return null
+        val tip = tipAsset?.takeIf { it.seriesId == seriesId }
+            ?: inSeries
+                .filter {
+                    com.blackgrapes.slmtoolbox.domain.FieldRules.canConnect(it.type) &&
+                        it.poleRole != com.blackgrapes.slmtoolbox.domain.model.PoleRole.END
+                }
+                .maxByOrNull { it.sequence }
+            ?: start
         return seriesConfigFrom(start)?.copy(
-            startStructure = start.poleStructure
+            startStructure = start.poleStructure,
+            status = tip.status
         )
     }
 }
 
 object SiteVerification {
-    const val MAX_ACCURACY_M = 30f
-    const val MAX_FIX_AGE_MS = 2 * 60 * 1000L
+    /** Accuracy required for locationVerified / live-at-site. */
+    const val MAX_ACCURACY_M = 15f
+    /** Still usable for placing, but shown as weak. */
+    const val WARN_ACCURACY_M = 30f
+    const val MAX_FIX_AGE_MS = 30_000L
     const val MAX_DISTANCE_M = 50f
+    const val MIN_SATS_USED = 4
 
     fun isVerified(
         deviceLatitude: Double?,
@@ -126,6 +147,7 @@ object SiteVerification {
         deviceFixTimestamp: Long?,
         distanceFromDeviceM: Float?,
         isMockLocation: Boolean,
+        satsUsedInFix: Int? = null,
         now: Long = System.currentTimeMillis()
     ): Boolean {
         if (deviceLatitude == null || deviceLongitude == null) return false
@@ -133,8 +155,23 @@ object SiteVerification {
         if (deviceFixTimestamp == null || now - deviceFixTimestamp > MAX_FIX_AGE_MS) return false
         if (distanceFromDeviceM == null || distanceFromDeviceM > MAX_DISTANCE_M) return false
         if (isMockLocation) return false
+        if (satsUsedInFix != null && satsUsedInFix < MIN_SATS_USED) return false
         return true
     }
+
+    fun accuracyGrade(accuracyM: Float?): AccuracyGrade {
+        if (accuracyM == null) return AccuracyGrade.UNKNOWN
+        return when {
+            accuracyM <= 8f -> AccuracyGrade.EXCELLENT
+            accuracyM <= MAX_ACCURACY_M -> AccuracyGrade.GOOD
+            accuracyM <= WARN_ACCURACY_M -> AccuracyGrade.WEAK
+            else -> AccuracyGrade.POOR
+        }
+    }
+}
+
+enum class AccuracyGrade {
+    EXCELLENT, GOOD, WEAK, POOR, UNKNOWN
 }
 
 object GeometryHitTest {

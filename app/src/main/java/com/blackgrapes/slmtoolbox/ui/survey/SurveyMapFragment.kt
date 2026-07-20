@@ -42,6 +42,7 @@ import com.blackgrapes.slmtoolbox.domain.GeometryHitTest
 import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
 import com.blackgrapes.slmtoolbox.domain.model.SurveyConnection
+import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
 import com.blackgrapes.slmtoolbox.map.MapStyleConfig
 import com.blackgrapes.slmtoolbox.ui.settings.PresetSettingsDialog
 import com.blackgrapes.slmtoolbox.ui.map.SurveyMapRenderer
@@ -53,6 +54,8 @@ import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.maplibre.android.annotations.IconFactory
@@ -62,7 +65,10 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
+import com.blackgrapes.slmtoolbox.domain.AccuracyGrade
+import com.blackgrapes.slmtoolbox.domain.SiteVerification
 import kotlin.coroutines.resume
+import java.util.ArrayDeque
 
 class SurveyMapFragment : Fragment() {
 
@@ -78,6 +84,13 @@ class SurveyMapFragment : Fragment() {
     private var gpsReady = false
     private var settingsPromptOpen = false
     private var lastDeviceLocation: Location? = null
+    private val recentFixes = ArrayDeque<Location>(12)
+    private var renderJob: Job? = null
+    private var cameraMoving = false
+    private var lastRenderedSurveyId: Long? = null
+    private var lastRenderedUpdatedAt: Long = -1L
+    private var lastRenderedSelectedId: Long? = null
+    private var lastRenderedSnappedId: Long? = null
 
     // ── Satellite tracking ──────────────────────────────────────────────────
     private data class SatInfo(
@@ -139,9 +152,12 @@ class SurveyMapFragment : Fragment() {
             map = mapLibreMap
             mapLibreMap.uiSettings.isAttributionEnabled = true
             mapLibreMap.setStyle(Style.Builder().fromUri(MapStyleConfig.STYLE_URL)) {
-                styleReady = true
+        styleReady = true
                 requestLocationOrFallback()
-                renderCurrentSurvey()
+                scheduleRender()
+                if (_binding != null) {
+                    binding.tvGpsAccuracy.text = getString(R.string.gps_accuracy_unknown)
+                }
             }
             mapLibreMap.addOnMapLongClickListener { latLng ->
                 handleLongPress(latLng.latitude, latLng.longitude)
@@ -153,8 +169,12 @@ class SurveyMapFragment : Fragment() {
                 false
             }
             mapLibreMap.addOnCameraMoveListener {
+                cameraMoving = true
                 updateDynamicSpanHint()
                 updateCoordinateChip()
+            }
+            mapLibreMap.addOnCameraIdleListener {
+                cameraMoving = false
             }
             // Show initial coordinates as soon as the map is ready
             updateCoordinateChip()
@@ -189,14 +209,14 @@ class SurveyMapFragment : Fragment() {
                             survey.assets.any { it.poleRole == PoleRole.END }
                         binding.liveSiteBanner.isVisible =
                             survey.assets.isNotEmpty() && !survey.isLiveAtSite
-                        renderCurrentSurvey()
+                        scheduleRender()
                         updateDynamicSpanHint()
                     }
                 }
                 launch {
                     viewModel.selectedTapPoleId.collect {
                         updateDynamicSpanHint()
-                        renderCurrentSurvey()
+                        scheduleRender()
                     }
                 }
                 launch {
@@ -220,11 +240,17 @@ class SurveyMapFragment : Fragment() {
     }
 
     private fun updateBlinkingMarker(blinkOn: Boolean) {
+        if (cameraMoving) {
+            if (_binding != null) {
+                binding.imgCrosshair.alpha = if (blinkOn) 1.0f else 0.45f
+            }
+            return
+        }
         val survey = viewModel.survey.value ?: return
         val blinkAsset = viewModel.selectedTapPole() ?: viewModel.activeOpenTip()
         val context = context ?: return
-        val iconFactory = org.maplibre.android.annotations.IconFactory.getInstance(context)
-        
+        val iconFactory = IconFactory.getInstance(context)
+
         if (blinkAsset != null) {
             val marker = assetMarkers[blinkAsset.id]
             if (marker != null) {
@@ -239,7 +265,7 @@ class SurveyMapFragment : Fragment() {
                 marker.setIcon(iconFactory.fromBitmap(icon))
             }
         }
-        
+
         val snappedId = snappedPoleId
         if (snappedId != null && (blinkAsset == null || blinkAsset.id != snappedId)) {
             val marker = assetMarkers[snappedId]
@@ -256,10 +282,10 @@ class SurveyMapFragment : Fragment() {
                 marker.setIcon(iconFactory.fromBitmap(icon))
             }
         }
-        
+
         updateMyLocationMarker()
         if (_binding != null) {
-            binding.imgCrosshair.alpha = if (blinkOn) 1.0f else 0.4f
+            binding.imgCrosshair.alpha = if (blinkOn) 1.0f else 0.45f
         }
     }
 
@@ -296,11 +322,49 @@ class SurveyMapFragment : Fragment() {
         wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
     }
 
-    private fun openNearLineBubble(lat: Double, lng: Double, candidates: List<SurveyAsset>, splitId: Long?) {
-        val wizard = SurveyBubbleWizard.forNearLine(lat, lng, candidates, splitId)
-        wizard.onSelectSource = { viewModel.selectTapPole(it) }
-        wizard.onPlace = { draft -> placeWithEvidence(draft) }
-        wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
+    private fun openNearLineBubble(
+        lat: Double,
+        lng: Double,
+        candidates: List<SurveyAsset>,
+        splitId: Long?,
+        lineVoltage: com.blackgrapes.slmtoolbox.domain.model.VoltageLevel? = null,
+        lineStatus: com.blackgrapes.slmtoolbox.domain.model.WorkStatus? = null,
+        directInsert: Boolean = false
+    ) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val seriesId = candidates.firstOrNull()?.seriesId
+            val meta = seriesId?.let { viewModel.getSeriesMeta(it) }
+            val wizard = SurveyBubbleWizard.forNearLine(
+                lat = lat,
+                lng = lng,
+                candidates = candidates,
+                splitId = splitId,
+                lineVoltage = lineVoltage,
+                lineStatus = lineStatus,
+                feederName = meta?.feederName.orEmpty(),
+                sourceSubstation = meta?.sourceSubstation.orEmpty(),
+                directInsert = directInsert
+            )
+            wizard.onPlace = { draft -> placeWithEvidence(draft) }
+            wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
+        }
+    }
+
+    /** Start a Proposed branch from an existing pole (voltage + feeder/SS inherited). */
+    private fun openTappingBubble(lat: Double, lng: Double, source: SurveyAsset) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewModel.clearTapPole()
+            val meta = source.seriesId?.let { viewModel.getSeriesMeta(it) }
+            val wizard = SurveyBubbleWizard.forTapping(
+                lat = lat,
+                lng = lng,
+                source = source,
+                feederName = meta?.feederName.orEmpty(),
+                sourceSubstation = meta?.sourceSubstation.orEmpty()
+            )
+            wizard.onPlace = { draft -> placeWithEvidence(draft) }
+            wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
+        }
     }
 
     /** Long-press on a pole → Edit properties or Delete. */
@@ -313,17 +377,32 @@ class SurveyMapFragment : Fragment() {
 
     private fun placeWithEvidence(draft: com.blackgrapes.slmtoolbox.domain.PlacementDraft) {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.setProcessing(true, "Capturing GPS...")
+            viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
             val evidence = captureEvidence(draft.latitude, draft.longitude)
+            val grade = SiteVerification.accuracyGrade(evidence.deviceAccuracyM)
+            if (grade == AccuracyGrade.POOR || grade == AccuracyGrade.UNKNOWN) {
+                Toast.makeText(
+                    requireContext(),
+                    R.string.gps_fix_poor_toast,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             viewModel.placePole(draft, evidence)
             updateDynamicSpanHint()
+            if (viewModel.hasPendingProposedBranch()) {
+                Toast.makeText(
+                    requireContext(),
+                    R.string.status_proposed_branch_ready,
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
     @SuppressLint("MissingPermission")
     private suspend fun captureEvidence(mapLat: Double, mapLng: Double): LocationEvidence {
         val satSnapshot = currentSatSnapshot()
-        val location = fetchFreshLocation() ?: lastDeviceLocation
+        val location = collectBestGpsFix()
         if (location == null) {
             return LocationEvidence(
                 null, null, null, null, null, false,
@@ -333,6 +412,7 @@ class SurveyMapFragment : Fragment() {
             )
         }
         lastDeviceLocation = location
+        rememberFix(location)
         val results = FloatArray(1)
         Location.distanceBetween(
             location.latitude,
@@ -341,7 +421,7 @@ class SurveyMapFragment : Fragment() {
             mapLng,
             results
         )
-        val mock = if (android.os.Build.VERSION.SDK_INT >= 31) {
+        val mock = if (Build.VERSION.SDK_INT >= 31) {
             location.isMock
         } else {
             @Suppress("DEPRECATION")
@@ -358,6 +438,50 @@ class SurveyMapFragment : Fragment() {
             satsVisible = satSnapshot.visible,
             avgSnrDb = satSnapshot.avgSnr
         )
+    }
+
+    private fun rememberFix(location: Location) {
+        recentFixes.addLast(location)
+        while (recentFixes.size > 12) recentFixes.removeFirst()
+    }
+
+    private fun bestRecentFix(maxAgeMs: Long = 10_000L): Location? {
+        val now = System.currentTimeMillis()
+        return recentFixes
+            .filter { loc ->
+                loc.hasAccuracy() &&
+                    (now - loc.time) in 0..maxAgeMs &&
+                    loc.accuracy <= SiteVerification.WARN_ACCURACY_M * 2
+            }
+            .minByOrNull { it.accuracy }
+    }
+
+    /**
+     * Collects several high-accuracy fixes (internet-assisted A-GPS + GNSS) and
+     * returns the lowest-accuracy sample. Rejects stale fixes older than 30s.
+     */
+    private suspend fun collectBestGpsFix(): Location? {
+        var best = bestRecentFix(maxAgeMs = 8_000L)
+        val deadline = System.currentTimeMillis() + 2_500L
+        while (System.currentTimeMillis() < deadline) {
+            delay(400)
+            val candidate = bestRecentFix(maxAgeMs = 5_000L)
+            if (candidate != null && (best == null || candidate.accuracy < best.accuracy)) {
+                best = candidate
+            }
+            if (best != null && best.accuracy <= 8f) break
+        }
+        val fresh = fetchFreshLocation()
+        if (fresh != null) {
+            rememberFix(fresh)
+            if (best == null || fresh.accuracy < best.accuracy) best = fresh
+        }
+        val now = System.currentTimeMillis()
+        return best?.takeIf {
+            it.hasAccuracy() &&
+                it.accuracy <= 50f &&
+                now - it.time <= SiteVerification.MAX_FIX_AGE_MS
+        }
     }
 
     private data class SatSnapshot(
@@ -401,10 +525,8 @@ class SurveyMapFragment : Fragment() {
         }
 
     /**
-     * Called from the + actions dialog when a series IS active and the user
-     * chose "Branch from Pole". Only shows tapping-pole selection — delete is
-     * intentionally absent here because the user is mid-draw and accidental
-     * deletion must be prevented.
+     * Mid-draw pole action: branch from an Existing pole starts a Proposed series;
+     * branching from a Proposed tip continues that series.
      */
     private fun showPoleActions(asset: SurveyAsset) {
         MaterialAlertDialogBuilder(requireContext())
@@ -412,12 +534,21 @@ class SurveyMapFragment : Fragment() {
             .setItems(
                 arrayOf(getString(R.string.select_as_tapping))
             ) { _, _ ->
-                viewModel.selectTapPole(asset)
-                Toast.makeText(
-                    requireContext(),
-                    getString(R.string.tapping_pole_selected, asset.sequence),
-                    Toast.LENGTH_LONG
-                ).show()
+                if (asset.status == WorkStatus.EXISTING) {
+                    viewModel.armProposedBranch(asset)
+                    Toast.makeText(
+                        requireContext(),
+                        R.string.status_proposed_branch_ready,
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    viewModel.selectTapPole(asset)
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.tapping_pole_selected, asset.sequence),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
                 updateDynamicSpanHint()
             }
             .setNegativeButton(R.string.cancel, null)
@@ -549,6 +680,8 @@ class SurveyMapFragment : Fragment() {
         }
         
         val baseHint = when {
+            viewModel.hasPendingProposedBranch() ->
+                getString(R.string.status_proposed_branch_ready)
             detectedTapPole != null && detectedConnection != null ->
                 "Near Pole #${detectedTapPole.sequence} & Line (Press + for options)"
             detectedTapPole != null ->
@@ -677,20 +810,45 @@ class SurveyMapFragment : Fragment() {
         assets.any { it.poleRole == PoleRole.START } &&
             assets.any { it.poleRole == PoleRole.END }
 
+    private fun scheduleRender() {
+        renderJob?.cancel()
+        renderJob = viewLifecycleOwner.lifecycleScope.launch {
+            delay(80)
+            renderCurrentSurvey()
+        }
+    }
+
     private fun renderCurrentSurvey() {
         val mapLibreMap = map ?: return
         val survey = viewModel.survey.value ?: return
         if (!styleReady) return
-        
+
+        val selectedId = viewModel.selectedTapPoleId.value
+        val snappedId = snappedPoleId
+        // Skip identical redraws when nothing in the survey or selection changed.
+        if (
+            survey.id == lastRenderedSurveyId &&
+            survey.updatedAt == lastRenderedUpdatedAt &&
+            selectedId == lastRenderedSelectedId &&
+            snappedId == lastRenderedSnappedId &&
+            assetMarkers.isNotEmpty()
+        ) {
+            return
+        }
+
         myLocationMarker = null
         assetMarkers = SurveyMapRenderer.render(
             context = requireContext(),
             map = mapLibreMap,
             survey = survey,
             readOnly = false,
-            selectedAssetId = viewModel.selectedTapPoleId.value,
-            snappedAssetId = snappedPoleId
+            selectedAssetId = selectedId,
+            snappedAssetId = snappedId
         )
+        lastRenderedSurveyId = survey.id
+        lastRenderedUpdatedAt = survey.updatedAt
+        lastRenderedSelectedId = selectedId
+        lastRenderedSnappedId = snappedId
         updateMyLocationMarker()
     }
 
@@ -909,14 +1067,16 @@ class SurveyMapFragment : Fragment() {
 
     private fun performQuickDrop() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.setProcessing(true, "Fetching GPS location...")
-            val location = fetchFreshLocation() ?: lastDeviceLocation
+            viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
+            val location = collectBestGpsFix()
             if (location == null) {
                 viewModel.setProcessing(false)
                 Toast.makeText(requireContext(), R.string.quick_drop_error_no_location, Toast.LENGTH_LONG).show()
                 return@launch
             }
             lastDeviceLocation = location
+            rememberFix(location)
+            updateGpsAccuracyUi(location)
             
             val centerLatLng = map?.cameraPosition?.target
             if (centerLatLng == null) {
@@ -926,7 +1086,16 @@ class SurveyMapFragment : Fragment() {
             }
             
             viewModel.setProcessing(false)
-            
+
+            // After inserting on an Existing line: next + starts Proposed branch from the joint.
+            if (viewModel.hasPendingProposedBranch()) {
+                val source = viewModel.consumePendingProposedBranch()
+                if (source != null) {
+                    openTappingBubble(centerLatLng.latitude, centerLatLng.longitude, source)
+                    return@launch
+                }
+            }
+
             val series = viewModel.activeSeriesConfig()
             val tap = viewModel.selectedTapPole()
             val isIdle = (series == null && tap == null)
@@ -987,20 +1156,18 @@ class SurveyMapFragment : Fragment() {
     ) {
         val options = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
-        
+
         if (nearestPole != null) {
-            options.add("Branch from Pole #${nearestPole.sequence}")
+            options.add(getString(R.string.choice_start_proposed_from_pole, nearestPole.sequence))
             actions.add {
-                viewModel.selectTapPole(nearestPole)
-                triggerQuickDropFeedback()
-                updateDynamicSpanHint()
+                openTappingBubble(centerLatLng.latitude, centerLatLng.longitude, nearestPole)
             }
         }
-        
+
         if (nearestLine != null && lineCandidates.size >= 2) {
             val from = lineCandidates[0]
             val to = lineCandidates[1]
-            options.add("Insert Pole into Line (Pole #${from.sequence} → Pole #${to.sequence})")
+            options.add(getString(R.string.choice_insert_on_line, from.sequence, to.sequence))
             actions.add {
                 val projected = GeometryHitTest.projectPointToSegment(
                     centerLatLng.latitude,
@@ -1010,17 +1177,35 @@ class SurveyMapFragment : Fragment() {
                     to.latitude,
                     to.longitude
                 )
-                openNearLineBubble(projected.first, projected.second, lineCandidates, nearestLine.id)
+                // One dialog only: go straight into insert (Existing/Proposed), no second "Action near line" menu.
+                openNearLineBubble(
+                    projected.first,
+                    projected.second,
+                    lineCandidates,
+                    nearestLine.id,
+                    lineVoltage = nearestLine.voltage,
+                    lineStatus = nearestLine.status,
+                    directInsert = true
+                )
+            }
+            // Branch options for both endpoints (skip if already offered as nearestPole).
+            lineCandidates.forEach { pole ->
+                if (nearestPole == null || pole.id != nearestPole.id) {
+                    options.add(getString(R.string.choice_start_proposed_from_pole, pole.sequence))
+                    actions.add {
+                        openTappingBubble(centerLatLng.latitude, centerLatLng.longitude, pole)
+                    }
+                }
             }
         }
-        
-        options.add("Place New Standalone Pole")
+
+        options.add(getString(R.string.choice_new_network))
         actions.add {
             openNewNetworkBubble(centerLatLng.latitude, centerLatLng.longitude)
         }
-        
+
         MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Actions near Target")
+            .setTitle(R.string.actions_near_target_title)
             .setItems(options.toTypedArray()) { _, which ->
                 actions[which].invoke()
             }
@@ -1309,16 +1494,59 @@ class SurveyMapFragment : Fragment() {
         override fun onLocationResult(locationResult: com.google.android.gms.location.LocationResult) {
             val location = locationResult.lastLocation ?: return
             lastDeviceLocation = location
+            rememberFix(location)
+            updateGpsAccuracyUi(location)
             updateMyLocationMarker()
         }
+    }
+
+    private fun updateGpsAccuracyUi(location: Location?) {
+        if (_binding == null) return
+        if (location == null || !location.hasAccuracy()) {
+            binding.tvGpsAccuracy.text = getString(R.string.gps_accuracy_unknown)
+            binding.tvGpsAccuracy.setTextColor(
+                ContextCompat.getColor(requireContext(), R.color.text_secondary)
+            )
+            return
+        }
+        val accuracy = location.accuracy
+        val grade = SiteVerification.accuracyGrade(accuracy)
+        val (textRes, color) = when (grade) {
+            AccuracyGrade.EXCELLENT ->
+                R.string.gps_accuracy_excellent to Color.parseColor("#15803D")
+            AccuracyGrade.GOOD ->
+                R.string.gps_accuracy_good to Color.parseColor("#16A34A")
+            AccuracyGrade.WEAK ->
+                R.string.gps_accuracy_weak to Color.parseColor("#CA8A04")
+            AccuracyGrade.POOR ->
+                R.string.gps_accuracy_poor to Color.parseColor("#DC2626")
+            AccuracyGrade.UNKNOWN ->
+                R.string.gps_accuracy_unknown to ContextCompat.getColor(requireContext(), R.color.text_secondary)
+        }
+        binding.tvGpsAccuracy.text = if (grade == AccuracyGrade.UNKNOWN) {
+            getString(textRes)
+        } else {
+            getString(textRes, accuracy)
+        }
+        binding.tvGpsAccuracy.setTextColor(color)
+
+        val indicatorColor = when (grade) {
+            AccuracyGrade.EXCELLENT, AccuracyGrade.GOOD -> Color.GREEN
+            AccuracyGrade.WEAK -> Color.YELLOW
+            else -> Color.RED
+        }
+        binding.gpsStatusIndicator.setColorFilter(indicatorColor, android.graphics.PorterDuff.Mode.SRC_IN)
     }
 
     @SuppressLint("MissingPermission")
     private fun startLocationUpdates() {
         if (!gpsReady) return
         val client = LocationServices.getFusedLocationProviderClient(requireContext())
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3_000L)
-            .setMinUpdateIntervalMillis(1_500L)
+        // Faster updates while surveying; internet assists A-GPS / fused location.
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_500L)
+            .setMinUpdateIntervalMillis(750L)
+            .setMinUpdateDistanceMeters(0.5f)
+            .setWaitForAccurateLocation(true)
             .build()
         client.requestLocationUpdates(request, locationCallback, android.os.Looper.getMainLooper())
     }

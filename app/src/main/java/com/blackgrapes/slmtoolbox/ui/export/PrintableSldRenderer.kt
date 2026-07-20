@@ -106,19 +106,29 @@ object PrintableSldRenderer {
         }
 
         page.nodes.forEach { node ->
-            fillPaint.color = colorFor(node.voltage)
-            canvas.drawCircle(node.x, node.y, 16f, fillPaint)
-            canvas.drawCircle(node.x, node.y, 16f, strokePaint)
+            val voltageColor = colorFor(node.voltage)
             if (node.status == WorkStatus.PROPOSED) {
-                val dash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = Color.DKGRAY
-                    style = Paint.Style.STROKE
-                    strokeWidth = 1.5f
-                    pathEffect = DashPathEffect(floatArrayOf(4f, 3f), 0f)
+                // Hollow circle = Proposed pole
+                val hollowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.WHITE
+                    style = Paint.Style.FILL
                 }
-                canvas.drawCircle(node.x, node.y, 20f, dash)
+                val hollowStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = voltageColor
+                    style = Paint.Style.STROKE
+                    strokeWidth = 3f
+                }
+                canvas.drawCircle(node.x, node.y, 16f, hollowFill)
+                canvas.drawCircle(node.x, node.y, 16f, hollowStroke)
+                val proposedText = Paint(nodeText).apply { color = voltageColor }
+                canvas.drawText(node.structure.label, node.x, node.y + 3.5f, proposedText)
+            } else {
+                // Filled circle = Existing pole
+                fillPaint.color = voltageColor
+                canvas.drawCircle(node.x, node.y, 16f, fillPaint)
+                canvas.drawCircle(node.x, node.y, 16f, strokePaint)
+                canvas.drawText(node.structure.label, node.x, node.y + 3.5f, nodeText)
             }
-            canvas.drawText(node.structure.label, node.x, node.y + 3.5f, nodeText)
             canvas.drawText("#${node.sequence}", node.x - 10f, node.y + 28f, smallPaint)
             if (node.showCoordinates) {
                 canvas.drawText(
@@ -213,7 +223,25 @@ object PrintableSldRenderer {
             "LT (${SurveyMetrics.formatDistance(lenLt, page.displayUnit, page.displayDecimals)})",
             colorFor(VoltageLevel.LT)
         )
-        drawKey("Proposed", Color.GRAY, dashed = true)
+        drawKey("Proposed line", Color.GRAY, dashed = true)
+
+        // Pole status key
+        val poleKeyY = keyY + 14f
+        var poleX = left + 12f
+        canvas.drawText("Pole", poleX, poleKeyY, textPaint)
+        poleX += 36f
+        fillPaint.color = Color.rgb(21, 101, 192)
+        canvas.drawCircle(poleX, poleKeyY - 3f, 6f, fillPaint)
+        canvas.drawCircle(poleX, poleKeyY - 3f, 6f, strokePaint)
+        canvas.drawText("Existing (filled)", poleX + 10f, poleKeyY, smallPaint)
+        poleX += 10f + smallPaint.measureText("Existing (filled)") + 16f
+        val hollow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(21, 101, 192)
+            style = Paint.Style.STROKE
+            strokeWidth = 2.5f
+        }
+        canvas.drawCircle(poleX, poleKeyY - 3f, 6f, hollow)
+        canvas.drawText("Proposed (hollow)", poleX + 10f, poleKeyY, smallPaint)
 
         // Feeder info on the right side of the legend strip
         if (page.feederEntries.isNotEmpty()) {
