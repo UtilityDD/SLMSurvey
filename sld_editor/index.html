@@ -4,11 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SLM Survey Desktop CAD Editor</title>
+    <!-- GitHub Pages project URLs without a trailing slash resolve relative
+         assets to the site root (e.g. /style.css → 404). Force /SLMSurvey/. -->
+    <script>
+        (function () {
+            var path = location.pathname || '/';
+            if (
+                location.hostname.endsWith('github.io') &&
+                path &&
+                !path.endsWith('/') &&
+                !/\.[a-z0-9]+$/i.test(path)
+            ) {
+                location.replace(path + '/' + location.search + location.hash);
+            }
+        })();
+    </script>
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
     <div class="app-container" id="appContainer">
@@ -374,7 +389,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="app.js"></script>
-    <script src="print_layout.js"></script>
+    <script src="./app.js"></script>
+    <script src="./print_layout.js"></script>
 </body>
 </html>
