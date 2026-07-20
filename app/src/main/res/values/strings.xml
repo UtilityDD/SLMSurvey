@@ -12,8 +12,16 @@
     <string name="undo">Undo</string>
     <string name="recenter">My location</string>
     <string name="preview">Preview</string>
-    <string name="export_share">Export &amp; Share</string>
+    <string name="export_share">Share</string>
     <string name="share_via_whatsapp">Share via WhatsApp</string>
+    <string name="share_summary_short">Summary</string>
+    <string name="share_csv_short">CSV</string>
+    <string name="share_png_short">PNG</string>
+    <string name="share_more">More…</string>
+    <string name="open_workspace">Open</string>
+    <string name="my_sld_history_hint">Date-wise survey history — tap Share for WhatsApp summary, Open to load workspace</string>
+    <string name="delete_workspace_option">Delete</string>
+    <string name="workspace_actions_title">Workspace</string>
     <string name="voltage_locked">Voltage locked to %1$s until End pole</string>
     <string name="voltage">Voltage</string>
     <string name="status">Status</string>
@@ -40,8 +48,8 @@
     <string name="open_location_settings">Open location settings</string>
     <string name="gps_still_off">Location is still off. Survey controls remain locked.</string>
     <string name="gps_checking">Checking GPS…</string>
-    <string name="gps_ready">GPS ready — long-press map to add, or long-press a pole to tap from it</string>
-    <string name="long_press_hint">Long-press empty map to add · Long-press existing pole to select tapping</string>
+    <string name="gps_ready">GPS ready — press + to add poles, or long-press a pole to edit / delete</string>
+    <string name="long_press_hint">Press + to add poles · Long-press a pole to edit or delete</string>
     <string name="export_ready">Export ready</string>
     <string name="export_failed">Export failed</string>
     <string name="whatsapp_not_found">WhatsApp not found. Opening share menu.</string>
@@ -61,7 +69,7 @@
     <string name="pole_start">Start</string>
     <string name="pole_continue">Continue</string>
     <string name="pole_end">End</string>
-    <string name="tapping_pole_selected">Tapping pole selected: #%1$d. Long-press the map to add the next pole from this tap.</string>
+    <string name="tapping_pole_selected">Tapping pole selected: #%1$d. Press + to add the next pole from this tap.</string>
     <string name="tapping_cleared">Tapping selection cleared</string>
     <string name="more_details">More details</string>
     <string name="hide_details">Hide details</string>
@@ -101,7 +109,7 @@
     <string name="bubble_source_hint">Branch inherits this line voltage</string>
     <string name="bubble_change_structure">Change structure</string>
     <string name="bubble_change_role_end">Mark as End</string>
-    <string name="status_idle">Long-press workspace to add poles</string>
+    <string name="status_idle">Press + to add poles · Long-press a pole to edit / delete</string>
     <string name="status_series_open">%1$s series open · structure only</string>
     <string name="status_tap_ready">Branch from pole #%1$d</string>
     <string name="not_live_at_site">SLD not verified as created live at site</string>
@@ -119,7 +127,7 @@
     <string name="choice_split_line">Insert pole into Line</string>
     <string name="choice_tap_from">Branch from pole #%1$d</string>
     <string name="choice_new_network">New Standalone Pole</string>
-    <string name="btn_quick_drop_desc">Quick drop pole at current GPS position</string>
+    <string name="btn_quick_drop_desc">Add new pole at map center</string>
     <string name="gps_status_good">GPS status: Good</string>
     <string name="gps_status_weak">GPS status: Weak accuracy</string>
     <string name="gps_status_bad">GPS status: Off/No signal</string>
@@ -130,14 +138,23 @@
     <string name="hint_source_ss">Source 33/11kV SS</string>
     <string name="feeder_confirm">Confirm</string>
     <string name="feeder_required_error">Both fields are required</string>
+    <string name="preset_pattern">Network pattern</string>
+    <string name="preset_pattern_standard">Standard</string>
+    <string name="preset_pattern_dtr_lt">DTR→LT</string>
+    <string name="preset_pattern_dtr_lt_hint">First pole = DTR (11kV). All next poles = LT 1P only.</string>
     <string name="preset_settings_title">Preset Configuration</string>
-    <string name="enable_presets">Use Presets for New Lines</string>
+    <string name="enable_presets">Use presets</string>
     <string name="use_preset_title">Use Preset Template?</string>
     <string name="preset_summary_hint">Places a new series using saved defaults</string>
     <string name="change_details">Customize details…</string>
     <string name="preset_saved_toast">Presets saved successfully</string>
     <string name="share_workspace_json">Share Workspace (.json)</string>
-    <string name="export_options_title">Export Options</string>
-    <string name="export_option_printable">Share PDF / PNG (Printable)</string>
-    <string name="export_option_workspace">Share Raw Workspace (.json)</string>
+    <string name="export_options_title">More share options</string>
+    <string name="export_option_png">PNG — Quick preview image</string>
+    <string name="export_option_gps_csv">CSV — All GPS points &amp; pole numbers</string>
+    <string name="export_option_summary">Text — Today\'s survey summary (WhatsApp)</string>
+    <string name="export_option_workspace">Workspace JSON — For Desktop Editor</string>
+    <string name="export_processing_png">Preparing PNG…</string>
+    <string name="export_processing_csv">Preparing GPS CSV…</string>
+    <string name="export_desktop_hint">Print-quality CAD sheets: use Desktop Editor.</string>
 </resources>

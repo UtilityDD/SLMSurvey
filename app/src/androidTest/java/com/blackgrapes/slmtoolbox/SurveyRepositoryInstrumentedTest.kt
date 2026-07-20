@@ -109,7 +109,10 @@ class SurveyRepositoryInstrumentedTest {
                 deviceFixTimestamp = System.currentTimeMillis(),
                 distanceFromDeviceM = 12f,
                 isMockLocation = false,
-                locationVerified = true
+                locationVerified = true,
+                satsUsedInFix = 11,
+                satsVisible = 19,
+                avgSnrDb = 33.5f
             )
         )
         val loaded = repository.getSurvey(survey.id)!!.assets.first { it.id == id }
@@ -118,5 +121,8 @@ class SurveyRepositoryInstrumentedTest {
         assertEquals(true, loaded.locationVerified)
         assertEquals(8f, loaded.deviceAccuracyM)
         assertEquals("H-Pole", loaded.poleMaterial)
+        assertEquals(11, loaded.satsUsedInFix)
+        assertEquals(19, loaded.satsVisible)
+        assertEquals(33.5f, loaded.avgSnrDb)
     }
 }

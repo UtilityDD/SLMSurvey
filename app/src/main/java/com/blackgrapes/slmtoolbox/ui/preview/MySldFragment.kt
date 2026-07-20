@@ -4,7 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
+import android.widget.BaseAdapter
+import android.widget.Toast
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -15,19 +16,20 @@ import androidx.navigation.fragment.findNavController
 import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.SlmApp
 import com.blackgrapes.slmtoolbox.databinding.FragmentMySldBinding
+import com.blackgrapes.slmtoolbox.databinding.ItemMySldWorkspaceBinding
+import com.blackgrapes.slmtoolbox.domain.SurveyShareSummary
 import com.blackgrapes.slmtoolbox.domain.model.Survey
+import com.blackgrapes.slmtoolbox.ui.export.ShareHelper
 import com.blackgrapes.slmtoolbox.ui.survey.SurveyViewModel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class MySldFragment : Fragment() {
 
     private var _binding: FragmentMySldBinding? = null
     private val binding get() = _binding!!
     private var workspaces: List<Survey> = emptyList()
+    private var adapter: WorkspaceHistoryAdapter? = null
 
     private val viewModel: SurveyViewModel by activityViewModels {
         SurveyViewModel.Factory((requireActivity().application as SlmApp).repository)
@@ -44,55 +46,106 @@ class MySldFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
-        
-        binding.sldList.setOnItemClickListener { _, _, position, _ ->
-            viewModel.openWorkspace(workspaces[position].id)
-            findNavController().popBackStack(R.id.surveyMapFragment, false)
-        }
 
-        binding.sldList.setOnItemLongClickListener { _, _, position, _ ->
-            val workspace = workspaces[position]
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.delete_workspace_title)
-                .setMessage(getString(R.string.delete_workspace_confirm, workspace.title))
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.delete) { _, _ ->
-                    viewModel.deleteWorkspace(workspace.id)
-                }
-                .show()
-            true
-        }
+        adapter = WorkspaceHistoryAdapter(
+            onOpen = { openWorkspace(it) },
+            onShareSummary = { shareSummary(it) },
+            onLongPress = { confirmDelete(it) }
+        )
+        binding.sldList.adapter = adapter
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.savedWorkspaces.collect { saved ->
                     workspaces = saved
-                    binding.sldList.adapter = ArrayAdapter(
-                        requireContext(),
-                        android.R.layout.simple_list_item_1,
-                        saved.map { workspace ->
-                            val date = workspace.savedAt?.let {
-                                SimpleDateFormat(
-                                    "dd MMM yyyy, hh:mm a",
-                                    Locale.getDefault()
-                                ).format(Date(it))
-                            }.orEmpty()
-                            val live = if (workspace.assets.isNotEmpty() && !workspace.isLiveAtSite) {
-                                "⚠ Not verified live at site"
-                            } else {
-                                null
-                            }
-                            listOfNotNull(workspace.title, date, live).joinToString("\n")
-                        }
-                    )
+                    adapter?.submit(saved)
                     binding.emptyText.isVisible = saved.isEmpty()
                 }
             }
         }
     }
 
+    private fun openWorkspace(survey: Survey) {
+        viewModel.openWorkspace(survey.id)
+        findNavController().popBackStack(R.id.surveyMapFragment, false)
+    }
+
+    private fun shareSummary(survey: Survey) {
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val text = SurveyShareSummary.build(requireContext(), survey)
+        ShareHelper.shareText(
+            context = requireContext(),
+            text = text,
+            title = "${survey.title} — Survey Summary"
+        )
+    }
+
+    private fun confirmDelete(survey: Survey) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.delete_workspace_title)
+            .setMessage(getString(R.string.delete_workspace_confirm, survey.title))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                viewModel.deleteWorkspace(survey.id)
+            }
+            .show()
+    }
+
     override fun onDestroyView() {
+        adapter = null
         _binding = null
         super.onDestroyView()
+    }
+
+    private class WorkspaceHistoryAdapter(
+        private val onOpen: (Survey) -> Unit,
+        private val onShareSummary: (Survey) -> Unit,
+        private val onLongPress: (Survey) -> Unit
+    ) : BaseAdapter() {
+
+        private var items: List<Survey> = emptyList()
+
+        fun submit(list: List<Survey>) {
+            items = list
+            notifyDataSetChanged()
+        }
+
+        override fun getCount(): Int = items.size
+        override fun getItem(position: Int): Survey = items[position]
+        override fun getItemId(position: Int): Long = items[position].id
+
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+            val binding = if (convertView?.tag is ItemMySldWorkspaceBinding) {
+                convertView.tag as ItemMySldWorkspaceBinding
+            } else {
+                ItemMySldWorkspaceBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+                    .also { it.root.tag = it }
+            }
+
+            val survey = items[position]
+            val ctx = parent.context
+            binding.tvDayLabel.text = SurveyShareSummary.formatSurveyDayKey(survey)
+            binding.tvTitle.text = survey.title
+            binding.tvDate.text = SurveyShareSummary.formatSurveyDate(survey)
+            binding.tvStats.text = SurveyShareSummary.compactStats(ctx, survey)
+
+            val showWarn = survey.assets.isNotEmpty() && !survey.isLiveAtSite
+            binding.tvLiveWarning.isVisible = showWarn
+            if (showWarn) {
+                binding.tvLiveWarning.text = ctx.getString(R.string.not_live_at_site)
+            }
+
+            binding.btnOpen.setOnClickListener { onOpen(survey) }
+            binding.btnShareSummary.setOnClickListener { onShareSummary(survey) }
+            binding.root.setOnClickListener { onOpen(survey) }
+            binding.root.setOnLongClickListener {
+                onLongPress(survey)
+                true
+            }
+            return binding.root
+        }
     }
 }

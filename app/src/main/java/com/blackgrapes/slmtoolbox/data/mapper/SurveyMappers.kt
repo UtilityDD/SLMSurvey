@@ -57,7 +57,10 @@ fun SurveyAssetEntity.toDomain(): SurveyAsset = SurveyAsset(
     deviceFixTimestamp = deviceFixTimestamp,
     distanceFromDeviceM = distanceFromDeviceM,
     isMockLocation = isMockLocation,
-    locationVerified = locationVerified
+    locationVerified = locationVerified,
+    satsUsedInFix = satsUsedInFix,
+    satsVisible = satsVisible,
+    avgSnrDb = avgSnrDb
 )
 
 fun SurveyConnectionEntity.toDomain(): SurveyConnection = SurveyConnection(
@@ -97,7 +100,10 @@ fun SurveyAsset.toEntity(): SurveyAssetEntity = SurveyAssetEntity(
     deviceFixTimestamp = deviceFixTimestamp,
     distanceFromDeviceM = distanceFromDeviceM,
     isMockLocation = isMockLocation,
-    locationVerified = locationVerified
+    locationVerified = locationVerified,
+    satsUsedInFix = satsUsedInFix,
+    satsVisible = satsVisible,
+    avgSnrDb = avgSnrDb
 )
 
 fun SurveyConnection.toEntity(): SurveyConnectionEntity = SurveyConnectionEntity(

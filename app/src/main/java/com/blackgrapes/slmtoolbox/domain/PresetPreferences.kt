@@ -6,8 +6,24 @@ import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.VoltageLevel
 import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
 
+/** How new poles are placed when presets are enabled. */
+enum class PresetPattern(val label: String) {
+    /** Same voltage/structure for every pole in the series. */
+    STANDARD("Standard"),
+    /** First pole is DTR (11kV); all following poles are LT 1P. */
+    DTR_LT("DTR→LT");
+
+    companion object {
+        fun fromLabel(label: String?): PresetPattern =
+            entries.firstOrNull { it.label.equals(label, ignoreCase = true) }
+                ?: entries.firstOrNull { it.name.equals(label, ignoreCase = true) }
+                ?: STANDARD
+    }
+}
+
 data class PresetData(
     val enabled: Boolean,
+    val pattern: PresetPattern = PresetPattern.STANDARD,
     val voltage: VoltageLevel,
     val status: WorkStatus,
     val material: PoleMaterial,
@@ -17,11 +33,38 @@ data class PresetData(
     val sourceSubstation: String,
     val displayUnit: String = "meter",
     val displayDecimals: Int = 1
-)
+) {
+    /** Effective values for the first / START pole of a new series. */
+    fun startPlacement(): Triple<VoltageLevel, PoleStructure, PoleMaterial> = when (pattern) {
+        PresetPattern.DTR_LT -> Triple(
+            VoltageLevel.KV_11,
+            PoleStructure.DTR,
+            material.takeIf { it in NetworkCatalog.materialsFor(VoltageLevel.KV_11) }
+                ?: NetworkCatalog.defaultMaterial(VoltageLevel.KV_11)
+        )
+        PresetPattern.STANDARD -> Triple(voltage, structure, material)
+    }
+
+    /** Effective values for CONTINUE poles after a DTR start. */
+    fun continueAfterDtr(): Triple<VoltageLevel, PoleStructure, PoleMaterial> =
+        Triple(
+            VoltageLevel.LT,
+            PoleStructure.P1,
+            PoleMaterial.PCC_8M
+        )
+
+    fun continueAfterDtrConductor(): String {
+        val lt = NetworkCatalog.conductorsFor(VoltageLevel.LT)
+        return conductor.takeIf { it in lt } ?: lt.first()
+    }
+
+    fun isDtrLt(): Boolean = pattern == PresetPattern.DTR_LT
+}
 
 object PresetPreferences {
     private const val PREFS_NAME = "slm_preset_prefs"
     private const val KEY_ENABLED = "preset_enabled"
+    private const val KEY_PATTERN = "preset_pattern"
     private const val KEY_VOLTAGE = "preset_voltage"
     private const val KEY_STATUS = "preset_status"
     private const val KEY_MATERIAL = "preset_material"
@@ -37,9 +80,14 @@ object PresetPreferences {
         return prefs.getBoolean(KEY_ENABLED, false)
     }
 
+    fun isDtrLt(context: Context): Boolean =
+        isEnabled(context) && get(context).pattern == PresetPattern.DTR_LT
+
     fun get(context: Context): PresetData {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        
+
+        val pattern = PresetPattern.fromLabel(prefs.getString(KEY_PATTERN, PresetPattern.STANDARD.name))
+
         val voltageLabel = prefs.getString(KEY_VOLTAGE, VoltageLevel.KV_11.label) ?: VoltageLevel.KV_11.label
         val voltage = VoltageLevel.fromLabel(voltageLabel)
 
@@ -60,6 +108,7 @@ object PresetPreferences {
 
         return PresetData(
             enabled = prefs.getBoolean(KEY_ENABLED, false),
+            pattern = pattern,
             voltage = voltage,
             status = status,
             material = material,
@@ -76,6 +125,7 @@ object PresetPreferences {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().apply {
             putBoolean(KEY_ENABLED, data.enabled)
+            putString(KEY_PATTERN, data.pattern.name)
             putString(KEY_VOLTAGE, data.voltage.label)
             putString(KEY_STATUS, data.status.label)
             putString(KEY_MATERIAL, data.material.label)

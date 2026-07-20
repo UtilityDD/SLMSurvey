@@ -117,7 +117,13 @@ data class SurveyAsset(
     val deviceFixTimestamp: Long? = null,
     val distanceFromDeviceM: Float? = null,
     val isMockLocation: Boolean = false,
-    val locationVerified: Boolean = false
+    val locationVerified: Boolean = false,
+    /** Satellites used in the GNSS fix when the pole was placed. */
+    val satsUsedInFix: Int? = null,
+    /** Total satellites visible when the pole was placed. */
+    val satsVisible: Int? = null,
+    /** Average CN0 (dB-Hz) of satellites used in the fix. */
+    val avgSnrDb: Float? = null
 ) {
     val poleStructure: PoleStructure?
         get() = PoleStructure.fromLabel(structure)

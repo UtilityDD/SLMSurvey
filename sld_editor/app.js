@@ -102,6 +102,18 @@ function drawShapeSymbol(type, w, h) {
     ctx.restore();
 }
 
+/** Default geographic scales (meters) for newly placed symbols. */
+const DEFAULT_ROAD_SCALE_M = 35;
+const DEFAULT_RIVER_SCALE_M = 40;
+const DEFAULT_POND_RADIUS_M = 20;
+const DEFAULT_TREE_SCALE_M = 11;
+const DEFAULT_LANDMARK_SCALE_M = 11;
+
+function defaultLandmarkScaleM(type) {
+    // tree, temple (mandir), mosque (masjid), house (home), school
+    return DEFAULT_LANDMARK_SCALE_M;
+}
+
 /** True geographic scale: meters → map pixels at current zoom (scales with zoom). */
 function mapDisplayPixels(meters, zoom) {
     const z = zoom != null ? zoom : (map ? map.getZoom() : 15);
@@ -211,12 +223,36 @@ let shapeZoomRaf = null;
 
 function shapePixelSize(kind, data, zoom) {
     if (kind === 'pond') {
-        const d = mapDisplayPixels((data.radius || 25) * 2, zoom);
+        const d = mapDisplayPixels((data.radius || DEFAULT_POND_RADIUS_M) * 2, zoom);
         return [d, d];
     }
-    const w = mapDisplayPixels(data.width || 60, zoom);
-    const h = mapDisplayPixels(data.height || 60, zoom);
+    if (kind === 'landmark') {
+        const d = mapDisplayPixels(data.size || defaultLandmarkScaleM(data.type), zoom);
+        return [d, d];
+    }
+    const fallback = kind === 'road' ? DEFAULT_ROAD_SCALE_M : DEFAULT_RIVER_SCALE_M;
+    const w = mapDisplayPixels(data.width || fallback, zoom);
+    const h = mapDisplayPixels(data.height || fallback, zoom);
     return [w, h];
+}
+
+function buildLandmarkDivIcon(lan, zoom) {
+    let emoji = '📍';
+    switch (lan.type) {
+        case 'tree': emoji = '🌲'; break;
+        case 'temple': emoji = '🛕'; break;
+        case 'mosque': emoji = '🕌'; break;
+        case 'school': emoji = '🏫'; break;
+        case 'house': emoji = '🏠'; break;
+    }
+    const sizeM = lan.size || defaultLandmarkScaleM(lan.type);
+    const size = mapDisplayPixels(sizeM, zoom);
+    return L.divIcon({
+        html: mapLandmarkIconHtml(emoji, size, lan.label),
+        className: 'custom-landmark-icon',
+        iconSize: [Math.max(72, size + 24), size + (lan.label ? 22 : 10)],
+        iconAnchor: [Math.max(36, (size + 24) / 2), size / 2 + 2]
+    });
 }
 
 function buildShapeDivIcon(kind, data, zoom) {
@@ -234,6 +270,10 @@ function refreshShapeMarkerIcons() {
     if (!map || !shapeMarkerRefs.length) return;
     const zoom = map.getZoom();
     shapeMarkerRefs.forEach((ref) => {
+        if (ref.kind === 'landmark') {
+            ref.marker.setIcon(buildLandmarkDivIcon(ref.data, zoom));
+            return;
+        }
         const [wPx, hPx] = shapePixelSize(ref.kind, ref.data, zoom);
         const el = ref.marker.getElement();
         if (el) {
@@ -338,7 +378,60 @@ window.addEventListener('DOMContentLoaded', () => {
     initExportEvents();
     initSelectionEvents();
     initStencilDragListeners();
+    initBasemapControls();
+    initResponsiveUi();
 });
+
+function initResponsiveUi() {
+    const app = document.getElementById('appContainer');
+    const toggle = document.getElementById('btnSidebarToggle');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const sidebar = document.getElementById('sidebar');
+
+    const closeSidebar = () => {
+        if (app) app.classList.remove('sidebar-open');
+    };
+
+    const openSidebar = () => {
+        if (app) app.classList.add('sidebar-open');
+    };
+
+    if (toggle && app) {
+        toggle.addEventListener('click', () => {
+            app.classList.toggle('sidebar-open');
+        });
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', closeSidebar);
+    }
+
+    if (sidebar) {
+        sidebar.addEventListener('click', (e) => {
+            if (window.innerWidth > 1024) return;
+            const target = e.target;
+            if (target.closest('.btn, .file-label, .stencil-item, input, select, textarea')) {
+                setTimeout(closeSidebar, 120);
+            }
+        });
+    }
+
+    let resizeTimer = null;
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 1024) {
+            closeSidebar();
+        }
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (typeof map !== 'undefined' && map) {
+                map.invalidateSize();
+            }
+            if (window.PrintLayout && typeof window.PrintLayout.refresh === 'function') {
+                window.PrintLayout.refresh();
+            }
+        }, 150);
+    });
+}
 
 // View Toggle Binding
 function initViewToggles() {
@@ -354,8 +447,13 @@ function initViewToggles() {
         btnGrid.classList.remove('active');
         paneMap.classList.add('active');
         paneGrid.classList.remove('active');
+        const basemapControls = document.getElementById('basemapControls');
+        if (basemapControls) basemapControls.style.display = '';
         if (surveyData) {
             renderMap();
+            if (activeSelection && shouldUseMapEditModal(activeSelection.type)) {
+                showMapSymbolEditModal(activeSelection.type, activeSelection.data);
+            }
         }
     });
 
@@ -366,6 +464,13 @@ function initViewToggles() {
         btnMap.classList.remove('active');
         paneGrid.classList.add('active');
         paneMap.classList.remove('active');
+        const basemapControls = document.getElementById('basemapControls');
+        if (basemapControls) basemapControls.style.display = 'none';
+        hideMapSymbolEditModal();
+        if (activeSelection) {
+            // Fall back to sidebar editor on schematic view
+            selectAnnotation(activeSelection.type, activeSelection.data);
+        }
         if (surveyData) {
             resetCanvasView();
             drawCanvas();
@@ -452,7 +557,6 @@ function loadWorkspace(data) {
     document.getElementById('infoCard').classList.remove('hidden');
     document.getElementById('toolsCard').classList.remove('hidden');
     document.getElementById('actionsCard').classList.remove('hidden');
-    document.getElementById('statsChip').classList.remove('hidden');
 
     // Parse assets and connections
     nodes = [];
@@ -483,8 +587,13 @@ function loadWorkspace(data) {
             remarks: asset.remarks || '',
             x: x,
             y: y,
-            assetRef: asset
+            assetRef: asset,
+            surveyLat: asset.surveyLatitude != null ? asset.surveyLatitude : asset.latitude,
+            surveyLng: asset.surveyLongitude != null ? asset.surveyLongitude : asset.longitude
         });
+        // Persist survey anchors so later nudges stay relative to original GPS
+        if (asset.surveyLatitude == null) asset.surveyLatitude = asset.latitude;
+        if (asset.surveyLongitude == null) asset.surveyLongitude = asset.longitude;
     });
 
     data.connections.forEach(conn => {
@@ -545,25 +654,16 @@ function loadWorkspace(data) {
         resetCanvasView();
         drawCanvas();
     }
+    if (window.PrintLayout && typeof window.PrintLayout.onWorkspaceLoaded === 'function') {
+        window.PrintLayout.onWorkspaceLoaded();
+    }
 }
 
-// Update Toolbar stats chip banner
+// Update route length totals (used by print legend / exports)
 function updateStats() {
-    const totalPoles = nodes.length;
-    const totalSpans = edges.length;
-
-    // Sum spans in the preset preference unit
-    let totalLength = 0;
-    edges.forEach(e => {
-        totalLength += e.spanLengthM;
-    });
-
-    const preset = getPresetDisplayOptions();
-    const formattedLength = formatDistance(totalLength, preset.unit, preset.decimals);
-
-    document.getElementById('statPoles').textContent = `${totalPoles} Poles`;
-    document.getElementById('statSpans').textContent = `${totalSpans} Spans`;
-    document.getElementById('statLength').textContent = `Total R/L: ${formattedLength}`;
+    if (window.PrintLayout && typeof window.PrintLayout.refresh === 'function') {
+        window.PrintLayout.refresh();
+    }
 }
 
 // Get display formatting parameters
@@ -597,24 +697,158 @@ function formatDistance(metres, unit, decimals) {
    Map View Rendering (Leaflet)
    ========================================================================== */
 let selectedStencilType = null; // Stored type when a stencil item is clicked for click-to-place
+let baseTileLayer = null;
+let basemapMode = localStorage.getItem('slm_basemap') || 'osm';
+let basemapOpacity = (() => {
+    const saved = parseInt(localStorage.getItem('slm_basemap_opacity'), 10);
+    return Number.isFinite(saved) ? Math.min(100, Math.max(0, saved)) : 100;
+})();
+
+function createBasemapLayer(mode) {
+    if (mode === 'google') {
+        return L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+            maxZoom: 21,
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google',
+            opacity: basemapOpacity / 100,
+            crossOrigin: true
+        });
+    }
+    if (mode === 'google_sat') {
+        return L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            maxZoom: 21,
+            subdomains: ['0', '1', '2', '3'],
+            attribution: '© Google',
+            opacity: basemapOpacity / 100,
+            crossOrigin: true
+        });
+    }
+    if (mode === 'none') {
+        return null;
+    }
+    // Default: OpenStreetMap
+    return L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors',
+        opacity: basemapOpacity / 100,
+        crossOrigin: true
+    });
+}
+
+function syncBasemapOpacityUi() {
+    const slider = document.getElementById('basemapOpacity');
+    const valueEl = document.getElementById('basemapOpacityValue');
+    const controls = document.getElementById('basemapControls');
+    if (slider && Number(slider.value) !== basemapOpacity) {
+        slider.value = String(basemapOpacity);
+    }
+    if (valueEl) valueEl.textContent = `${basemapOpacity}%`;
+    if (controls) controls.classList.toggle('is-none-map', basemapMode === 'none');
+}
+
+function applyBasemapOpacity(percent) {
+    const next = Math.min(100, Math.max(0, Math.round(Number(percent))));
+    basemapOpacity = Number.isFinite(next) ? next : 100;
+    localStorage.setItem('slm_basemap_opacity', String(basemapOpacity));
+    syncBasemapOpacityUi();
+    if (baseTileLayer) {
+        baseTileLayer.setOpacity(basemapOpacity / 100);
+    }
+}
+
+function applyBasemap(mode) {
+    basemapMode = mode || 'osm';
+    localStorage.setItem('slm_basemap', basemapMode);
+
+    const mapEl = document.getElementById('mapView');
+    if (mapEl) {
+        mapEl.classList.toggle('basemap-none', basemapMode === 'none');
+    }
+
+    const select = document.getElementById('basemapSelect');
+    if (select && select.value !== basemapMode) {
+        select.value = basemapMode;
+    }
+
+    syncBasemapOpacityUi();
+
+    if (!map) return;
+
+    if (baseTileLayer) {
+        map.removeLayer(baseTileLayer);
+        baseTileLayer = null;
+    }
+
+    const layer = createBasemapLayer(basemapMode);
+    if (layer) {
+        baseTileLayer = layer;
+        // Keep tiles under decorations / network
+        baseTileLayer.setZIndex(0);
+        baseTileLayer.addTo(map);
+        baseTileLayer.bringToBack();
+        baseTileLayer.setOpacity(basemapOpacity / 100);
+    }
+}
+
+function initBasemapControls() {
+    const select = document.getElementById('basemapSelect');
+    const slider = document.getElementById('basemapOpacity');
+    if (select) {
+        select.value = basemapMode;
+        select.addEventListener('change', () => {
+            applyBasemap(select.value);
+        });
+    }
+    if (slider) {
+        slider.value = String(basemapOpacity);
+        slider.addEventListener('input', () => {
+            applyBasemapOpacity(slider.value);
+        });
+    }
+    syncBasemapOpacityUi();
+}
+
+/** Fine GIS map zoom step (print framing). */
+const MAP_FINE_ZOOM_STEP = 0.15;
+/** Leaflet wheel / snap settings for smoother zoom when framing print area. */
+const MAP_ZOOM_SNAP = 0.15;
+const MAP_WHEEL_PX_PER_ZOOM = 220;
+
+function nudgeMapZoom(delta) {
+    if (!map) return;
+    const next = map.getZoom() + delta;
+    const min = map.getMinZoom();
+    const max = map.getMaxZoom();
+    map.setZoom(Math.max(min, Math.min(max, next)), { animate: true });
+}
 
 function renderMap() {
     // Lazy init map container
     if (!map) {
-        map = L.map('mapView').setView([23.25, 77.41], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        map = L.map('mapView', {
+            zoomSnap: MAP_ZOOM_SNAP,
+            zoomDelta: MAP_FINE_ZOOM_STEP,
+            wheelPxPerZoomLevel: MAP_WHEEL_PX_PER_ZOOM
+        }).setView([23.25, 77.41], 15);
+
+        // Decorative symbols (road/river/pond/landmarks) sit behind network lines & poles.
+        // Leaflet defaults: overlayPane≈400 (polylines), markerPane≈600 (poles).
+        map.createPane('decorationPane');
+        map.getPane('decorationPane').style.zIndex = 350;
+
+        applyBasemap(basemapMode);
 
         // Bind Leaflet Map Clicks
         map.on('click', onMapClick);
         bindMapZoomSync();
+        map.on('move zoom zoomend', repositionActiveMapSymbolModal);
+    } else if (!baseTileLayer && basemapMode !== 'none') {
+        applyBasemap(basemapMode);
     }
 
     // Clear old map layer markers
     mapMarkers.forEach(m => map.removeLayer(m));
-    mapPolylines.forEach(p => map.removeLayer(p));
+    mapPolylines.forEach(p => map.removeLayer(p.polyline || p));
     mapMarkers = [];
     mapPolylines = [];
     shapeMarkerRefs = [];
@@ -624,100 +858,18 @@ function renderMap() {
 
     // Bounds calculation to fit all markers dynamically
     const latLngs = [];
-
-    // Map each node to a leaflet marker
-    nodes.forEach(node => {
-        const lat = node.assetRef.latitude;
-        const lng = node.assetRef.longitude;
-        latLngs.push([lat, lng]);
-
-        // Custom div icon to reflect structure layout matching our app branding
-        const markerIcon = L.divIcon({
-            html: `<div class="map-pole-icon ${node.structure.toLowerCase()}">${node.structure}</div>`,
-            className: 'custom-map-icon',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-        });
-
-        const marker = L.marker([lat, lng], {
-            icon: markerIcon,
-            draggable: true
-        }).addTo(map);
-
-        // Bind interactive editing on double click
-        marker.on('dblclick', () => {
-            openEditModal(node);
-        });
-
-        marker.on('click', (e) => {
-            L.DomEvent.stopPropagation(e);
-            selectAnnotation('node', node);
-        });
-
-        // Save position updates on drag finish
-        marker.on('dragend', (e) => {
-            const newPos = e.target.getLatLng();
-            node.assetRef.latitude = newPos.lat;
-            node.assetRef.longitude = newPos.lng;
-            recalculateSpans();
-            updateStats();
-            drawCanvas(); // keep canvas synced
-        });
-
-        // Popup details binding
-        marker.bindPopup(`
-            <div class="map-popup">
-                <strong>${node.label} (${node.structure})</strong><br>
-                <span>Material: ${node.material}</span><br>
-                <span>GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}</span><br>
-                <span>Remarks: ${node.remarks || 'None'}</span>
-            </div>
-        `);
-
-        mapMarkers.push(marker);
-        registerSelectableMarker(marker, 'node', node);
-    });
-
-    // Draw connection polylines
-    const nodesById = {};
-    nodes.forEach(n => nodesById[n.id] = n);
-
-    edges.forEach(edge => {
-        const fromNode = nodesById[edge.from];
-        const toNode = nodesById[edge.to];
-        if (!fromNode || !toNode) return;
-
-        const p1 = [fromNode.assetRef.latitude, fromNode.assetRef.longitude];
-        const p2 = [toNode.assetRef.latitude, toNode.assetRef.longitude];
-
-        // Match voltage coloring (Red, Yellow/Orange, Green)
-        let strokeColor = '#22c55e'; // LT: green
-        if (edge.voltage === '33kV') {
-            strokeColor = '#ef4444'; // 33kV: red
-        } else if (edge.voltage === '11kV') {
-            strokeColor = '#f97316'; // 11kV: orange
-        }
-
-        const isDashed = edge.status.toLowerCase() === 'proposed';
-
-        const polyline = L.polyline([p1, p2], {
-            color: strokeColor,
-            weight: 4,
-            dashArray: isDashed ? '10, 8' : null
-        }).addTo(map);
-
-        mapPolylines.push(polyline);
-    });
-
-    // Draw irregular Roads on geographical map (using rotated scaled SVG)
     const zoom = map.getZoom();
+
+    // ── 1. Decorative symbols FIRST (behind lines & poles via decorationPane) ──
     annotations.roads.forEach(road => {
         const p = [road.lat, road.lng];
         const icon = buildShapeDivIcon('road', road, zoom);
 
         const marker = L.marker(p, {
             icon: icon,
-            draggable: true
+            draggable: true,
+            pane: 'decorationPane',
+            zIndexOffset: -1000
         }).addTo(map);
 
         marker.on('dragend', (e) => {
@@ -748,14 +900,15 @@ function renderMap() {
         registerSelectableMarker(marker, 'road', road);
     });
 
-    // Draw winding Rivers on geographical map (using rotated scaled SVG)
     annotations.rivers.forEach(river => {
         const p = [river.lat, river.lng];
         const icon = buildShapeDivIcon('river', river, zoom);
 
         const marker = L.marker(p, {
             icon: icon,
-            draggable: true
+            draggable: true,
+            pane: 'decorationPane',
+            zIndexOffset: -1000
         }).addTo(map);
 
         marker.on('dragend', (e) => {
@@ -786,7 +939,6 @@ function renderMap() {
         registerSelectableMarker(marker, 'river', river);
     });
 
-    // Draw point Landmarks & irregular Ponds on geographical map
     annotations.landmarks.forEach(lan => {
         let marker = null;
         if (lan.type === 'pond') {
@@ -794,7 +946,9 @@ function renderMap() {
 
             marker = L.marker([lan.lat, lan.lng], {
                 icon: icon,
-                draggable: true
+                draggable: true,
+                pane: 'decorationPane',
+                zIndexOffset: -1000
             }).addTo(map);
 
             marker.on('click', (e) => {
@@ -804,32 +958,18 @@ function renderMap() {
             shapeMarkerRefs.push({ marker, kind: 'pond', data: lan });
             registerSelectableMarker(marker, 'landmark', lan);
         } else {
-            let emoji = '📍';
-            switch (lan.type) {
-                case 'tree': emoji = '🌲'; break;
-                case 'temple': emoji = '🛕'; break;
-                case 'mosque': emoji = '🕌'; break;
-                case 'school': emoji = '🏫'; break;
-                case 'house': emoji = '🏠'; break;
-            }
-
-            const size = lan.size || 24;
-            const icon = L.divIcon({
-                html: mapLandmarkIconHtml(emoji, size, lan.label),
-                className: 'custom-landmark-icon',
-                iconSize: [72, size + (lan.label ? 22 : 10)],
-                iconAnchor: [36, size / 2 + 2]
-            });
-
             marker = L.marker([lan.lat, lan.lng], {
-                icon: icon,
-                draggable: true
+                icon: buildLandmarkDivIcon(lan, zoom),
+                draggable: true,
+                pane: 'decorationPane',
+                zIndexOffset: -1000
             }).addTo(map);
 
             marker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 selectAnnotation('landmark', lan);
             });
+            shapeMarkerRefs.push({ marker, kind: 'landmark', data: lan });
             registerSelectableMarker(marker, 'landmark', lan);
         }
 
@@ -854,7 +994,157 @@ function renderMap() {
         mapMarkers.push(marker);
     });
 
-    // Draw text Annotations on geographical map
+    // ── 2. Connection polylines (above decorations, below poles) ──
+    const nodesById = {};
+    nodes.forEach(n => nodesById[n.id] = n);
+
+    // Draw connection polylines + span length labels on the network
+    const preset = getPresetDisplayOptions();
+    edges.forEach(edge => {
+        const fromNode = nodesById[edge.from];
+        const toNode = nodesById[edge.to];
+        if (!fromNode || !toNode) return;
+
+        const p1 = [fromNode.assetRef.latitude, fromNode.assetRef.longitude];
+        const p2 = [toNode.assetRef.latitude, toNode.assetRef.longitude];
+
+        // Match voltage coloring (Red, Yellow/Orange, Green)
+        let strokeColor = '#22c55e'; // LT: green
+        if (edge.voltage === '33kV') {
+            strokeColor = '#ef4444'; // 33kV: red
+        } else if (edge.voltage === '11kV') {
+            strokeColor = '#f97316'; // 11kV: orange
+        }
+
+        const isDashed = edge.status.toLowerCase() === 'proposed';
+
+        const polyline = L.polyline([p1, p2], {
+            color: strokeColor,
+            weight: 4,
+            dashArray: isDashed ? '10, 8' : null
+        }).addTo(map);
+
+        const midLat = (p1[0] + p2[0]) / 2;
+        const midLng = (p1[1] + p2[1]) / 2;
+        const spanText = formatDistance(edge.spanLengthM || 0, preset.unit, preset.decimals);
+        const spanIcon = L.divIcon({
+            html: `<div class="map-span-label">${spanText}</div>`,
+            className: 'custom-span-label',
+            iconSize: [72, 18],
+            iconAnchor: [36, 9]
+        });
+        const spanMarker = L.marker([midLat, midLng], {
+            icon: spanIcon,
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: 500
+        }).addTo(map);
+
+        mapPolylines.push({
+            polyline,
+            spanMarker,
+            from: edge.from,
+            to: edge.to,
+            edge
+        });
+        mapMarkers.push(spanMarker);
+    });
+
+    // ── 3. Poles on top (default markerPane) with pole numbers ──
+    nodes.forEach(node => {
+        ensurePoleSurveyAnchor(node);
+        const lat = node.assetRef.latitude;
+        const lng = node.assetRef.longitude;
+        latLngs.push([lat, lng]);
+
+        const poleNo = node.label || `P-${String(node.sequence).padStart(2, '0')}`;
+        const markerIcon = L.divIcon({
+            html: `<div class="map-pole-root">
+                <div class="map-pole-icon ${String(node.structure || '').toLowerCase()}">${node.structure}</div>
+                <div class="map-pole-number">${poleNo}</div>
+            </div>`,
+            className: 'custom-map-icon',
+            iconSize: [56, 44],
+            iconAnchor: [28, 14]
+        });
+
+        const marker = L.marker([lat, lng], {
+            icon: markerIcon,
+            draggable: true,
+            zIndexOffset: 1000,
+            autoPan: false
+        }).addTo(map);
+
+        // Bind interactive editing on double click
+        marker.on('dblclick', () => {
+            openEditModal(node);
+        });
+
+        marker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            selectAnnotation('node', node);
+        });
+
+        marker.on('dragstart', () => {
+            showEditorToast(
+                `Pole nudge only — max ${MAX_POLE_NUDGE_M} m from survey GPS to compensate error. Connections stay linked.`
+            );
+        });
+
+        // Live clamp while dragging; keep connected lines + span labels attached
+        marker.on('drag', (e) => {
+            const pos = e.target.getLatLng();
+            const result = applyPoleNudge(node, pos.lat, pos.lng);
+            if (result.clamped) {
+                e.target.setLatLng([result.lat, result.lng]);
+            }
+            syncMapPolylines();
+        });
+
+        // Save position updates on drag finish
+        marker.on('dragend', (e) => {
+            const newPos = e.target.getLatLng();
+            const result = applyPoleNudge(node, newPos.lat, newPos.lng);
+            e.target.setLatLng([result.lat, result.lng]);
+            recalculateSpans();
+            syncMapPolylines();
+            updateStats();
+            drawCanvas(); // keep canvas synced
+            if (result.clamped) {
+                showEditorToast(
+                    `Limited to ${MAX_POLE_NUDGE_M} m from survey position (error compensation only).`
+                );
+            }
+            if (activeSelection && activeSelection.type === 'node' && activeSelection.data === node) {
+                updateSelectionInfoPanels('node', node);
+            }
+            marker.setPopupContent(`
+                <div class="map-popup">
+                    <strong>${node.label} (${node.structure})</strong><br>
+                    <span>Material: ${node.material}</span><br>
+                    <span>GPS: ${result.lat.toFixed(5)}, ${result.lng.toFixed(5)}</span><br>
+                    <span>Nudge ≤ ${MAX_POLE_NUDGE_M} m from survey</span><br>
+                    <span>Remarks: ${node.remarks || 'None'}</span>
+                </div>
+            `);
+        });
+
+        // Popup details binding
+        marker.bindPopup(`
+            <div class="map-popup">
+                <strong>${node.label} (${node.structure})</strong><br>
+                <span>Material: ${node.material}</span><br>
+                <span>GPS: ${lat.toFixed(5)}, ${lng.toFixed(5)}</span><br>
+                <span>Nudge ≤ ${MAX_POLE_NUDGE_M} m from survey</span><br>
+                <span>Remarks: ${node.remarks || 'None'}</span>
+            </div>
+        `);
+
+        mapMarkers.push(marker);
+        registerSelectableMarker(marker, 'node', node);
+    });
+
+    // ── 4. Text labels on top of network ──
     annotations.texts.forEach(ann => {
         const icon = L.divIcon({
             html: mapTextIconHtml(ann.text, ann.size),
@@ -865,7 +1155,8 @@ function renderMap() {
 
         const marker = L.marker([ann.lat, ann.lng], {
             icon: icon,
-            draggable: true
+            draggable: true,
+            zIndexOffset: 2000
         }).addTo(map);
 
         marker.on('dragend', (e) => {
@@ -964,6 +1255,90 @@ function haversine(lat1, lon1, lat2, lon2) {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
     return R * c;
+}
+
+/** Max distance a pole may be nudged from its survey GPS (error compensation only). */
+const MAX_POLE_NUDGE_M = 4;
+
+/**
+ * Clamp a proposed lat/lng so it stays within maxM of the survey anchor.
+ * Returns { lat, lng, distanceM, clamped }.
+ */
+function clampPoleLatLng(lat, lng, surveyLat, surveyLng, maxM = MAX_POLE_NUDGE_M) {
+    const distanceM = haversine(surveyLat, surveyLng, lat, lng);
+    if (!isFinite(distanceM) || distanceM <= maxM) {
+        return { lat, lng, distanceM: distanceM || 0, clamped: false };
+    }
+    const ratio = maxM / distanceM;
+    return {
+        lat: surveyLat + (lat - surveyLat) * ratio,
+        lng: surveyLng + (lng - surveyLng) * ratio,
+        distanceM: maxM,
+        clamped: true
+    };
+}
+
+function ensurePoleSurveyAnchor(node) {
+    const asset = node.assetRef;
+    if (asset.surveyLatitude == null || asset.surveyLongitude == null) {
+        asset.surveyLatitude = asset.latitude;
+        asset.surveyLongitude = asset.longitude;
+    }
+    node.surveyLat = asset.surveyLatitude;
+    node.surveyLng = asset.surveyLongitude;
+}
+
+function applyPoleNudge(node, lat, lng) {
+    ensurePoleSurveyAnchor(node);
+    const result = clampPoleLatLng(lat, lng, node.surveyLat, node.surveyLng);
+    node.assetRef.latitude = result.lat;
+    node.assetRef.longitude = result.lng;
+    return result;
+}
+
+function syncMapPolylines() {
+    const byId = {};
+    nodes.forEach(n => { byId[n.id] = n; });
+    const preset = getPresetDisplayOptions();
+    mapPolylines.forEach(ref => {
+        const from = byId[ref.from];
+        const to = byId[ref.to];
+        if (!from || !to || !ref.polyline) return;
+        const p1 = [from.assetRef.latitude, from.assetRef.longitude];
+        const p2 = [to.assetRef.latitude, to.assetRef.longitude];
+        ref.polyline.setLatLngs([p1, p2]);
+
+        if (ref.spanMarker) {
+            const midLat = (p1[0] + p2[0]) / 2;
+            const midLng = (p1[1] + p2[1]) / 2;
+            ref.spanMarker.setLatLng([midLat, midLng]);
+            const spanText = formatDistance(
+                (ref.edge && ref.edge.spanLengthM) || 0,
+                preset.unit,
+                preset.decimals
+            );
+            const el = ref.spanMarker.getElement();
+            const label = el && el.querySelector('.map-span-label');
+            if (label) label.textContent = spanText;
+        }
+    });
+}
+
+let toastTimer = null;
+function showEditorToast(message, durationMs = 3200) {
+    let el = document.getElementById('editorToast');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'editorToast';
+        el.className = 'editor-toast';
+        document.body.appendChild(el);
+    }
+    el.textContent = message;
+    el.classList.add('visible');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        el.classList.remove('visible');
+    }, durationMs);
 }
 
 // Convert geographic coordinates (latitude, longitude) to schematic grid coordinates (x, y)
@@ -1163,7 +1538,9 @@ function initCanvasEvents() {
             annotations.landmarks.forEach((lan, idx) => {
                 const p = latLngToSchematic(lan.lat, lan.lng);
                 const dist = Math.hypot(p.x - gridPos.x, p.y - gridPos.y);
-                const threshold = lan.type === 'pond' ? Math.max(20, metersToCanvasPixels(lan.radius || 20)) : 20;
+                const threshold = lan.type === 'pond'
+                    ? Math.max(20, metersToCanvasPixels(lan.radius || DEFAULT_POND_RADIUS_M))
+                    : Math.max(20, metersToCanvasPixels(lan.size || defaultLandmarkScaleM(lan.type)) / 2);
                 if (dist <= threshold) {
                     clickedLandmark = lan;
                 }
@@ -1197,8 +1574,8 @@ function initCanvasEvents() {
             let clickedRoad = null;
             annotations.roads.forEach(road => {
                 const p = latLngToSchematic(road.lat, road.lng);
-                const wPx = metersToCanvasPixels(road.width || 40);
-                const hPx = metersToCanvasPixels(road.height || 40);
+                const wPx = metersToCanvasPixels(road.width || DEFAULT_ROAD_SCALE_M);
+                const hPx = metersToCanvasPixels(road.height || DEFAULT_ROAD_SCALE_M);
                 if (gridPos.x >= p.x - wPx / 2 && gridPos.x <= p.x + wPx / 2 &&
                     gridPos.y >= p.y - hPx / 2 && gridPos.y <= p.y + hPx / 2) {
                     clickedRoad = road;
@@ -1215,8 +1592,8 @@ function initCanvasEvents() {
             let clickedRiver = null;
             annotations.rivers.forEach(river => {
                 const p = latLngToSchematic(river.lat, river.lng);
-                const wPx = metersToCanvasPixels(river.width || 40);
-                const hPx = metersToCanvasPixels(river.height || 40);
+                const wPx = metersToCanvasPixels(river.width || DEFAULT_RIVER_SCALE_M);
+                const hPx = metersToCanvasPixels(river.height || DEFAULT_RIVER_SCALE_M);
                 if (gridPos.x >= p.x - wPx / 2 && gridPos.x <= p.x + wPx / 2 &&
                     gridPos.y >= p.y - hPx / 2 && gridPos.y <= p.y + hPx / 2) {
                     clickedRiver = river;
@@ -1398,7 +1775,9 @@ function initCanvasEvents() {
             annotations.landmarks.forEach((lan) => {
                 const p = latLngToSchematic(lan.lat, lan.lng);
                 const dist = Math.hypot(p.x - gridPos.x, p.y - gridPos.y);
-                const threshold = lan.type === 'pond' ? Math.max(20, metersToCanvasPixels(lan.radius || 20)) : 20;
+                const threshold = lan.type === 'pond'
+                    ? Math.max(20, metersToCanvasPixels(lan.radius || DEFAULT_POND_RADIUS_M))
+                    : Math.max(20, metersToCanvasPixels(lan.size || defaultLandmarkScaleM(lan.type)) / 2);
                 if (dist <= threshold) {
                     clickedLandmark = lan;
                 }
@@ -1441,8 +1820,8 @@ function initCanvasEvents() {
             let clickedRoad = null;
             annotations.roads.forEach(road => {
                 const p = latLngToSchematic(road.lat, road.lng);
-                const wPx = metersToCanvasPixels(road.width || 40);
-                const hPx = metersToCanvasPixels(road.height || 40);
+                const wPx = metersToCanvasPixels(road.width || DEFAULT_ROAD_SCALE_M);
+                const hPx = metersToCanvasPixels(road.height || DEFAULT_ROAD_SCALE_M);
                 if (gridPos.x >= p.x - wPx / 2 && gridPos.x <= p.x + wPx / 2 &&
                     gridPos.y >= p.y - hPx / 2 && gridPos.y <= p.y + hPx / 2) {
                     clickedRoad = road;
@@ -1464,8 +1843,8 @@ function initCanvasEvents() {
             let clickedRiver = null;
             annotations.rivers.forEach(river => {
                 const p = latLngToSchematic(river.lat, river.lng);
-                const wPx = metersToCanvasPixels(river.width || 40);
-                const hPx = metersToCanvasPixels(river.height || 40);
+                const wPx = metersToCanvasPixels(river.width || DEFAULT_RIVER_SCALE_M);
+                const hPx = metersToCanvasPixels(river.height || DEFAULT_RIVER_SCALE_M);
                 if (gridPos.x >= p.x - wPx / 2 && gridPos.x <= p.x + wPx / 2 &&
                     gridPos.y >= p.y - hPx / 2 && gridPos.y <= p.y + hPx / 2) {
                     clickedRiver = river;
@@ -1519,8 +1898,8 @@ function drawCanvas() {
     // 2. Draw irregular roads
     annotations.roads.forEach(road => {
         const p = latLngToSchematic(road.lat, road.lng);
-        const wPx = metersToCanvasPixels(road.width || 40);
-        const hPx = metersToCanvasPixels(road.height || 40);
+        const wPx = metersToCanvasPixels(road.width || DEFAULT_ROAD_SCALE_M);
+        const hPx = metersToCanvasPixels(road.height || DEFAULT_ROAD_SCALE_M);
 
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -1543,11 +1922,11 @@ function drawCanvas() {
         }
     });
 
-    // 3. Draw winding rivers
+    // 3. Draw winding rivers behind the network
     annotations.rivers.forEach(river => {
         const p = latLngToSchematic(river.lat, river.lng);
-        const wPx = metersToCanvasPixels(river.width || 40);
-        const hPx = metersToCanvasPixels(river.height || 40);
+        const wPx = metersToCanvasPixels(river.width || DEFAULT_RIVER_SCALE_M);
+        const hPx = metersToCanvasPixels(river.height || DEFAULT_RIVER_SCALE_M);
 
         ctx.save();
         ctx.translate(p.x, p.y);
@@ -1570,7 +1949,47 @@ function drawCanvas() {
         }
     });
 
-    // 4. Draw edge connections
+    // 4. Draw landmarks & ponds behind the network (same layer as roads/rivers)
+    annotations.landmarks.forEach(lan => {
+        const p = latLngToSchematic(lan.lat, lan.lng);
+        if (lan.type === 'pond') {
+            const rPx = metersToCanvasPixels(lan.radius || DEFAULT_POND_RADIUS_M);
+            ctx.save();
+            ctx.translate(p.x, p.y);
+            if (imgCache.pond && imgCache.pond.complete && imgCache.pond.naturalWidth > 0) {
+                ctx.drawImage(imgCache.pond, -rPx, -rPx, rPx * 2, rPx * 2);
+            } else {
+                drawShapeSymbol('pond', rPx * 2, rPx * 2);
+            }
+            ctx.restore();
+
+            if (lan.label && lan.label.trim()) {
+                drawAnnotationLabel(ctx, p.x, p.y, lan.label, rPx + 4);
+            }
+            return;
+        }
+
+        let emoji = '📍';
+        switch (lan.type) {
+            case 'tree': emoji = '🌲'; break;
+            case 'temple': emoji = '🛕'; break;
+            case 'mosque': emoji = '🕌'; break;
+            case 'school': emoji = '🏫'; break;
+            case 'house': emoji = '🏠'; break;
+        }
+
+        const size = metersToCanvasPixels(lan.size || defaultLandmarkScaleM(lan.type));
+        ctx.font = `${Math.max(12, size)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, p.x, p.y);
+
+        if (lan.label && lan.label.trim()) {
+            drawAnnotationLabel(ctx, p.x, p.y, lan.label, size / 2 + 6);
+        }
+    });
+
+    // 5. Draw edge connections (above decorations)
     const nodesById = {};
     nodes.forEach(n => nodesById[n.id] = n);
 
@@ -1624,7 +2043,7 @@ function drawCanvas() {
         ctx.fillText(spanText, midX, midY);
     });
 
-    // 5. Draw nodes (poles)
+    // 6. Draw nodes (poles) on top of lines & decorations
     nodes.forEach(node => {
         const isExisting = node.assetRef?.status?.toLowerCase() === 'existing';
         
@@ -1673,7 +2092,7 @@ function drawCanvas() {
         }
     });
 
-    // 6. Draw custom text annotations
+    // 7. Draw custom text annotations on top
     annotations.texts.forEach(ann => {
         const p = latLngToSchematic(ann.lat, ann.lng);
         ctx.fillStyle = '#334155';
@@ -1681,46 +2100,6 @@ function drawCanvas() {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(ann.text, p.x, p.y);
-    });
-
-    // 7. Draw custom point landmarks & Ponds
-    annotations.landmarks.forEach(lan => {
-        const p = latLngToSchematic(lan.lat, lan.lng);
-        if (lan.type === 'pond') {
-            const rPx = metersToCanvasPixels(lan.radius || 20);
-            ctx.save();
-            ctx.translate(p.x, p.y);
-            if (imgCache.pond && imgCache.pond.complete && imgCache.pond.naturalWidth > 0) {
-                ctx.drawImage(imgCache.pond, -rPx, -rPx, rPx * 2, rPx * 2);
-            } else {
-                drawShapeSymbol('pond', rPx * 2, rPx * 2);
-            }
-            ctx.restore();
-
-            if (lan.label && lan.label.trim()) {
-                drawAnnotationLabel(ctx, p.x, p.y, lan.label, rPx + 4);
-            }
-            return;
-        }
-
-        let emoji = '📍';
-        switch (lan.type) {
-            case 'tree': emoji = '🌲'; break;
-            case 'temple': emoji = '🛕'; break;
-            case 'mosque': emoji = '🕌'; break;
-            case 'school': emoji = '🏫'; break;
-            case 'house': emoji = '🏠'; break;
-        }
-
-        const size = lan.size || 24;
-        ctx.font = `${size}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(emoji, p.x, p.y);
-
-        if (lan.label && lan.label.trim()) {
-            drawAnnotationLabel(ctx, p.x, p.y, lan.label, size / 2 + 6);
-        }
     });
 
     drawSelectionHighlight();
@@ -1743,20 +2122,21 @@ function drawSelectionHighlight() {
         ctx.stroke();
     } else if (type === 'road' || type === 'river') {
         const p = latLngToSchematic(data.lat, data.lng);
-        const wPx = metersToCanvasPixels(data.width || 40);
-        const hPx = metersToCanvasPixels(data.height || 40);
+        const fallback = type === 'road' ? DEFAULT_ROAD_SCALE_M : DEFAULT_RIVER_SCALE_M;
+        const wPx = metersToCanvasPixels(data.width || fallback);
+        const hPx = metersToCanvasPixels(data.height || fallback);
         ctx.translate(p.x, p.y);
         ctx.rotate(((data.angle || 0) * Math.PI) / 180);
         ctx.strokeRect(-wPx / 2 - 4, -hPx / 2 - 4, wPx + 8, hPx + 8);
     } else if (type === 'landmark') {
         const p = latLngToSchematic(data.lat, data.lng);
         if (data.type === 'pond') {
-            const rPx = metersToCanvasPixels(data.radius || 20);
+            const rPx = metersToCanvasPixels(data.radius || DEFAULT_POND_RADIUS_M);
             ctx.beginPath();
             ctx.arc(p.x, p.y, rPx + 4, 0, Math.PI * 2);
             ctx.stroke();
         } else {
-            const size = data.size || 24;
+            const size = metersToCanvasPixels(data.size || defaultLandmarkScaleM(data.type));
             ctx.strokeRect(p.x - size / 2 - 4, p.y - size / 2 - 4, size + 8, size + 8);
         }
     } else if (type === 'text') {
@@ -1920,6 +2300,8 @@ function initExportEvents() {
                     ...asset,
                     latitude: memoryNode.assetRef.latitude,
                     longitude: memoryNode.assetRef.longitude,
+                    surveyLatitude: memoryNode.surveyLat ?? memoryNode.assetRef.surveyLatitude ?? memoryNode.assetRef.latitude,
+                    surveyLongitude: memoryNode.surveyLng ?? memoryNode.assetRef.surveyLongitude ?? memoryNode.assetRef.longitude,
                     poleStructure: getStructureEnum(memoryNode.structure),
                     structure: memoryNode.structure,
                     poleMaterial: memoryNode.material,
@@ -1953,9 +2335,13 @@ function initExportEvents() {
         URL.revokeObjectURL(url);
     });
 
-    // Print PDF Button Click
+    // Print PDF Button Click — professional CAD sheet export
     document.getElementById('btnPrintPdf').addEventListener('click', () => {
-        // Toggle view to Grid before printing so the canvas draws
+        if (window.PrintLayout && typeof window.PrintLayout.exportPdf === 'function') {
+            window.PrintLayout.exportPdf();
+            return;
+        }
+        // Fallback: schematic print
         if (activeView !== 'grid') {
             document.getElementById('btnViewGrid').click();
             setTimeout(() => {
@@ -1971,62 +2357,244 @@ function initExportEvents() {
    Active Selection Annotation Editor & Resizer
    ========================================================================== */
 let activeSelection = null;
+/** True after the user manually drags the map symbol editor. */
+let mapSymbolEditUserMoved = false;
 
-function selectAnnotation(type, data) {
-    activeSelection = { type, data };
+function isMapSymbolType(type) {
+    return type === 'road' || type === 'river' || type === 'landmark' || type === 'text';
+}
 
-    const card = document.getElementById('selectionCard');
-    const typeLabel = document.getElementById('selectionTypeLabel');
-    const labelInput = document.getElementById('selectionLabel');
-    const sizeGroup = document.getElementById('selectionSizeGroup');
-    const sizeLabel = document.getElementById('selectionSizeLabel');
-    const slider = document.getElementById('selectionSizeSlider');
-    const valDisplay = document.getElementById('selectionSizeValue');
-    const rotateGroup = document.getElementById('selectionRotateGroup');
-    const rotateSlider = document.getElementById('selectionRotateSlider');
-    const rotateVal = document.getElementById('selectionRotateValue');
+function shouldUseMapEditModal(type) {
+    return type === 'node' || isMapSymbolType(type);
+}
 
-    card.classList.remove('hidden');
+function getConnectedSpanSummaries(node) {
+    const byId = {};
+    nodes.forEach(n => { byId[n.id] = n; });
+    const preset = getPresetDisplayOptions();
+    const lines = [];
+    edges.forEach(edge => {
+        let otherId = null;
+        if (edge.from === node.id) otherId = edge.to;
+        else if (edge.to === node.id) otherId = edge.from;
+        if (otherId == null) return;
+        const other = byId[otherId];
+        const otherLabel = other
+            ? (other.label || `P-${String(other.sequence).padStart(2, '0')}`)
+            : `#${otherId}`;
+        const spanText = formatDistance(edge.spanLengthM || 0, preset.unit, preset.decimals);
+        lines.push(`${otherLabel} · ${spanText} · ${edge.voltage || ''}`);
+    });
+    return lines;
+}
+
+function buildSelectionInfoHtml(type, data) {
+    if (type === 'node') {
+        const seq = data.sequence != null ? data.sequence : (data.assetRef?.sequence ?? '—');
+        const poleNo = data.label || `P-${String(seq).padStart(2, '0')}`;
+        const structure = data.structure || data.assetRef?.structure || '—';
+        const material = data.material || data.assetRef?.poleMaterial || '—';
+        const voltage = data.assetRef?.voltage || '—';
+        const status = data.assetRef?.status || '—';
+        const lat = data.assetRef?.latitude;
+        const lng = data.assetRef?.longitude;
+        const spans = getConnectedSpanSummaries(data);
+        const gps = (lat != null && lng != null)
+            ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+            : '—';
+        const spanHtml = spans.length
+            ? `<div class="info-spans"><span class="info-k">Spans</span>${
+                spans.map(s => `<span class="info-span-line">${escapeHtml(s)}</span>`).join('')
+              }</div>`
+            : `<div class="info-spans"><span class="info-k">Spans</span><span class="info-span-line">No connections</span></div>`;
+        return `
+            <div class="info-row"><span class="info-k">Pole</span><span class="info-v">${escapeHtml(poleNo)}</span></div>
+            <div class="info-row"><span class="info-k">No.</span><span class="info-v">#${escapeHtml(seq)}</span></div>
+            <div class="info-row"><span class="info-k">Structure</span><span class="info-v">${escapeHtml(structure)}</span></div>
+            <div class="info-row"><span class="info-k">Material</span><span class="info-v">${escapeHtml(material)}</span></div>
+            <div class="info-row"><span class="info-k">Voltage</span><span class="info-v">${escapeHtml(voltage)}</span></div>
+            <div class="info-row"><span class="info-k">Status</span><span class="info-v">${escapeHtml(status)}</span></div>
+            <div class="info-row"><span class="info-k">GPS</span><span class="info-v">${escapeHtml(gps)}</span></div>
+            ${spanHtml}
+            <div class="info-spans"><span class="info-span-line">Nudge ≤ ${MAX_POLE_NUDGE_M} m for GPS error only</span></div>
+        `;
+    }
+
+    if (isMapSymbolType(type)) {
+        const kind = type === 'landmark' ? (data.type || 'landmark') : type;
+        const lat = data.lat;
+        const lng = data.lng;
+        const gps = (lat != null && lng != null)
+            ? `${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)}`
+            : '—';
+        let sizeText = '—';
+        if (type === 'road' || type === 'river') {
+            sizeText = `${data.width || (type === 'road' ? DEFAULT_ROAD_SCALE_M : DEFAULT_RIVER_SCALE_M)} m`;
+        } else if (type === 'landmark' && data.type === 'pond') {
+            sizeText = `R ${data.radius || DEFAULT_POND_RADIUS_M} m`;
+        } else if (type === 'landmark') {
+            sizeText = `${data.size || defaultLandmarkScaleM(data.type)} m`;
+        } else if (type === 'text') {
+            sizeText = `${data.size || 15} px`;
+        }
+        return `
+            <div class="info-row"><span class="info-k">Type</span><span class="info-v">${escapeHtml(kind)}</span></div>
+            <div class="info-row"><span class="info-k">Size</span><span class="info-v">${escapeHtml(sizeText)}</span></div>
+            <div class="info-row"><span class="info-k">GPS</span><span class="info-v">${escapeHtml(gps)}</span></div>
+        `;
+    }
+    return '';
+}
+
+function updateSelectionInfoPanels(type, data) {
+    // Info block (pole no. / spans / etc.) is for network poles only — not CAD symbols.
+    const html = type === 'node' ? buildSelectionInfoHtml(type, data) : '';
+    const mapInfo = document.getElementById('mapEditInfo');
+    const sideInfo = document.getElementById('selectionInfoBlock');
+    if (mapInfo) {
+        if (html) {
+            mapInfo.innerHTML = html;
+            mapInfo.classList.remove('hidden');
+        } else {
+            mapInfo.innerHTML = '';
+            mapInfo.classList.add('hidden');
+        }
+    }
+    if (sideInfo) {
+        if (html) {
+            sideInfo.innerHTML = html;
+            sideInfo.classList.remove('hidden');
+        } else {
+            sideInfo.innerHTML = '';
+            sideInfo.classList.add('hidden');
+        }
+    }
+}
+
+function getSelectionLatLng(type, data) {
+    if (!data) return null;
+    if (type === 'node') {
+        return {
+            lat: data.assetRef?.latitude ?? data.surveyLat,
+            lng: data.assetRef?.longitude ?? data.surveyLng
+        };
+    }
+    if (data.lat != null && data.lng != null) {
+        return { lat: data.lat, lng: data.lng };
+    }
+    return null;
+}
+
+function hideMapSymbolEditModal() {
+    const modal = document.getElementById('mapSymbolEditModal');
+    if (modal) modal.classList.add('hidden');
+    mapSymbolEditUserMoved = false;
+}
+
+function positionMapSymbolEditModal(lat, lng) {
+    const modal = document.getElementById('mapSymbolEditModal');
+    const mapEl = document.getElementById('mapView');
+    if (!modal || !map || !mapEl || lat == null || lng == null) return;
+    if (activeView !== 'map') {
+        modal.classList.add('hidden');
+        return;
+    }
+    // Keep user-dragged position until a new symbol is selected
+    if (mapSymbolEditUserMoved) return;
+
+    const pt = map.latLngToContainerPoint([lat, lng]);
+    const modalW = modal.offsetWidth || 200;
+    const modalH = modal.offsetHeight || 170;
+    const pad = 8;
+    const offsetX = 14;
+    const offsetY = -8;
+
+    let left = pt.x + offsetX;
+    let top = pt.y + offsetY - modalH / 2;
+
+    const maxLeft = Math.max(pad, mapEl.clientWidth - modalW - pad);
+    const maxTop = Math.max(pad, mapEl.clientHeight - modalH - pad);
+    left = Math.min(Math.max(pad, left), maxLeft);
+    top = Math.min(Math.max(pad, top), maxTop);
+
+    modal.style.left = `${left}px`;
+    modal.style.top = `${top}px`;
+}
+
+function configureSymbolEditControls(prefix, type, data) {
+    const typeLabel = document.getElementById(`${prefix}Title`) ||
+        document.getElementById(`${prefix}TypeLabel`);
+    const labelInput = document.getElementById(`${prefix}Label`);
+    const labelGroup = document.getElementById(`${prefix}LabelGroup`);
+    const sizeGroup = document.getElementById(`${prefix}SizeGroup`);
+    const sizeLabel = document.getElementById(`${prefix}SizeLabel`);
+    const slider = document.getElementById(`${prefix}SizeSlider`);
+    const valDisplay = document.getElementById(`${prefix}SizeValue`);
+    const rotateGroup = document.getElementById(`${prefix}RotateGroup`);
+    const rotateSlider = document.getElementById(`${prefix}RotateSlider`);
+    const rotateVal = document.getElementById(`${prefix}RotateValue`);
+    const deleteBtn = document.getElementById(prefix === 'mapEdit' ? 'mapEditDelete' : 'btnDeleteSelection');
 
     let typeName = type.charAt(0).toUpperCase() + type.slice(1);
     if (type === 'landmark') {
-        typeName = data.type === 'pond' ? 'Pond Shape' : `Landmark (${data.type})`;
+        typeName = data.type === 'pond' ? 'Pond' : (data.type || 'Landmark');
+        typeName = typeName.charAt(0).toUpperCase() + typeName.slice(1);
     } else if (type === 'node') {
-        typeName = `Pole (${data.structure})`;
+        const seq = data.sequence != null ? data.sequence : '';
+        typeName = data.label || `Pole ${seq}`;
     }
-    typeLabel.textContent = `Selected ${typeName}`;
-    labelInput.value = data.label || data.text || '';
 
-    // Configure sizing controls
+    if (typeLabel) {
+        typeLabel.textContent = prefix === 'mapEdit'
+            ? (type === 'node' ? typeName : `Edit ${typeName}`)
+            : `Selected ${type === 'landmark' && data.type !== 'pond' ? `Landmark (${data.type})` : typeName}`;
+    }
+
+    if (labelInput) {
+        labelInput.value = data.label || data.text || '';
+    }
+    if (labelGroup) {
+        labelGroup.classList.toggle('hidden', type === 'node');
+    }
+
+    updateSelectionInfoPanels(type, data);
+
+    if (deleteBtn) {
+        deleteBtn.classList.toggle('hidden', type === 'node');
+    }
+
+    if (!sizeGroup || !slider || !valDisplay || !sizeLabel) return;
+
     sizeGroup.classList.remove('hidden');
-    rotateGroup.classList.add('hidden');
+    if (rotateGroup) rotateGroup.classList.add('hidden');
 
     if (type === 'node') {
         sizeGroup.classList.add('hidden');
-        rotateGroup.classList.add('hidden');
+        if (rotateGroup) rotateGroup.classList.add('hidden');
     } else if (type === 'road' || type === 'river') {
-        sizeLabel.textContent = 'Scale/Width (meters)';
+        sizeLabel.textContent = prefix === 'mapEdit' ? 'Scale / Width (m)' : 'Scale/Width (meters)';
         slider.min = 10;
         slider.max = 200;
-        slider.value = data.width || 40;
+        const fallback = type === 'road' ? DEFAULT_ROAD_SCALE_M : DEFAULT_RIVER_SCALE_M;
+        slider.value = data.width || fallback;
         valDisplay.textContent = `${slider.value}m`;
-
-        // Show rotation
-        rotateGroup.classList.remove('hidden');
-        rotateSlider.value = data.angle || 0;
-        rotateVal.textContent = `${rotateSlider.value}°`;
+        if (rotateGroup && rotateSlider && rotateVal) {
+            rotateGroup.classList.remove('hidden');
+            rotateSlider.value = data.angle || 0;
+            rotateVal.textContent = `${rotateSlider.value}°`;
+        }
     } else if (type === 'landmark' && data.type === 'pond') {
-        sizeLabel.textContent = 'Pond Radius (meters)';
+        sizeLabel.textContent = prefix === 'mapEdit' ? 'Radius (m)' : 'Pond Radius (meters)';
         slider.min = 5;
         slider.max = 150;
-        slider.value = data.radius || 20;
+        slider.value = data.radius || DEFAULT_POND_RADIUS_M;
         valDisplay.textContent = `${slider.value}m`;
     } else if (type === 'landmark') {
-        sizeLabel.textContent = 'Icon Scale (px)';
-        slider.min = 16;
-        slider.max = 48;
-        slider.value = data.size || 24;
-        valDisplay.textContent = `${slider.value}px`;
+        sizeLabel.textContent = prefix === 'mapEdit' ? 'Scale (m)' : 'Scale (meters)';
+        slider.min = 10;
+        slider.max = 100;
+        slider.value = data.size || defaultLandmarkScaleM(data.type);
+        valDisplay.textContent = `${slider.value}m`;
     } else if (type === 'text') {
         sizeLabel.textContent = 'Font Size (px)';
         slider.min = 10;
@@ -2035,6 +2603,52 @@ function selectAnnotation(type, data) {
         valDisplay.textContent = `${slider.value}px`;
     } else {
         sizeGroup.classList.add('hidden');
+    }
+}
+
+function showMapSymbolEditModal(type, data) {
+    const modal = document.getElementById('mapSymbolEditModal');
+    if (!modal) return;
+    mapSymbolEditUserMoved = false;
+    configureSymbolEditControls('mapEdit', type, data);
+    modal.classList.remove('hidden');
+    const ll = getSelectionLatLng(type, data);
+    if (ll) positionMapSymbolEditModal(ll.lat, ll.lng);
+    requestAnimationFrame(() => {
+        if (ll) positionMapSymbolEditModal(ll.lat, ll.lng);
+    });
+}
+
+function repositionActiveMapSymbolModal() {
+    if (!activeSelection || activeView !== 'map') return;
+    if (!shouldUseMapEditModal(activeSelection.type)) return;
+    const modal = document.getElementById('mapSymbolEditModal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const ll = getSelectionLatLng(activeSelection.type, activeSelection.data);
+    if (ll) positionMapSymbolEditModal(ll.lat, ll.lng);
+}
+
+function selectAnnotation(type, data) {
+    activeSelection = { type, data };
+
+    const card = document.getElementById('selectionCard');
+    const useMapModal = activeView === 'map' && shouldUseMapEditModal(type) && map;
+
+    if (useMapModal) {
+        if (card) card.classList.add('hidden');
+        showMapSymbolEditModal(type, data);
+    } else {
+        hideMapSymbolEditModal();
+        if (card) {
+            card.classList.remove('hidden');
+            configureSymbolEditControls('selection', type, data);
+        }
+    }
+
+    const nudgeHint = document.getElementById('poleNudgeHint');
+    if (nudgeHint) {
+        // Compact nudge note is included in map pole info; sidebar still shows hint
+        nudgeHint.classList.toggle('hidden', type !== 'node' || useMapModal);
     }
 
     updateMapSelectionHighlights();
@@ -2047,7 +2661,93 @@ function clearSelection() {
     if (selectionCard) {
         selectionCard.classList.add('hidden');
     }
+    const sideInfo = document.getElementById('selectionInfoBlock');
+    if (sideInfo) {
+        sideInfo.innerHTML = '';
+        sideInfo.classList.add('hidden');
+    }
+    hideMapSymbolEditModal();
     updateMapSelectionHighlights();
+    drawCanvas();
+}
+
+function applySelectionLabel(value) {
+    if (!activeSelection) return;
+    const { type, data } = activeSelection;
+    if (type === 'text') {
+        data.text = value;
+        renderMap();
+        if (activeView === 'map') showMapSymbolEditModal(type, data);
+    } else if (type === 'node') {
+        data.label = value;
+        renderMap();
+    } else {
+        data.label = value;
+        if (type === 'road' || type === 'river' || (type === 'landmark' && data.type === 'pond')) {
+            refreshShapeMarkerIcons();
+            updateMapSelectionHighlights();
+        } else {
+            renderMap();
+            if (activeView === 'map' && isMapSymbolType(type)) {
+                showMapSymbolEditModal(type, data);
+            }
+        }
+        repositionActiveMapSymbolModal();
+    }
+    drawCanvas();
+}
+
+function applySelectionSize(val) {
+    if (!activeSelection) return;
+    const { type, data } = activeSelection;
+
+    if (type === 'road' || type === 'river') {
+        data.width = val;
+        data.height = val;
+        refreshShapeMarkerIcons();
+    } else if (type === 'landmark' && data.type === 'pond') {
+        data.radius = val;
+        refreshShapeMarkerIcons();
+    } else if (type === 'landmark') {
+        data.size = val;
+        refreshShapeMarkerIcons();
+    } else if (type === 'text') {
+        data.size = val;
+        renderMap();
+        if (activeView === 'map') showMapSymbolEditModal(type, data);
+    }
+    drawCanvas();
+    repositionActiveMapSymbolModal();
+}
+
+function applySelectionRotate(val) {
+    if (!activeSelection) return;
+    const { type, data } = activeSelection;
+    if (type === 'road' || type === 'river') {
+        data.angle = val;
+        refreshShapeMarkerIcons();
+        drawCanvas();
+        repositionActiveMapSymbolModal();
+    }
+}
+
+function deleteActiveSelection() {
+    if (!activeSelection) return;
+    const { type, data } = activeSelection;
+    if (type === 'text') {
+        annotations.texts = annotations.texts.filter(t => t !== data);
+    } else if (type === 'road') {
+        annotations.roads = annotations.roads.filter(r => r !== data);
+    } else if (type === 'river') {
+        annotations.rivers = annotations.rivers.filter(r => r !== data);
+    } else if (type === 'landmark') {
+        annotations.landmarks = annotations.landmarks.filter(l => l !== data);
+    } else if (type === 'node') {
+        showEditorToast('Poles cannot be deleted here. They stay as connected network nodes.');
+        return;
+    }
+    clearSelection();
+    renderMap();
     drawCanvas();
 }
 
@@ -2061,86 +2761,138 @@ function initSelectionEvents() {
     const btnClose = document.getElementById('btnDeselect');
 
     labelInput.addEventListener('input', () => {
-        if (!activeSelection) return;
-        const { type, data } = activeSelection;
-        if (type === 'text') {
-            data.text = labelInput.value;
-            renderMap();
-        } else if (type === 'node') {
-            data.label = labelInput.value;
-            renderMap();
-        } else {
-            data.label = labelInput.value;
-            if (type === 'road' || type === 'river' || (type === 'landmark' && data.type === 'pond')) {
-                refreshShapeMarkerIcons();
-                updateMapSelectionHighlights();
-            } else {
-                renderMap();
-            }
-        }
-        drawCanvas();
+        applySelectionLabel(labelInput.value);
+        const mapLabel = document.getElementById('mapEditLabel');
+        if (mapLabel && mapLabel !== document.activeElement) mapLabel.value = labelInput.value;
     });
 
     slider.addEventListener('input', () => {
         if (!activeSelection) return;
-        const { type, data } = activeSelection;
-        const val = parseInt(slider.value);
-
-        if (type === 'road' || type === 'river') {
-            data.width = val;
-            data.height = val; // proportional scale
-            valDisplay.textContent = `${val}m`;
-            refreshShapeMarkerIcons();
-        } else if (type === 'landmark' && data.type === 'pond') {
-            data.radius = val;
-            valDisplay.textContent = `${val}m`;
-            refreshShapeMarkerIcons();
-        } else if (type === 'landmark') {
-            data.size = val;
-            valDisplay.textContent = `${val}px`;
-            renderMap();
-        } else if (type === 'text') {
-            data.size = val;
-            valDisplay.textContent = `${val}px`;
-            renderMap();
-        }
-        drawCanvas();
+        const val = parseInt(slider.value, 10);
+        valDisplay.textContent = activeSelection.type === 'text' ? `${val}px` : `${val}m`;
+        applySelectionSize(val);
+        const mapSlider = document.getElementById('mapEditSizeSlider');
+        const mapVal = document.getElementById('mapEditSizeValue');
+        if (mapSlider) mapSlider.value = val;
+        if (mapVal) mapVal.textContent = valDisplay.textContent;
     });
 
     rotateSlider.addEventListener('input', () => {
         if (!activeSelection) return;
-        const { type, data } = activeSelection;
-        if (type === 'road' || type === 'river') {
-            const val = parseInt(rotateSlider.value);
-            data.angle = val;
-            rotateVal.textContent = `${val}°`;
-            refreshShapeMarkerIcons();
-            drawCanvas();
+        const val = parseInt(rotateSlider.value, 10);
+        rotateVal.textContent = `${val}°`;
+        applySelectionRotate(val);
+        const mapRot = document.getElementById('mapEditRotateSlider');
+        const mapRotVal = document.getElementById('mapEditRotateValue');
+        if (mapRot) mapRot.value = val;
+        if (mapRotVal) mapRotVal.textContent = `${val}°`;
+    });
+
+    btnDelete.addEventListener('click', deleteActiveSelection);
+    btnClose.addEventListener('click', clearSelection);
+
+    const mapLabel = document.getElementById('mapEditLabel');
+    const mapSlider = document.getElementById('mapEditSizeSlider');
+    const mapVal = document.getElementById('mapEditSizeValue');
+    const mapRot = document.getElementById('mapEditRotateSlider');
+    const mapRotVal = document.getElementById('mapEditRotateValue');
+    const mapDelete = document.getElementById('mapEditDelete');
+    const mapDone = document.getElementById('mapEditDone');
+    const mapClose = document.getElementById('mapEditClose');
+    const mapModal = document.getElementById('mapSymbolEditModal');
+
+    if (mapModal) {
+        ['click', 'dblclick', 'wheel', 'touchstart'].forEach((evt) => {
+            mapModal.addEventListener(evt, (e) => e.stopPropagation());
+        });
+        mapModal.addEventListener('mousedown', (e) => e.stopPropagation());
+
+        const dragHandle = document.getElementById('mapEditDragHandle');
+        let dragState = null;
+
+        const onPointerMove = (e) => {
+            if (!dragState) return;
+            const viewport = document.querySelector('.viewer-viewport') || document.getElementById('mapView');
+            if (!viewport) return;
+            const rect = viewport.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            let left = clientX - rect.left - dragState.offsetX;
+            let top = clientY - rect.top - dragState.offsetY;
+            const pad = 6;
+            const maxLeft = Math.max(pad, viewport.clientWidth - mapModal.offsetWidth - pad);
+            const maxTop = Math.max(pad, viewport.clientHeight - mapModal.offsetHeight - pad);
+            left = Math.min(Math.max(pad, left), maxLeft);
+            top = Math.min(Math.max(pad, top), maxTop);
+            mapModal.style.left = `${left}px`;
+            mapModal.style.top = `${top}px`;
+            e.preventDefault();
+        };
+
+        const endDrag = () => {
+            if (!dragState) return;
+            dragState = null;
+            mapModal.classList.remove('is-dragging');
+            window.removeEventListener('mousemove', onPointerMove);
+            window.removeEventListener('mouseup', endDrag);
+            window.removeEventListener('touchmove', onPointerMove);
+            window.removeEventListener('touchend', endDrag);
+        };
+
+        const startDrag = (e) => {
+            if (e.target && e.target.closest && e.target.closest('#mapEditClose')) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const modalRect = mapModal.getBoundingClientRect();
+            dragState = {
+                offsetX: clientX - modalRect.left,
+                offsetY: clientY - modalRect.top
+            };
+            mapSymbolEditUserMoved = true;
+            mapModal.classList.add('is-dragging');
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', endDrag);
+            window.addEventListener('touchmove', onPointerMove, { passive: false });
+            window.addEventListener('touchend', endDrag);
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        if (dragHandle) {
+            dragHandle.addEventListener('mousedown', startDrag);
+            dragHandle.addEventListener('touchstart', startDrag, { passive: false });
         }
-    });
+    }
 
-    btnDelete.addEventListener('click', () => {
-        if (!activeSelection) return;
-        const { type, data } = activeSelection;
-        
-        if (type === 'road') {
-            annotations.roads = annotations.roads.filter(r => r !== data);
-        } else if (type === 'river') {
-            annotations.rivers = annotations.rivers.filter(r => r !== data);
-        } else if (type === 'text') {
-            annotations.texts = annotations.texts.filter(t => t !== data);
-        } else if (type === 'landmark') {
-            annotations.landmarks = annotations.landmarks.filter(l => l !== data);
-        }
-
-        clearSelection();
-        renderMap();
-        drawCanvas();
-    });
-
-    btnClose.addEventListener('click', () => {
-        clearSelection();
-    });
+    if (mapLabel) {
+        mapLabel.addEventListener('input', () => {
+            applySelectionLabel(mapLabel.value);
+            if (labelInput) labelInput.value = mapLabel.value;
+        });
+    }
+    if (mapSlider && mapVal) {
+        mapSlider.addEventListener('input', () => {
+            if (!activeSelection) return;
+            const val = parseInt(mapSlider.value, 10);
+            mapVal.textContent = activeSelection.type === 'text' ? `${val}px` : `${val}m`;
+            applySelectionSize(val);
+            if (slider) slider.value = val;
+            if (valDisplay) valDisplay.textContent = mapVal.textContent;
+        });
+    }
+    if (mapRot && mapRotVal) {
+        mapRot.addEventListener('input', () => {
+            if (!activeSelection) return;
+            const val = parseInt(mapRot.value, 10);
+            mapRotVal.textContent = `${val}°`;
+            applySelectionRotate(val);
+            if (rotateSlider) rotateSlider.value = val;
+            if (rotateVal) rotateVal.textContent = `${val}°`;
+        });
+    }
+    if (mapDelete) mapDelete.addEventListener('click', deleteActiveSelection);
+    if (mapDone) mapDone.addEventListener('click', clearSelection);
+    if (mapClose) mapClose.addEventListener('click', clearSelection);
 }
 
 /* ==========================================================================
@@ -2219,20 +2971,42 @@ function addStencilAnnotation(type, lat, lng) {
     let placedItem = null;
 
     if (type === 'road') {
-        placedItem = { id, lat, lng, width: 80, height: 80, angle: 0, label: '' };
+        placedItem = {
+            id, lat, lng,
+            width: DEFAULT_ROAD_SCALE_M,
+            height: DEFAULT_ROAD_SCALE_M,
+            angle: 0,
+            label: ''
+        };
         annotations.roads.push(placedItem);
     } else if (type === 'river') {
-        placedItem = { id, lat, lng, width: 90, height: 90, angle: 0, label: '' };
+        placedItem = {
+            id, lat, lng,
+            width: DEFAULT_RIVER_SCALE_M,
+            height: DEFAULT_RIVER_SCALE_M,
+            angle: 0,
+            label: ''
+        };
         annotations.rivers.push(placedItem);
     } else if (type === 'pond') {
-        placedItem = { id, lat, lng, type: 'pond', radius: 40, label: '' };
+        placedItem = {
+            id, lat, lng,
+            type: 'pond',
+            radius: DEFAULT_POND_RADIUS_M,
+            label: ''
+        };
         annotations.landmarks.push(placedItem);
     } else if (type === 'text') {
         placedItem = { lat, lng, text: 'Text Label', size: 16 };
         annotations.texts.push(placedItem);
     } else {
-        // Tree, temple, mosque, school, house point landmarks
-        placedItem = { id, lat, lng, type, size: 24, label: '' };
+        // Tree, temple, mosque, school, house — size in meters
+        placedItem = {
+            id, lat, lng,
+            type,
+            size: defaultLandmarkScaleM(type),
+            label: ''
+        };
         annotations.landmarks.push(placedItem);
     }
 

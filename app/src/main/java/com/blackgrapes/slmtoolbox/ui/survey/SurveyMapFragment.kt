@@ -264,57 +264,18 @@ class SurveyMapFragment : Fragment() {
     }
 
     /**
-     * Handles a long press anywhere on the map.
-     *
-     * Priority:
-     *  1. If a series/tap is active → continue-placement bubble
-     *  2. If idle and a pole is nearby → Edit / Delete sheet (long-press intent)
-     *  3. If idle and a line is nearby → insert-or-branch bubble
-     *  4. Otherwise → new-network bubble
+     * Long-press is reserved for modifying / deleting an existing pole.
+     * Adding poles (new network, continue series, branch, insert) uses the + button.
      */
     private fun handleLongPress(lat: Double, lng: Double) {
-        val series = viewModel.activeSeriesConfig()
-        val tapActive = viewModel.selectedTapPoleId.value != null
-
-        if (series != null || tapActive) {
-            // ── Active series / tap: place next pole or open continue bubble ──
-            openContinueBubble(lat, lng)
-            return
+        val nearPole = nearestConnectablePole(lat, lng) ?: return
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(
+            nearPole.latitude, nearPole.longitude, lat, lng, results
+        )
+        if (results[0] <= 25.0f) {
+            openEditBubble(nearPole)
         }
-
-        // ── Idle: check if user long-pressed near an existing pole ────────────
-        val nearPole = nearestConnectablePole(lat, lng)
-        if (nearPole != null) {
-            val results = FloatArray(1)
-            android.location.Location.distanceBetween(
-                nearPole.latitude, nearPole.longitude, lat, lng, results
-            )
-            if (results[0] <= 25.0f) {
-                // Long press on a pole → Edit / Delete
-                openEditBubble(nearPole)
-                return
-            }
-        }
-
-        // ── Idle: check for nearby line segment ──────────────────────────────
-        val nearLine = nearestCompletedConnection(lat, lng)
-        if (nearLine != null) {
-            val survey = viewModel.survey.value ?: return
-            val from = survey.assets.firstOrNull { it.id == nearLine.fromAssetId }
-            val to   = survey.assets.firstOrNull { it.id == nearLine.toAssetId }
-            if (from != null && to != null) {
-                val projected = GeometryHitTest.projectPointToSegment(
-                    lat, lng,
-                    from.latitude, from.longitude,
-                    to.latitude, to.longitude
-                )
-                openNearLineBubble(projected.first, projected.second, listOf(from, to), nearLine.id)
-                return
-            }
-        }
-
-        // ── Nothing nearby: start a new network ─────────────────────────────
-        openNewNetworkBubble(lat, lng)
     }
 
     private fun openNewNetworkBubble(lat: Double, lng: Double) {
@@ -361,9 +322,15 @@ class SurveyMapFragment : Fragment() {
 
     @SuppressLint("MissingPermission")
     private suspend fun captureEvidence(mapLat: Double, mapLng: Double): LocationEvidence {
+        val satSnapshot = currentSatSnapshot()
         val location = fetchFreshLocation() ?: lastDeviceLocation
         if (location == null) {
-            return LocationEvidence(null, null, null, null, null, false)
+            return LocationEvidence(
+                null, null, null, null, null, false,
+                satsUsedInFix = satSnapshot.used,
+                satsVisible = satSnapshot.visible,
+                avgSnrDb = satSnapshot.avgSnr
+            )
         }
         lastDeviceLocation = location
         val results = FloatArray(1)
@@ -386,7 +353,29 @@ class SurveyMapFragment : Fragment() {
             deviceAccuracyM = location.accuracy,
             deviceFixTimestamp = location.time.takeIf { it > 0L } ?: System.currentTimeMillis(),
             distanceFromDeviceM = results[0],
-            isMockLocation = mock
+            isMockLocation = mock,
+            satsUsedInFix = satSnapshot.used,
+            satsVisible = satSnapshot.visible,
+            avgSnrDb = satSnapshot.avgSnr
+        )
+    }
+
+    private data class SatSnapshot(
+        val used: Int?,
+        val visible: Int?,
+        val avgSnr: Float?
+    )
+
+    private fun currentSatSnapshot(): SatSnapshot {
+        val list = satelliteList
+        if (list.isEmpty()) return SatSnapshot(null, null, null)
+        val usedSats = list.filter { it.usedInFix }
+        val snrSource = usedSats.ifEmpty { list }
+        val avg = snrSource.map { it.snr }.filter { it > 0f }.average().toFloat()
+        return SatSnapshot(
+            used = usedSats.size,
+            visible = list.size,
+            avgSnr = avg.takeIf { !it.isNaN() }
         )
     }
 

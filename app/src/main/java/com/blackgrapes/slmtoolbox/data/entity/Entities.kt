@@ -58,7 +58,10 @@ data class SurveyAssetEntity(
     val deviceFixTimestamp: Long? = null,
     val distanceFromDeviceM: Float? = null,
     val isMockLocation: Boolean = false,
-    val locationVerified: Boolean = false
+    val locationVerified: Boolean = false,
+    val satsUsedInFix: Int? = null,
+    val satsVisible: Int? = null,
+    val avgSnrDb: Float? = null
 )
 
 @Entity(

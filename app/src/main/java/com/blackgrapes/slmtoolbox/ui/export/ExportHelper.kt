@@ -5,8 +5,8 @@ import android.graphics.Bitmap
 import android.graphics.pdf.PdfDocument
 import android.util.Log
 import com.blackgrapes.slmtoolbox.data.entity.SeriesMetaEntity
+import com.blackgrapes.slmtoolbox.domain.GisAccuracyReport
 import com.blackgrapes.slmtoolbox.domain.PrintableSldBuilder
-import com.blackgrapes.slmtoolbox.domain.PrintableSldDocument
 import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.model.SurveyStamp
 import java.io.File
@@ -20,11 +20,63 @@ data class ExportResult(
     val pdfFile: File
 )
 
+data class GisDataSheetExport(
+    val pdfFile: File,
+    val csvFile: File
+)
+
 object ExportHelper {
     private const val TAG = "ExportHelper"
 
     fun exportDirectory(context: Context): File =
         File(context.cacheDir, "exports").also { it.mkdirs() }
+
+    fun exportPreviewPng(
+        context: Context,
+        survey: Survey,
+        seriesMeta: List<SeriesMetaEntity> = emptyList()
+    ): File? {
+        return try {
+            val preset = com.blackgrapes.slmtoolbox.domain.PresetPreferences.get(context)
+            val sldDoc = PrintableSldBuilder.build(
+                survey,
+                seriesMeta,
+                displayUnit = preset.displayUnit,
+                displayDecimals = preset.displayDecimals
+            )
+            if (sldDoc.pages.isEmpty()) return null
+
+            val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val pngFile = File(exportDirectory(context), "sld_preview_${survey.id}_$stampSuffix.png")
+            val scale = 3f
+            val bitmap = PrintableSldRenderer.renderPage(sldDoc.pages.first(), scale)
+            FileOutputStream(pngFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            bitmap.recycle()
+            pngFile
+        } catch (e: Exception) {
+            Log.e(TAG, "PNG preview export failed", e)
+            null
+        }
+    }
+
+    fun exportGpsCsv(context: Context, survey: Survey): File? {
+        return try {
+            if (survey.assets.isEmpty()) return null
+            val sheet = GisAccuracyReport.build(survey)
+            val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                .format(Date(sheet.generatedAt))
+            val csvFile = File(exportDirectory(context), "gps_points_${survey.id}_$stampSuffix.csv")
+            FileOutputStream(csvFile).use { out ->
+                out.write(GisAccuracyReport.toCsv(sheet).toByteArray(Charsets.UTF_8))
+            }
+            csvFile
+        } catch (e: Exception) {
+            Log.e(TAG, "GPS CSV export failed", e)
+            null
+        }
+    }
 
     fun exportPrintableSld(
         context: Context,
@@ -40,7 +92,7 @@ object ExportHelper {
                 displayUnit = preset.displayUnit,
                 displayDecimals = preset.displayDecimals
             )
-            
+
             val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(stamp.timestamp))
             val baseName = "sld_print_${survey.id}_$stampSuffix"
             val dir = exportDirectory(context)
@@ -48,13 +100,13 @@ object ExportHelper {
             val pdfFile = File(dir, "$baseName.pdf")
 
             val pdfDocument = PdfDocument()
-            
+            var pageIndex = 0
+
             val scale = 4f
-            sldDoc.pages.forEachIndexed { index, pageData ->
+            sldDoc.pages.forEach { pageData ->
                 val bitmap = PrintableSldRenderer.renderPage(pageData, scale)
-                
-                // Save first page as PNG preview
-                if (index == 0) {
+
+                if (pageIndex == 0) {
                     FileOutputStream(pngFile).use { out ->
                         bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
                     }
@@ -63,9 +115,9 @@ object ExportHelper {
                 val pageInfo = PdfDocument.PageInfo.Builder(
                     PrintableSldBuilder.PAGE_WIDTH.toInt(),
                     PrintableSldBuilder.PAGE_HEIGHT.toInt(),
-                    index + 1
+                    pageIndex + 1
                 ).create()
-                
+
                 val page = pdfDocument.startPage(pageInfo)
                 val pdfCanvas = page.canvas
                 pdfCanvas.save()
@@ -73,9 +125,28 @@ object ExportHelper {
                 pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
                 pdfCanvas.restore()
                 pdfDocument.finishPage(page)
-                
-                // Crucial: Recycle bitmap immediately to prevent OOM
                 bitmap.recycle()
+                pageIndex++
+            }
+
+            // Appendix: GIS accuracy data sheet pages
+            val dataSheet = GisAccuracyReport.build(survey)
+            val sheetScale = 2f
+            GisDataSheetRenderer.renderPages(dataSheet, sheetScale).forEach { bitmap ->
+                val pageInfo = PdfDocument.PageInfo.Builder(
+                    GisDataSheetRenderer.PAGE_WIDTH.toInt(),
+                    GisDataSheetRenderer.PAGE_HEIGHT.toInt(),
+                    pageIndex + 1
+                ).create()
+                val page = pdfDocument.startPage(pageInfo)
+                val pdfCanvas = page.canvas
+                pdfCanvas.save()
+                pdfCanvas.scale(1f / sheetScale, 1f / sheetScale)
+                pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
+                pdfCanvas.restore()
+                pdfDocument.finishPage(page)
+                bitmap.recycle()
+                pageIndex++
             }
 
             FileOutputStream(pdfFile).use { pdfDocument.writeTo(it) }
@@ -88,12 +159,55 @@ object ExportHelper {
         }
     }
 
+    fun exportGisDataSheet(context: Context, survey: Survey): GisDataSheetExport? {
+        return try {
+            val sheet = GisAccuracyReport.build(survey)
+            val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+                .format(Date(sheet.generatedAt))
+            val baseName = "gis_datasheet_${survey.id}_$stampSuffix"
+            val dir = exportDirectory(context)
+            val pdfFile = File(dir, "$baseName.pdf")
+            val csvFile = File(dir, "$baseName.csv")
+
+            val pdfDocument = PdfDocument()
+            val scale = 2f
+            GisDataSheetRenderer.renderPages(sheet, scale).forEachIndexed { index, bitmap ->
+                val pageInfo = PdfDocument.PageInfo.Builder(
+                    GisDataSheetRenderer.PAGE_WIDTH.toInt(),
+                    GisDataSheetRenderer.PAGE_HEIGHT.toInt(),
+                    index + 1
+                ).create()
+                val page = pdfDocument.startPage(pageInfo)
+                val pdfCanvas = page.canvas
+                pdfCanvas.save()
+                pdfCanvas.scale(1f / scale, 1f / scale)
+                pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
+                pdfCanvas.restore()
+                pdfDocument.finishPage(page)
+                bitmap.recycle()
+            }
+            FileOutputStream(pdfFile).use { pdfDocument.writeTo(it) }
+            pdfDocument.close()
+
+            FileOutputStream(csvFile).use { out ->
+                out.write(GisAccuracyReport.toCsv(sheet).toByteArray(Charsets.UTF_8))
+            }
+
+            GisDataSheetExport(pdfFile, csvFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "GIS data sheet export failed", e)
+            null
+        }
+    }
+
     fun exportJsonWorkspace(
         context: Context,
         survey: Survey,
         seriesMeta: List<SeriesMetaEntity>
     ): File? {
         return try {
+            val dataSheet = GisAccuracyReport.build(survey)
+            val summary = dataSheet.summary
             val root = org.json.JSONObject().apply {
                 put("surveyId", survey.id)
                 put("title", survey.title)
@@ -101,9 +215,24 @@ object ExportHelper {
                 put("linemanMobile", survey.linemanMobile)
                 put("createdAt", survey.createdAt)
                 put("updatedAt", survey.updatedAt)
-                put("isLiveAtSite", survey.assets.isNotEmpty() && survey.assets.all { it.locationVerified })
+                put("isLiveAtSite", survey.isLiveAtSite)
+                put(
+                    "gisAccuracy",
+                    org.json.JSONObject().apply {
+                        put("grade", summary.grade.label)
+                        put("poleCount", summary.poleCount)
+                        put("verifiedCount", summary.verifiedCount)
+                        put("verifiedPercent", summary.verifiedPercent)
+                        put("avgAccuracyM", summary.avgAccuracyM)
+                        put("minAccuracyM", summary.minAccuracyM)
+                        put("maxAccuracyM", summary.maxAccuracyM)
+                        put("avgDistanceFromDeviceM", summary.avgDistanceFromDeviceM)
+                        put("avgSatsUsed", summary.avgSatsUsed)
+                        put("avgSnrDb", summary.avgSnrDb)
+                        put("mockCount", summary.mockCount)
+                    }
+                )
 
-                // Assets array
                 val assetsArr = org.json.JSONArray()
                 survey.assets.forEach { asset ->
                     val assetObj = org.json.JSONObject().apply {
@@ -126,13 +255,21 @@ object ExportHelper {
                         put("remarks", asset.remarks)
                         put("structure", asset.structure)
                         put("seriesId", asset.seriesId)
+                        put("deviceLatitude", asset.deviceLatitude)
+                        put("deviceLongitude", asset.deviceLongitude)
+                        put("deviceAccuracyM", asset.deviceAccuracyM)
+                        put("deviceFixTimestamp", asset.deviceFixTimestamp)
+                        put("distanceFromDeviceM", asset.distanceFromDeviceM)
+                        put("isMockLocation", asset.isMockLocation)
                         put("locationVerified", asset.locationVerified)
+                        put("satsUsedInFix", asset.satsUsedInFix)
+                        put("satsVisible", asset.satsVisible)
+                        put("avgSnrDb", asset.avgSnrDb)
                     }
                     assetsArr.put(assetObj)
                 }
                 put("assets", assetsArr)
 
-                // Connections array
                 val connArr = org.json.JSONArray()
                 survey.connections.forEach { conn ->
                     val connObj = org.json.JSONObject().apply {
@@ -147,7 +284,6 @@ object ExportHelper {
                 }
                 put("connections", connArr)
 
-                // SeriesMeta array
                 val metaArr = org.json.JSONArray()
                 seriesMeta.forEach { meta ->
                     val metaObj = org.json.JSONObject().apply {

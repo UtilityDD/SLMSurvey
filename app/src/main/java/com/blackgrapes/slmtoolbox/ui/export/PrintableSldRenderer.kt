@@ -143,15 +143,11 @@ object PrintableSldRenderer {
         strokePaint: Paint,
         nodeText: Paint
     ) {
-        val left = 635f
-        val top = 110f
-
-        // Calculate dynamic height based on content
-        val legendItemCount = page.legend.size
-        val feederCount = page.feederEntries.size
-        val baseHeight = 60f + legendItemCount * 26f + 8f + 22f + 16f * 4 + 10f
-        val feederHeight = if (feederCount > 0) 18f + feederCount * 32f else 0f
-        val totalHeight = baseHeight + feederHeight + 16f
+        // Legend sits below the network diagram (full width strip).
+        val left = 28f
+        val right = 814f
+        val top = 412f
+        val bottom = 488f
 
         val box = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.rgb(245, 247, 250)
@@ -162,70 +158,83 @@ object PrintableSldRenderer {
             style = Paint.Style.STROKE
             strokeWidth = 1f
         }
-        canvas.drawRoundRect(left, top, 820f, top + totalHeight, 8f, 8f, box)
-        canvas.drawRoundRect(left, top, 820f, top + totalHeight, 8f, 8f, border)
-        canvas.drawText("Legend", left + 12f, top + 22f, textPaint)
-        canvas.drawText("Symbol / Count", left + 12f, top + 40f, smallPaint)
+        canvas.drawRoundRect(left, top, right, bottom, 8f, 8f, box)
+        canvas.drawRoundRect(left, top, right, bottom, 8f, 8f, border)
 
-        var y = top + 60f
+        canvas.drawText("Legend", left + 12f, top + 16f, textPaint)
+
+        // Structure symbols in a horizontal row
+        var x = left + 70f
+        val symbolY = top + 22f
         page.legend.forEach { item ->
             fillPaint.color = Color.rgb(21, 101, 192)
-            canvas.drawCircle(left + 24f, y, 12f, fillPaint)
-            canvas.drawCircle(left + 24f, y, 12f, strokePaint)
-            canvas.drawText(item.structure.label, left + 24f, y + 3.5f, nodeText)
-            canvas.drawText("${item.structure.label}  × ${item.count}", left + 46f, y + 4f, smallPaint)
-            y += 26f
+            canvas.drawCircle(x, symbolY, 10f, fillPaint)
+            canvas.drawCircle(x, symbolY, 10f, strokePaint)
+            val symbolLabelPaint = Paint(nodeText).apply { textSize = 8f }
+            canvas.drawText(item.structure.label, x, symbolY + 3f, symbolLabelPaint)
+            canvas.drawText(
+                "${item.structure.label} × ${item.count}",
+                x + 14f,
+                symbolY + 3.5f,
+                smallPaint
+            )
+            x += 78f
         }
-        y += 8f
-        canvas.drawText("Line key", left + 12f, y, textPaint)
-        y += 18f
+
+        // Line key on second row
+        var keyX = left + 12f
+        val keyY = top + 48f
+        canvas.drawText("Line key", keyX, keyY, textPaint)
+        keyX += 58f
         val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             strokeWidth = 3f
             style = Paint.Style.STROKE
         }
+        fun drawKey(label: String, color: Int, dashed: Boolean = false) {
+            keyPaint.color = color
+            keyPaint.pathEffect = if (dashed) DashPathEffect(floatArrayOf(8f, 6f), 0f) else null
+            canvas.drawLine(keyX, keyY - 3f, keyX + 28f, keyY - 3f, keyPaint)
+            canvas.drawText(label, keyX + 34f, keyY, smallPaint)
+            keyX += 34f + smallPaint.measureText(label) + 18f
+            keyPaint.pathEffect = null
+        }
         val len33 = page.voltageRouteLengths[VoltageLevel.KV_33] ?: 0.0
-        val len33Str = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(len33, page.displayUnit, page.displayDecimals)
-        keyPaint.color = colorFor(VoltageLevel.KV_33)
-        canvas.drawLine(left + 12f, y, left + 40f, y, keyPaint)
-        canvas.drawText("33kV (R/L: $len33Str)", left + 48f, y + 3f, smallPaint)
-        y += 16f
-
         val len11 = page.voltageRouteLengths[VoltageLevel.KV_11] ?: 0.0
-        val len11Str = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(len11, page.displayUnit, page.displayDecimals)
-        keyPaint.color = colorFor(VoltageLevel.KV_11)
-        canvas.drawLine(left + 12f, y, left + 40f, y, keyPaint)
-        canvas.drawText("11kV (R/L: $len11Str)", left + 48f, y + 3f, smallPaint)
-        y += 16f
-
         val lenLt = page.voltageRouteLengths[VoltageLevel.LT] ?: 0.0
-        val lenLtStr = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(lenLt, page.displayUnit, page.displayDecimals)
-        keyPaint.color = colorFor(VoltageLevel.LT)
-        canvas.drawLine(left + 12f, y, left + 40f, y, keyPaint)
-        canvas.drawText("LT (R/L: $lenLtStr)", left + 48f, y + 3f, smallPaint)
-        y += 16f
-        keyPaint.color = Color.GRAY
-        keyPaint.pathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
-        canvas.drawLine(left + 12f, y, left + 40f, y, keyPaint)
-        canvas.drawText("Proposed", left + 48f, y + 3f, smallPaint)
-        keyPaint.pathEffect = null
+        drawKey(
+            "33kV (${SurveyMetrics.formatDistance(len33, page.displayUnit, page.displayDecimals)})",
+            colorFor(VoltageLevel.KV_33)
+        )
+        drawKey(
+            "11kV (${SurveyMetrics.formatDistance(len11, page.displayUnit, page.displayDecimals)})",
+            colorFor(VoltageLevel.KV_11)
+        )
+        drawKey(
+            "LT (${SurveyMetrics.formatDistance(lenLt, page.displayUnit, page.displayDecimals)})",
+            colorFor(VoltageLevel.LT)
+        )
+        drawKey("Proposed", Color.GRAY, dashed = true)
 
-        // Draw feeder metadata
+        // Feeder info on the right side of the legend strip
         if (page.feederEntries.isNotEmpty()) {
-            y += 14f
-            val dividerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.rgb(200, 200, 200)
-                strokeWidth = 0.5f
-            }
-            canvas.drawLine(left + 8f, y, 816f, y, dividerPaint)
-            y += 14f
-            canvas.drawText("Feeder Info", left + 12f, y, textPaint)
-            y += 4f
-            page.feederEntries.forEach { entry ->
-                y += 16f
-                val voltageLbl = entry.voltage.label
-                canvas.drawText("$voltageLbl: ${entry.feederName}", left + 12f, y, smallPaint)
-                y += 12f
-                canvas.drawText("Source SS: ${entry.sourceSubstation}", left + 12f, y, smallPaint)
+            var feederY = top + 14f
+            val feederX = 560f
+            canvas.drawText("Feeder Info", feederX, feederY, textPaint)
+            page.feederEntries.take(2).forEach { entry ->
+                feederY += 14f
+                canvas.drawText(
+                    "${entry.voltage.label}: ${entry.feederName}",
+                    feederX,
+                    feederY,
+                    smallPaint
+                )
+                feederY += 12f
+                canvas.drawText(
+                    "Source SS: ${entry.sourceSubstation}",
+                    feederX,
+                    feederY,
+                    smallPaint
+                )
             }
         }
     }
@@ -236,8 +245,8 @@ object PrintableSldRenderer {
         textPaint: Paint,
         smallPaint: Paint
     ) {
-        val y = 500f
-        val totalRouteStr = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(
+        val y = 508f
+        val totalRouteStr = SurveyMetrics.formatDistance(
             page.totalRouteLengthM, page.displayUnit, page.displayDecimals
         )
         canvas.drawText(
@@ -246,7 +255,7 @@ object PrintableSldRenderer {
             y,
             textPaint
         )
-        val pageRouteStr = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(
+        val pageRouteStr = SurveyMetrics.formatDistance(
             page.pageRouteLengthM, page.displayUnit, page.displayDecimals
         )
         canvas.drawText(
@@ -255,21 +264,21 @@ object PrintableSldRenderer {
             y,
             smallPaint
         )
-        canvas.drawText("Surveyed by", 28f, 530f, textPaint)
+        canvas.drawText("Surveyed by", 28f, 536f, textPaint)
         val name = page.linemanName.ifBlank { "________________" }
-        canvas.drawText(name, 110f, 530f, textPaint)
+        canvas.drawText(name, 110f, 536f, textPaint)
         if (page.linemanMobile.isNotBlank()) {
-            canvas.drawText(page.linemanMobile, 280f, 530f, smallPaint)
+            canvas.drawText(page.linemanMobile, 280f, 536f, smallPaint)
         }
-        canvas.drawText("Signature", 520f, 530f, textPaint)
-        canvas.drawLine(580f, 532f, 800f, 532f, Paint().apply {
+        canvas.drawText("Signature", 520f, 536f, textPaint)
+        canvas.drawLine(580f, 538f, 800f, 538f, Paint().apply {
             color = Color.DKGRAY
             strokeWidth = 1f
         })
         canvas.drawText(
             "Existing solid · Proposed dashed · Circles show 1P/2P/3P/4P/DTR",
             28f,
-            560f,
+            568f,
             smallPaint
         )
     }

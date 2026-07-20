@@ -20,7 +20,9 @@ data class SeriesConfig(
     val material: PoleMaterial,
     val conductor: String,
     val feederName: String = "",
-    val sourceSubstation: String = ""
+    val sourceSubstation: String = "",
+    /** Structure of the series START pole (used for DTR→LT continue). */
+    val startStructure: PoleStructure? = null
 )
 
 data class PlacementDraft(
@@ -94,7 +96,20 @@ object NetworkCatalog {
             voltage = asset.voltage,
             status = asset.status,
             material = material,
-            conductor = conductor
+            conductor = conductor,
+            startStructure = asset.poleStructure
+        )
+    }
+
+    /** Prefer series START asset so DTR→LT pattern is detected correctly. */
+    fun seriesConfigFromSeries(assets: List<SurveyAsset>, seriesId: Long): SeriesConfig? {
+        val inSeries = assets.filter { it.seriesId == seriesId }
+        if (inSeries.isEmpty()) return null
+        val start = inSeries.firstOrNull {
+            it.poleRole == com.blackgrapes.slmtoolbox.domain.model.PoleRole.START
+        } ?: inSeries.minByOrNull { it.sequence } ?: return null
+        return seriesConfigFrom(start)?.copy(
+            startStructure = start.poleStructure
         )
     }
 }

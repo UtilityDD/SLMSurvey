@@ -35,7 +35,10 @@ data class AssetParcelable(
     val deviceFixTimestamp: Long?,
     val distanceFromDeviceM: Float?,
     val isMockLocation: Boolean,
-    val locationVerified: Boolean
+    val locationVerified: Boolean,
+    val satsUsedInFix: Int?,
+    val satsVisible: Int?,
+    val avgSnrDb: Float?
 ) : Parcelable {
     constructor(parcel: Parcel) : this(
         parcel.readLong(),
@@ -64,7 +67,10 @@ data class AssetParcelable(
         parcel.readValue(Long::class.java.classLoader) as Long?,
         parcel.readValue(Float::class.java.classLoader) as Float?,
         parcel.readByte() != 0.toByte(),
-        parcel.readByte() != 0.toByte()
+        parcel.readByte() != 0.toByte(),
+        parcel.readValue(Int::class.java.classLoader) as Int?,
+        parcel.readValue(Int::class.java.classLoader) as Int?,
+        parcel.readValue(Float::class.java.classLoader) as Float?
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -95,6 +101,9 @@ data class AssetParcelable(
         parcel.writeValue(distanceFromDeviceM)
         parcel.writeByte(if (isMockLocation) 1 else 0)
         parcel.writeByte(if (locationVerified) 1 else 0)
+        parcel.writeValue(satsUsedInFix)
+        parcel.writeValue(satsVisible)
+        parcel.writeValue(avgSnrDb)
     }
 
     override fun describeContents(): Int = 0
@@ -126,7 +135,10 @@ data class AssetParcelable(
         deviceFixTimestamp = deviceFixTimestamp,
         distanceFromDeviceM = distanceFromDeviceM,
         isMockLocation = isMockLocation,
-        locationVerified = locationVerified
+        locationVerified = locationVerified,
+        satsUsedInFix = satsUsedInFix,
+        satsVisible = satsVisible,
+        avgSnrDb = avgSnrDb
     )
 
     companion object CREATOR : Parcelable.Creator<AssetParcelable> {
@@ -162,5 +174,8 @@ fun SurveyAsset.toParcelable(): AssetParcelable = AssetParcelable(
     deviceFixTimestamp = deviceFixTimestamp,
     distanceFromDeviceM = distanceFromDeviceM,
     isMockLocation = isMockLocation,
-    locationVerified = locationVerified
+    locationVerified = locationVerified,
+    satsUsedInFix = satsUsedInFix,
+    satsVisible = satsVisible,
+    avgSnrDb = avgSnrDb
 )

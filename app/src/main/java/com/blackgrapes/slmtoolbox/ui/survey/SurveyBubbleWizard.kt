@@ -68,6 +68,8 @@ class SurveyBubbleWizard : DialogFragment() {
         val lockedMaterial = requireArguments().getString(ARG_LOCKED_MATERIAL)
         val lockedConductor = requireArguments().getString(ARG_LOCKED_CONDUCTOR)
         val lockedSeriesId = requireArguments().getLong(ARG_LOCKED_SERIES, -1L)
+        val lockedStartStructure = requireArguments().getString(ARG_LOCKED_START_STRUCTURE)
+            ?.let { PoleStructure.fromLabel(it) }
         if (
             lockedVoltage != null &&
             lockedStatus != null &&
@@ -80,7 +82,8 @@ class SurveyBubbleWizard : DialogFragment() {
                 voltage = VoltageLevel.fromLabel(lockedVoltage),
                 status = WorkStatus.fromLabel(lockedStatus),
                 material = PoleMaterial.fromLabel(lockedMaterial)!!,
-                conductor = lockedConductor
+                conductor = lockedConductor,
+                startStructure = lockedStartStructure
             )
         }
         candidatePoles = requireArguments().getParcelableArrayListCompat(ARG_CANDIDATES).orEmpty()
@@ -127,15 +130,29 @@ class SurveyBubbleWizard : DialogFragment() {
             }
             mode == Mode.NEAR_LINE -> push(Step.LINE_ACTION_CHOICE)
             lockedSeries != null -> {
-                voltage = lockedSeries!!.voltage
-                status = lockedSeries!!.status
-                material = lockedSeries!!.material
-                conductor = lockedSeries!!.conductor
-                if (lockedSeries!!.voltage == VoltageLevel.LT) {
-                    structure = PoleStructure.P1
+                val series = lockedSeries!!
+                val dtrLtContinue = series.startStructure == PoleStructure.DTR &&
+                    PresetPreferences.isDtrLt(requireContext())
+                if (dtrLtContinue) {
+                    val preset = PresetPreferences.get(requireContext())
+                    val (v, s, m) = preset.continueAfterDtr()
+                    voltage = v
+                    status = series.status
+                    material = m
+                    structure = s
+                    conductor = preset.continueAfterDtrConductor()
                     push(Step.PLACE_ROLE)
                 } else {
-                    push(Step.STRUCTURE)
+                    voltage = series.voltage
+                    status = series.status
+                    material = series.material
+                    conductor = series.conductor
+                    if (series.voltage == VoltageLevel.LT) {
+                        structure = PoleStructure.P1
+                        push(Step.PLACE_ROLE)
+                    } else {
+                        push(Step.STRUCTURE)
+                    }
                 }
             }
             mode == Mode.TAPPING_BRANCH -> {
@@ -143,14 +160,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 push(Step.STATUS)
             }
             PresetPreferences.isEnabled(requireContext()) && editing == null && mode == Mode.NEW_NETWORK -> {
-                val preset = PresetPreferences.get(requireContext())
-                voltage = preset.voltage
-                status = preset.status
-                material = preset.material
-                structure = preset.structure
-                conductor = preset.conductor
-                feederName = preset.feederName.takeIf { it.isNotBlank() }
-                sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
+                applyPresetForNewNetwork()
                 push(Step.PRESET_SUMMARY)
             }
             else -> push(Step.VOLTAGE)
@@ -207,14 +217,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     splitConnectionId = null
                     sourceAssetId = null
                     if (PresetPreferences.isEnabled(requireContext())) {
-                        val preset = PresetPreferences.get(requireContext())
-                        voltage = preset.voltage
-                        status = preset.status
-                        material = preset.material
-                        structure = preset.structure
-                        conductor = preset.conductor
-                        feederName = preset.feederName.takeIf { it.isNotBlank() }
-                        sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
+                        applyPresetForNewNetwork()
                         push(Step.PRESET_SUMMARY)
                     } else {
                         push(Step.VOLTAGE)
@@ -401,6 +404,10 @@ class SurveyBubbleWizard : DialogFragment() {
             Step.PRESET_SUMMARY -> {
                 binding.bubbleTitle.text = getString(R.string.use_preset_title)
                 binding.bubbleSubtitle.text = buildString {
+                    if (PresetPreferences.isDtrLt(requireContext())) {
+                        append(getString(R.string.preset_pattern_dtr_lt_hint))
+                        append("\n")
+                    }
                     append(voltage?.label ?: "").append(" · ")
                     append(status?.label ?: "").append(" · ")
                     append(material?.label ?: "").append(" · ")
@@ -518,6 +525,25 @@ class SurveyBubbleWizard : DialogFragment() {
         TAPPING_YES_NO, SOURCE_POLE, EDIT_MENU, CONFIRM_DELETE, LINE_ACTION_CHOICE
     }
 
+    /** Apply saved preset values for a brand-new series (START pole). */
+    private fun applyPresetForNewNetwork() {
+        val preset = PresetPreferences.get(requireContext())
+        val (v, s, m) = preset.startPlacement()
+        voltage = v
+        status = preset.status
+        material = m
+        structure = s
+        conductor = when {
+            preset.isDtrLt() -> {
+                val opts = NetworkCatalog.conductorsFor(VoltageLevel.KV_11)
+                preset.conductor.takeIf { it in opts } ?: opts.first()
+            }
+            else -> preset.conductor
+        }
+        feederName = preset.feederName.takeIf { it.isNotBlank() }
+        sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
+    }
+
     /** Returns true when this is a new (not continuing) 33kV or 11kV series that needs feeder info. */
     private fun needsFeederInfo(): Boolean {
         val v = voltage ?: return false
@@ -544,6 +570,7 @@ class SurveyBubbleWizard : DialogFragment() {
         private const val ARG_LOCKED_MATERIAL = "locked_material"
         private const val ARG_LOCKED_CONDUCTOR = "locked_conductor"
         private const val ARG_LOCKED_SERIES = "locked_series"
+        private const val ARG_LOCKED_START_STRUCTURE = "locked_start_structure"
         private const val ARG_CANDIDATES = "candidates"
 
         fun forNew(lat: Double, lng: Double): SurveyBubbleWizard =
@@ -571,6 +598,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     ARG_LOCKED_MATERIAL to series.material.label,
                     ARG_LOCKED_CONDUCTOR to series.conductor,
                     ARG_LOCKED_SERIES to series.seriesId,
+                    ARG_LOCKED_START_STRUCTURE to (series.startStructure?.label ?: ""),
                     ARG_SOURCE_ID to (sourceId ?: -1L)
                 )
             }

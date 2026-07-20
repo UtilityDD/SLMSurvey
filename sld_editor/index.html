@@ -11,9 +11,10 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="appContainer">
+        <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
         <!-- Sidebar Panel -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo-box">
                     <span class="logo-text">SLM</span>
@@ -122,6 +123,11 @@
                     <button class="btn btn-danger w-100" style="padding: 6px 12px; font-size: 11px;" id="btnDeleteSelection">🗑️ Delete</button>
                     <button class="btn btn-tonal w-100" style="padding: 6px 12px; font-size: 11px; color: var(--text-on-dark);" id="btnDeselect">✕ Close</button>
                 </div>
+
+                <div class="pole-nudge-hint hidden" id="poleNudgeHint">
+                    Poles stay connected. You can nudge a pole up to <strong>4 m</strong> only to compensate GPS / placement error. Connected lines move with it.
+                </div>
+                <div class="selection-info-block hidden" id="selectionInfoBlock"></div>
             </div>
 
             <!-- Actions Panel -->
@@ -131,7 +137,7 @@
                     <span>💾</span> Save Workspace (.json)
                 </button>
                 <button class="btn btn-success w-100 mt-2" id="btnPrintPdf">
-                    <span>🖨️</span> Print CAD PDF
+                    <span>🖨️</span> Export CAD Sheet (PDF)
                 </button>
             </div>
             
@@ -144,19 +150,144 @@
         <main class="main-content">
             <!-- Header Toolbar -->
             <header class="workspace-header">
+                <button type="button" class="btn-sidebar-toggle" id="btnSidebarToggle" title="Toggle tools panel" aria-label="Toggle tools panel">☰</button>
                 <div class="view-toggle-container">
-                    <button class="btn-toggle active" id="btnViewMap">🗺️ Geographical Map</button>
-                    <button class="btn-toggle" id="btnViewGrid">📏 Schematic Grid Editor</button>
+                    <button class="btn-toggle active" id="btnViewMap" title="Geographical Map (GIS)">GIS</button>
+                    <button class="btn-toggle" id="btnViewGrid" title="Schematic Grid Editor (SLD)">SLD</button>
                 </div>
-                <div class="stats-chip hidden" id="statsChip">
-                    <span id="statPoles">0 Poles</span> · <span id="statSpans">0 Spans</span> · <span id="statLength">0.0 m</span>
+                <div class="basemap-controls" id="basemapControls">
+                    <label class="basemap-label" for="basemapSelect">Map</label>
+                    <select id="basemapSelect" class="basemap-select" title="Change map background">
+                        <option value="osm">OSM</option>
+                        <option value="google">Google</option>
+                        <option value="google_sat">Satellite</option>
+                        <option value="none">None</option>
+                    </select>
+                    <label class="basemap-label" for="basemapOpacity" title="Basemap opacity">Opacity</label>
+                    <input type="range" id="basemapOpacity" class="basemap-opacity" min="0" max="100" value="100" step="5" title="Map opacity">
+                    <span class="basemap-opacity-value" id="basemapOpacityValue">100%</span>
                 </div>
             </header>
+
+            <!-- Print / CAD Sheet Toolbar -->
+            <div class="print-toolbar" id="printToolbar">
+                <div class="print-toolbar-group">
+                    <label class="print-field-label" for="printPageSize">Size</label>
+                    <select id="printPageSize" class="print-select" title="Page size">
+                        <option value="A4" selected>A4</option>
+                        <option value="A3">A3</option>
+                        <option value="A2">A2</option>
+                        <option value="Letter">Letter</option>
+                        <option value="Legal">Legal</option>
+                    </select>
+                    <label class="print-field-label" for="printOrientation">Orient</label>
+                    <select id="printOrientation" class="print-select" title="Page orientation">
+                        <option value="landscape" selected>Landscape</option>
+                        <option value="portrait">Portrait</option>
+                    </select>
+                    <label class="print-field-label" for="printDpi">DPI</label>
+                    <select id="printDpi" class="print-select" title="Export resolution">
+                        <option value="150">150</option>
+                        <option value="200" selected>200</option>
+                        <option value="300">300</option>
+                    </select>
+                    <button type="button" class="btn print-toolbar-btn print-layout-toggle" id="btnTogglePrintLayout" title="Show printable page frame on map">
+                        <span>▦</span> Print Layout
+                    </button>
+                    <div class="print-zoom-stepper" id="printZoomStepper" title="Fine map zoom for framing">
+                        <button type="button" class="print-zoom-btn" id="btnMapZoomOut" title="Zoom out (fine step)">−</button>
+                        <button type="button" class="print-zoom-btn" id="btnMapZoomIn" title="Zoom in (fine step)">+</button>
+                    </div>
+                </div>
+                <div class="print-toolbar-divider"></div>
+                <div class="print-toolbar-group print-meta-group">
+                    <input type="text" id="printDrawingTitle" class="print-input" placeholder="Drawing title" title="Drawing title">
+                    <input type="text" id="printSurveyor" class="print-input" placeholder="Surveyor" title="Surveyor / lineman">
+                    <input type="text" id="printCompany" class="print-input print-input-sm" placeholder="Org / Utility" title="Organization">
+                    <input type="text" id="printDrawingNo" class="print-input print-input-sm" placeholder="Drg No." title="Drawing number">
+                    <input type="text" id="printScale" class="print-input print-input-xs" placeholder="Scale" value="NTS" title="Scale">
+                </div>
+                <div class="print-toolbar-divider"></div>
+                <div class="print-toolbar-group print-toolbar-actions">
+                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit network into print frame">Fit</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnCenterPrintFrame" title="Center print frame">Center</button>
+                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnExportPrintPng" title="Export high-resolution PNG">PNG</button>
+                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Export print-ready PDF">PDF</button>
+                </div>
+            </div>
 
             <!-- Viewer Containers -->
             <div class="viewer-viewport">
                 <!-- Leaflet Map View -->
                 <div id="mapView" class="view-pane active"></div>
+
+                <!-- Printable page frame overlay (GIS map) -->
+                <div id="printOverlay" class="print-overlay hidden" aria-hidden="true">
+                    <div id="printFrame" class="print-frame" title="Drag to position print area">
+                        <div class="print-frame-chrome print-frame-header" id="printFrameHeader">
+                            <div class="pf-header-left">
+                                <div class="pf-org" id="pfOrg">SLM Survey</div>
+                                <div class="pf-title" id="pfTitle">Single Line Diagram</div>
+                                <div class="pf-subtitle">Electrical Network SLD · GIS Sheet</div>
+                            </div>
+                            <div class="pf-header-meta">
+                                <div class="pf-meta-row"><span>Drg No.</span><strong id="pfDrgNo">—</strong></div>
+                                <div class="pf-meta-row"><span>Scale</span><strong id="pfScale">NTS</strong></div>
+                                <div class="pf-meta-row"><span>Date</span><strong id="pfDate">—</strong></div>
+                                <div class="pf-meta-row"><span>Sheet</span><strong>1 of 1</strong></div>
+                            </div>
+                        </div>
+                        <div class="print-frame-map-hole" id="printMapHole"></div>
+                        <div class="print-frame-chrome print-frame-legend" id="printFrameLegend">
+                            <div class="pf-legend-title">Legend</div>
+                            <div class="pf-legend-body" id="pfLegendBody"></div>
+                        </div>
+                        <div class="print-frame-chrome print-frame-footer" id="printFrameFooter">
+                            <div class="pf-footer-cell"><span>Surveyor</span><strong id="pfSurveyor">—</strong></div>
+                            <div class="pf-footer-cell"><span>Poles / Spans</span><strong id="pfStats">—</strong></div>
+                            <div class="pf-footer-cell"><span>Route</span><strong id="pfRoute">—</strong></div>
+                            <div class="pf-footer-cell pf-sign"><span>Signature</span><div class="pf-sign-line"></div></div>
+                        </div>
+                        <div class="print-frame-handle nw"></div>
+                        <div class="print-frame-handle ne"></div>
+                        <div class="print-frame-handle sw"></div>
+                        <div class="print-frame-handle se"></div>
+                    </div>
+                </div>
+
+                <!-- Floating property editor anchored near selected CAD symbol on the map -->
+                <div id="mapSymbolEditModal" class="map-symbol-edit-modal hidden">
+                    <div class="map-symbol-edit-card">
+                        <div class="map-symbol-edit-header" id="mapEditDragHandle" title="Drag to move">
+                            <span class="map-symbol-edit-grip">⋮⋮</span>
+                            <h4 id="mapEditTitle">Edit Symbol</h4>
+                            <button type="button" class="map-symbol-edit-close" id="mapEditClose" title="Close">✕</button>
+                        </div>
+                        <div class="map-symbol-edit-info hidden" id="mapEditInfo"></div>
+                        <div class="form-group-sm" id="mapEditLabelGroup">
+                            <label class="form-lbl-sm" for="mapEditLabel">Name</label>
+                            <input type="text" class="form-input" id="mapEditLabel" placeholder="Label">
+                        </div>
+                        <div class="form-group-sm" id="mapEditSizeGroup">
+                            <label class="form-lbl-sm" id="mapEditSizeLabel">Scale</label>
+                            <div class="map-symbol-edit-slider-row">
+                                <input type="range" id="mapEditSizeSlider" min="5" max="200" step="1">
+                                <span id="mapEditSizeValue">40m</span>
+                            </div>
+                        </div>
+                        <div class="form-group-sm hidden" id="mapEditRotateGroup">
+                            <label class="form-lbl-sm">Rotate</label>
+                            <div class="map-symbol-edit-slider-row">
+                                <input type="range" id="mapEditRotateSlider" min="0" max="360" step="5">
+                                <span id="mapEditRotateValue">0°</span>
+                            </div>
+                        </div>
+                        <div class="map-symbol-edit-actions">
+                            <button type="button" class="btn btn-danger" id="mapEditDelete">Delete</button>
+                            <button type="button" class="btn btn-primary" id="mapEditDone">Done</button>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Schematic Grid Canvas View -->
                 <div id="canvasView" class="view-pane">
@@ -241,6 +372,9 @@
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="app.js"></script>
+    <script src="print_layout.js"></script>
 </body>
 </html>

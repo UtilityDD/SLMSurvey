@@ -20,6 +20,7 @@ import com.blackgrapes.slmtoolbox.SlmApp
 import com.blackgrapes.slmtoolbox.databinding.FragmentSldPreviewBinding
 import com.blackgrapes.slmtoolbox.domain.PrintableSldBuilder
 import com.blackgrapes.slmtoolbox.domain.PrintableSldDocument
+import com.blackgrapes.slmtoolbox.domain.SurveyShareSummary
 import com.blackgrapes.slmtoolbox.domain.SurveyStampFactory
 import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.ui.export.ExportHelper
@@ -55,6 +56,9 @@ class SldPreviewFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
+        binding.btnShareSummary.setOnClickListener { shareSurveySummary() }
+        binding.btnShareCsv.setOnClickListener { shareGpsCsv() }
+        binding.btnSharePng.setOnClickListener { sharePreviewPng() }
         binding.btnExport.setOnClickListener { exportAndShare() }
         binding.btnSaveSld.setOnClickListener { saveToMySld() }
         binding.btnPrevPage.setOnClickListener {
@@ -156,55 +160,94 @@ class SldPreviewFragment : Fragment() {
 
     private fun exportAndShare() {
         val options = arrayOf(
-            getString(R.string.export_option_printable),
             getString(R.string.export_option_workspace)
         )
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+        MaterialAlertDialogBuilder(requireContext())
             .setTitle(getString(R.string.export_options_title))
+            .setMessage(getString(R.string.export_desktop_hint))
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> sharePrintableSld()
-                    1 -> shareJsonWorkspace()
+                    0 -> shareJsonWorkspace()
                 }
             }
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 
-    private fun sharePrintableSld() {
+    private fun sharePreviewPng() {
         val survey = viewModel.survey.value ?: return
-        val center = survey.assets.firstOrNull()
-        val stamp = SurveyStampFactory.create(
-            requireContext(),
-            binding.linemanNameInput.text?.toString().orEmpty(),
-            binding.linemanMobileInput.text?.toString().orEmpty(),
-            center?.latitude,
-            center?.longitude
-        )
-        
-        viewModel.setProcessing(true, "Exporting SLD...")
-        
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewModel.setProcessing(true, getString(R.string.export_processing_png))
         viewLifecycleOwner.lifecycleScope.launch {
             try {
                 val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
-                val result = ExportHelper.exportPrintableSld(requireContext(), survey, stamp, seriesMeta)
-                if (result != null) {
-                    ShareHelper.shareDrawing(
+                val pngFile = ExportHelper.exportPreviewPng(requireContext(), survey, seriesMeta)
+                if (pngFile != null) {
+                    val caption = SurveyShareSummary.build(requireContext(), survey)
+                    ShareHelper.sharePng(
                         context = requireContext(),
-                        pngFile = result.pngFile,
-                        pdfFile = result.pdfFile,
-                        title = "${survey.title} SLD",
-                        caption = stamp.asReadableLines().joinToString("\n")
+                        pngFile = pngFile,
+                        title = survey.title,
+                        caption = caption
                     )
                     Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
             } finally {
                 viewModel.setProcessing(false)
             }
         }
+    }
+
+    private fun shareGpsCsv() {
+        val survey = viewModel.survey.value ?: return
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        viewModel.setProcessing(true, getString(R.string.export_processing_csv))
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val csvFile = ExportHelper.exportGpsCsv(requireContext(), survey)
+                if (csvFile != null) {
+                    val caption = SurveyShareSummary.build(requireContext(), survey)
+                    ShareHelper.shareFiles(
+                        context = requireContext(),
+                        files = listOf(csvFile),
+                        title = "${survey.title} GPS Points",
+                        caption = caption,
+                        mimeType = "text/csv"
+                    )
+                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Exception) {
+                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            } finally {
+                viewModel.setProcessing(false)
+            }
+        }
+    }
+
+    private fun shareSurveySummary() {
+        val survey = viewModel.survey.value ?: return
+        if (survey.assets.isEmpty()) {
+            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val summary = SurveyShareSummary.build(requireContext(), survey)
+        ShareHelper.shareText(
+            context = requireContext(),
+            text = summary,
+            title = "${survey.title} — Survey Summary"
+        )
     }
 
     private fun shareJsonWorkspace() {

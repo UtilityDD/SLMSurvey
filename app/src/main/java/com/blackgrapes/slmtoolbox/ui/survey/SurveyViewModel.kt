@@ -36,7 +36,10 @@ data class LocationEvidence(
     val deviceAccuracyM: Float?,
     val deviceFixTimestamp: Long?,
     val distanceFromDeviceM: Float?,
-    val isMockLocation: Boolean
+    val isMockLocation: Boolean,
+    val satsUsedInFix: Int? = null,
+    val satsVisible: Int? = null,
+    val avgSnrDb: Float? = null
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -148,9 +151,17 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
     }
 
     fun activeSeriesConfig(): SeriesConfig? {
-        selectedTapPole()?.let { return NetworkCatalog.seriesConfigFrom(it) }
+        selectedTapPole()?.let { tap ->
+            val sid = tap.seriesId ?: return NetworkCatalog.seriesConfigFrom(tap)
+            val assets = survey.value?.assets.orEmpty()
+            return NetworkCatalog.seriesConfigFromSeries(assets, sid)
+                ?: NetworkCatalog.seriesConfigFrom(tap)
+        }
         val tip = activeOpenTip() ?: return null
-        return NetworkCatalog.seriesConfigFrom(tip)
+        val sid = tip.seriesId ?: return NetworkCatalog.seriesConfigFrom(tip)
+        val assets = survey.value?.assets.orEmpty()
+        return NetworkCatalog.seriesConfigFromSeries(assets, sid)
+            ?: NetworkCatalog.seriesConfigFrom(tip)
     }
 
     fun activeLineVoltage(): VoltageLevel? = activeSeriesConfig()?.voltage
@@ -237,7 +248,10 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                             deviceFixTimestamp = evidence.deviceFixTimestamp,
                             distanceFromDeviceM = evidence.distanceFromDeviceM,
                             isMockLocation = evidence.isMockLocation,
-                            locationVerified = verified
+                            locationVerified = verified,
+                            satsUsedInFix = evidence.satsUsedInFix,
+                            satsVisible = evidence.satsVisible,
+                            avgSnrDb = evidence.avgSnrDb
                         ))
                         
                         // Renumber subsequent poles in same series
@@ -292,15 +306,34 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             }
             val locked = if (continuingSeries) {
                 draft.seriesId?.let { sid ->
-                    current?.assets?.firstOrNull { it.seriesId == sid }?.let { NetworkCatalog.seriesConfigFrom(it) }
+                    NetworkCatalog.seriesConfigFromSeries(current?.assets.orEmpty(), sid)
+                } ?: connectionSource?.seriesId?.let { sid ->
+                    NetworkCatalog.seriesConfigFromSeries(current?.assets.orEmpty(), sid)
                 } ?: connectionSource?.let { NetworkCatalog.seriesConfigFrom(it) }
             } else {
                 null
             }
-            val voltage = locked?.voltage ?: if (isTappingBranch) tapSource!!.voltage else draft.voltage
+            // DTR→LT: series starts at DTR (11kV); subsequent poles keep draft LT specs.
+            val dtrLtContinue = continuingSeries &&
+                locked?.startStructure == PoleStructure.DTR &&
+                draft.voltage == VoltageLevel.LT
+            val voltage = when {
+                dtrLtContinue -> draft.voltage
+                locked != null -> locked.voltage
+                isTappingBranch -> tapSource!!.voltage
+                else -> draft.voltage
+            }
             val status = locked?.status ?: draft.status
-            val material = locked?.material ?: draft.material
-            val conductor = locked?.conductor ?: draft.conductor
+            val material = when {
+                dtrLtContinue -> draft.material
+                locked != null -> locked.material
+                else -> draft.material
+            }
+            val conductor = when {
+                dtrLtContinue -> draft.conductor
+                locked != null -> locked.conductor
+                else -> draft.conductor
+            }
             val structure = draft.structure
             val type = NetworkCatalog.assetTypeFor(structure)
 
@@ -341,7 +374,10 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                     deviceFixTimestamp = evidence.deviceFixTimestamp,
                     distanceFromDeviceM = evidence.distanceFromDeviceM,
                     isMockLocation = evidence.isMockLocation,
-                    locationVerified = verified
+                    locationVerified = verified,
+                    satsUsedInFix = evidence.satsUsedInFix,
+                    satsVisible = evidence.satsVisible,
+                    avgSnrDb = evidence.avgSnrDb
                 )
             )
             undoStack.addLast(UndoAction.AssetAdded(assetId))
@@ -398,16 +434,22 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
             val siblings = current.assets.filter { it.seriesId != null && it.seriesId == asset.seriesId }
             val seriesAnchor = siblings.minByOrNull { it.sequence }
             val locked = seriesAnchor?.let { NetworkCatalog.seriesConfigFrom(it) }
-            val sanitized = if (locked != null) {
-                asset.copy(
+            val dtrLtContinue = locked?.startStructure == PoleStructure.DTR &&
+                asset.poleRole != PoleRole.START &&
+                asset.voltage == VoltageLevel.LT
+            val sanitized = when {
+                locked != null && dtrLtContinue -> asset.copy(
+                    status = locked.status,
+                    type = NetworkCatalog.assetTypeFor(asset.poleStructure ?: PoleStructure.P1)
+                )
+                locked != null -> asset.copy(
                     voltage = locked.voltage,
                     status = locked.status,
                     poleMaterial = locked.material.label,
                     conductor = locked.conductor,
                     type = NetworkCatalog.assetTypeFor(asset.poleStructure ?: PoleStructure.P1)
                 )
-            } else {
-                asset.copy(
+                else -> asset.copy(
                     type = NetworkCatalog.assetTypeFor(asset.poleStructure ?: PoleStructure.P1)
                 )
             }

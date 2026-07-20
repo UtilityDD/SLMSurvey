@@ -16,6 +16,7 @@ import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.databinding.DialogPresetSettingsBinding
 import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.PresetData
+import com.blackgrapes.slmtoolbox.domain.PresetPattern
 import com.blackgrapes.slmtoolbox.domain.PresetPreferences
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
@@ -27,6 +28,7 @@ class PresetSettingsDialog : DialogFragment() {
     private var _binding: DialogPresetSettingsBinding? = null
     private val binding get() = _binding!!
 
+    private var selectedPattern = PresetPattern.STANDARD
     private var selectedVoltage = VoltageLevel.KV_11
     private var selectedStatus = WorkStatus.PROPOSED
 
@@ -65,6 +67,7 @@ class PresetSettingsDialog : DialogFragment() {
             (parentView as? View)?.setOnClickListener { /* consume */ }
         }
 
+        setupPatternChips()
         setupVoltageChips()
         setupStatusChips()
         setupDisplayPrefsDropdowns()
@@ -90,54 +93,126 @@ class PresetSettingsDialog : DialogFragment() {
         binding.actvDisplayDecimals.setAdapter(decimalAdapter)
     }
 
-    private fun setupVoltageChips() {
-        binding.cgVoltage.setOnCheckedStateChangeListener { group, checkedIds ->
-            val checkedId = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            selectedVoltage = when (checkedId) {
-                R.id.chip33kv -> VoltageLevel.KV_33
-                R.id.chipLt -> VoltageLevel.LT
-                else -> VoltageLevel.KV_11
+    private fun setupPatternChips() {
+        val chips = listOf(binding.chipPatternStandard, binding.chipPatternDtrLt)
+        chips.forEach { chip ->
+            chip.setOnClickListener {
+                chips.forEach { it.isChecked = false }
+                chip.isChecked = true
+                selectedPattern = when (chip.id) {
+                    R.id.chipPatternDtrLt -> PresetPattern.DTR_LT
+                    else -> PresetPattern.STANDARD
+                }
+                applyPatternConstraints()
             }
-            updateDropdowns(null, null, null)
+        }
+    }
+
+    private fun setupVoltageChips() {
+        val chips = listOf(binding.chip33kv, binding.chip11kv, binding.chipLt)
+        chips.forEach { chip ->
+            chip.setOnClickListener {
+                if (selectedPattern == PresetPattern.DTR_LT) return@setOnClickListener
+                chips.forEach { it.isChecked = false }
+                chip.isChecked = true
+                selectedVoltage = when (chip.id) {
+                    R.id.chip33kv -> VoltageLevel.KV_33
+                    R.id.chipLt -> VoltageLevel.LT
+                    else -> VoltageLevel.KV_11
+                }
+                updateDropdowns(null, null, null)
+            }
         }
     }
 
     private fun setupStatusChips() {
-        binding.cgStatus.setOnCheckedStateChangeListener { group, checkedIds ->
-            val checkedId = checkedIds.firstOrNull() ?: return@setOnCheckedStateChangeListener
-            selectedStatus = when (checkedId) {
-                R.id.chipExisting -> WorkStatus.EXISTING
-                else -> WorkStatus.PROPOSED
+        val chips = listOf(binding.chipExisting, binding.chipProposed)
+        chips.forEach { chip ->
+            chip.setOnClickListener {
+                chips.forEach { it.isChecked = false }
+                chip.isChecked = true
+                selectedStatus = when (chip.id) {
+                    R.id.chipExisting -> WorkStatus.EXISTING
+                    else -> WorkStatus.PROPOSED
+                }
             }
         }
     }
 
-    private fun updateDropdowns(preselectedMaterial: String?, preselectedStructure: String?, preselectedConductor: String?) {
+    private fun selectPatternChip(pattern: PresetPattern) {
+        binding.chipPatternStandard.isChecked = pattern == PresetPattern.STANDARD
+        binding.chipPatternDtrLt.isChecked = pattern == PresetPattern.DTR_LT
+    }
+
+    private fun selectVoltageChip(voltage: VoltageLevel) {
+        binding.chip33kv.isChecked = voltage == VoltageLevel.KV_33
+        binding.chip11kv.isChecked = voltage == VoltageLevel.KV_11
+        binding.chipLt.isChecked = voltage == VoltageLevel.LT
+    }
+
+    private fun selectStatusChip(status: WorkStatus) {
+        binding.chipExisting.isChecked = status == WorkStatus.EXISTING
+        binding.chipProposed.isChecked = status == WorkStatus.PROPOSED
+    }
+
+    private fun applyPatternConstraints() {
+        val dtrLt = selectedPattern == PresetPattern.DTR_LT
+        binding.tvPatternHint.isVisible = dtrLt
+        binding.chip33kv.isEnabled = !dtrLt
+        binding.chip11kv.isEnabled = !dtrLt
+        binding.chipLt.isEnabled = !dtrLt
+        if (dtrLt) {
+            selectedVoltage = VoltageLevel.KV_11
+            selectVoltageChip(VoltageLevel.KV_11)
+            updateDropdowns(
+                preselectedMaterial = binding.actvMaterial.text?.toString(),
+                preselectedStructure = PoleStructure.DTR.label,
+                preselectedConductor = binding.actvConductor.text?.toString()
+            )
+            binding.tilStructure.isEnabled = false
+            binding.actvStructure.isEnabled = false
+        } else {
+            binding.tilStructure.isEnabled = true
+            binding.actvStructure.isEnabled = true
+            updateDropdowns(
+                preselectedMaterial = binding.actvMaterial.text?.toString(),
+                preselectedStructure = binding.actvStructure.text?.toString(),
+                preselectedConductor = binding.actvConductor.text?.toString()
+            )
+        }
+    }
+
+    private fun updateDropdowns(
+        preselectedMaterial: String?,
+        preselectedStructure: String?,
+        preselectedConductor: String?
+    ) {
         val context = requireContext()
 
-        // Materials list
         val materials = NetworkCatalog.materialsFor(selectedVoltage).map { it.label }
         val matAdapter = ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, materials)
         binding.actvMaterial.setAdapter(matAdapter)
         val defaultMat = preselectedMaterial?.takeIf { it in materials } ?: materials.firstOrNull() ?: ""
         binding.actvMaterial.setText(defaultMat, false)
 
-        // Structures list
         val structures = NetworkCatalog.structuresFor(selectedVoltage).map { it.label }
         val structAdapter = ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, structures)
         binding.actvStructure.setAdapter(structAdapter)
-        val defaultStruct = preselectedStructure?.takeIf { it in structures } ?: structures.firstOrNull() ?: ""
+        val defaultStruct = when {
+            selectedPattern == PresetPattern.DTR_LT -> PoleStructure.DTR.label
+            else -> preselectedStructure?.takeIf { it in structures } ?: structures.firstOrNull() ?: ""
+        }
         binding.actvStructure.setText(defaultStruct, false)
 
-        // Conductors list
         val conductors = NetworkCatalog.conductorsFor(selectedVoltage)
         val condAdapter = ArrayAdapter(context, android.R.layout.simple_dropdown_item_1line, conductors)
         binding.actvConductor.setAdapter(condAdapter)
         val defaultCond = preselectedConductor?.takeIf { it in conductors } ?: conductors.firstOrNull() ?: ""
         binding.actvConductor.setText(defaultCond, false)
 
-        // Hide Feeder/SS inputs for LT
         binding.feederFieldsContainer.isVisible = selectedVoltage != VoltageLevel.LT
+        binding.tilStructure.isEnabled = selectedPattern != PresetPattern.DTR_LT
+        binding.actvStructure.isEnabled = selectedPattern != PresetPattern.DTR_LT
     }
 
     private fun loadPresets() {
@@ -146,29 +221,33 @@ class PresetSettingsDialog : DialogFragment() {
         binding.switchPresetEnabled.isChecked = preset.enabled
         binding.presetInputsContainer.isVisible = preset.enabled
 
-        selectedVoltage = preset.voltage
-        when (preset.voltage) {
-            VoltageLevel.KV_33 -> binding.cgVoltage.check(R.id.chip33kv)
-            VoltageLevel.LT -> binding.cgVoltage.check(R.id.chipLt)
-            VoltageLevel.KV_11 -> binding.cgVoltage.check(R.id.chip11kv)
+        selectedPattern = preset.pattern
+        selectPatternChip(preset.pattern)
+
+        selectedVoltage = if (preset.pattern == PresetPattern.DTR_LT) {
+            VoltageLevel.KV_11
+        } else {
+            preset.voltage
         }
+        selectVoltageChip(selectedVoltage)
 
         selectedStatus = preset.status
-        when (preset.status) {
-            WorkStatus.EXISTING -> binding.cgStatus.check(R.id.chipExisting)
-            WorkStatus.PROPOSED -> binding.cgStatus.check(R.id.chipProposed)
-        }
+        selectStatusChip(preset.status)
 
         updateDropdowns(
             preselectedMaterial = preset.material.label,
-            preselectedStructure = preset.structure.label,
+            preselectedStructure = if (preset.pattern == PresetPattern.DTR_LT) {
+                PoleStructure.DTR.label
+            } else {
+                preset.structure.label
+            },
             preselectedConductor = preset.conductor
         )
+        applyPatternConstraints()
 
         binding.etFeederName.setText(preset.feederName)
         binding.etSourceSs.setText(preset.sourceSubstation)
 
-        // Load display preferences
         val unitText = when (preset.displayUnit.lowercase()) {
             "foot" -> "Foot"
             "km" -> "KM"
@@ -202,24 +281,31 @@ class PresetSettingsDialog : DialogFragment() {
         }
 
         if (!enabled) {
-            // Save as disabled, preserve other settings but update display settings
             val current = PresetPreferences.get(context)
-            PresetPreferences.save(context, current.copy(
-                enabled = false,
-                displayUnit = displayUnit,
-                displayDecimals = displayDecimals
-            ))
+            PresetPreferences.save(
+                context,
+                current.copy(
+                    enabled = false,
+                    displayUnit = displayUnit,
+                    displayDecimals = displayDecimals
+                )
+            )
             Toast.makeText(context, R.string.preset_saved_toast, Toast.LENGTH_SHORT).show()
             dismiss()
             return
         }
 
         val matLabel = binding.actvMaterial.text?.toString() ?: ""
-        val structLabel = binding.actvStructure.text?.toString() ?: ""
+        val structLabel = if (selectedPattern == PresetPattern.DTR_LT) {
+            PoleStructure.DTR.label
+        } else {
+            binding.actvStructure.text?.toString() ?: ""
+        }
         val cond = binding.actvConductor.text?.toString() ?: ""
 
         val material = PoleMaterial.fromLabel(matLabel)
         val structure = PoleStructure.fromLabel(structLabel)
+        val voltage = if (selectedPattern == PresetPattern.DTR_LT) VoltageLevel.KV_11 else selectedVoltage
 
         if (material == null || structure == null || cond.isBlank()) {
             Toast.makeText(context, "Invalid configuration selections", Toast.LENGTH_SHORT).show()
@@ -229,7 +315,7 @@ class PresetSettingsDialog : DialogFragment() {
         var feeder = ""
         var ss = ""
 
-        if (selectedVoltage != VoltageLevel.LT) {
+        if (voltage != VoltageLevel.LT) {
             feeder = binding.etFeederName.text?.toString()?.trim() ?: ""
             ss = binding.etSourceSs.text?.toString()?.trim() ?: ""
 
@@ -245,7 +331,8 @@ class PresetSettingsDialog : DialogFragment() {
 
         val data = PresetData(
             enabled = true,
-            voltage = selectedVoltage,
+            pattern = selectedPattern,
+            voltage = voltage,
             status = selectedStatus,
             material = material,
             structure = structure,

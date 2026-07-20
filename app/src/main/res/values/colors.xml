@@ -20,4 +20,5 @@
     <color name="map_toolbar">#F2FFFFFF</color>
     <color name="sld_bg">#FFFAFAFA</color>
     <color name="sld_line">#FF212121</color>
+    <color name="ic_launcher_background">#FFFFFFFF</color>
 </resources>

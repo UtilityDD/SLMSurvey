@@ -73,8 +73,9 @@ object PrintableSldBuilder {
     private const val NODES_PER_PAGE = 10
     private const val CONTENT_LEFT = 40f
     private const val CONTENT_TOP = 110f
-    private const val CONTENT_RIGHT = 620f
-    private const val CONTENT_BOTTOM = 470f
+    /** Full page width — legend sits below the network, not beside it. */
+    private const val CONTENT_RIGHT = 802f
+    private const val CONTENT_BOTTOM = 400f
 
     fun build(
         survey: Survey,
