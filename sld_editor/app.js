@@ -367,8 +367,13 @@ let clickStartPos = null;
 // Modal States
 let activeEditNode = null;
 
-// Init Event Listeners on Load
-window.addEventListener('DOMContentLoaded', () => {
+// Init Event Listeners on Load (after rental license gate)
+window.addEventListener('DOMContentLoaded', async () => {
+    const licensed = window.SlmLicense
+        ? await window.SlmLicense.ensureLicensed()
+        : true;
+    if (!licensed) return;
+
     initImageCache();
     initDragAndDrop();
     initViewToggles();

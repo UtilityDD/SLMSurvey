@@ -164,22 +164,34 @@ class SurveyBubbleWizard : DialogFragment() {
                     PresetPreferences.isDtrLt(requireContext())
                 if (dtrLtContinue) {
                     val preset = PresetPreferences.get(requireContext())
-                    val (v, s, m) = preset.continueAfterDtr()
+                    val (v, _, m) = preset.continueAfterDtr()
                     voltage = v
                     // Status locked from previous pole / series tip — never re-ask.
                     status = series.status
                     material = m
-                    structure = s
                     conductor = preset.continueAfterDtrConductor()
-                    push(Step.PLACE_ROLE)
+                    // LT phase may change on every pole (bare only).
+                    if (NetworkCatalog.isAbcConductor(conductor)) {
+                        structure = PoleStructure.P1
+                        push(Step.PLACE_ROLE)
+                    } else {
+                        structure = null
+                        push(Step.STRUCTURE)
+                    }
                 } else {
                     voltage = series.voltage
                     status = series.status
                     material = series.material
                     conductor = series.conductor
                     if (series.voltage == VoltageLevel.LT) {
-                        structure = PoleStructure.P1
-                        push(Step.PLACE_ROLE)
+                        // Conductor locked for the series; phase selectable each pole for bare.
+                        if (NetworkCatalog.isAbcConductor(series.conductor)) {
+                            structure = PoleStructure.P1
+                            push(Step.PLACE_ROLE)
+                        } else {
+                            structure = null
+                            push(Step.STRUCTURE)
+                        }
                     } else {
                         push(Step.STRUCTURE)
                     }
@@ -312,15 +324,39 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.STRUCTURE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_structure)
-                binding.bubbleSubtitle.text = buildString {
-                    append(voltage?.label ?: lockedSeries?.voltage?.label)
-                    append(" · ")
-                    append(status?.label ?: lockedSeries?.status?.label)
-                }
                 val v = voltage ?: lockedSeries!!.voltage
-                NetworkCatalog.structuresFor(v).forEach { option ->
-                    addChoice(option.label) {
+                val isLtPhase = v == VoltageLevel.LT
+                binding.bubbleTitle.text = if (isLtPhase) {
+                    getString(R.string.bubble_lt_phase)
+                } else {
+                    getString(R.string.bubble_structure)
+                }
+                binding.bubbleSubtitle.text = if (isLtPhase) {
+                    getString(R.string.bubble_lt_phase_hint, conductor ?: "")
+                } else {
+                    buildString {
+                        append(voltage?.label ?: lockedSeries?.voltage?.label)
+                        append(" · ")
+                        append(status?.label ?: lockedSeries?.status?.label)
+                    }
+                }
+                val structureOptions = if (isLtPhase) {
+                    NetworkCatalog.ltPhasesForConductor(conductor)
+                } else {
+                    NetworkCatalog.structuresFor(v)
+                }
+                structureOptions.forEach { option ->
+                    val label = if (isLtPhase) {
+                        when (option) {
+                            PoleStructure.P1 -> getString(R.string.lt_phase_1p)
+                            PoleStructure.P2 -> getString(R.string.lt_phase_2p)
+                            PoleStructure.P3 -> getString(R.string.lt_phase_3p)
+                            else -> option.label
+                        }
+                    } else {
+                        option.label
+                    }
+                    addChoice(label) {
                         structure = option
                         if (lockedSeries != null) {
                             push(Step.PLACE_ROLE)
@@ -335,14 +371,32 @@ class SurveyBubbleWizard : DialogFragment() {
             }
             Step.CONDUCTOR -> {
                 binding.bubbleTitle.text = getString(R.string.bubble_conductor)
-                binding.bubbleSubtitle.text = voltage!!.label
+                binding.bubbleSubtitle.text = if (voltage == VoltageLevel.LT) {
+                    getString(R.string.bubble_lt_conductor_hint)
+                } else {
+                    voltage!!.label
+                }
                 NetworkCatalog.conductorsFor(voltage!!).forEach { option ->
-                    addChoice(option) {
+                    val label = if (voltage == VoltageLevel.LT && option == "ABC") {
+                        getString(R.string.conductor_abc_label)
+                    } else if (voltage == VoltageLevel.LT) {
+                        getString(R.string.conductor_bare_size, option)
+                    } else {
+                        option
+                    }
+                    addChoice(label) {
                         conductor = option
-                        if (needsFeederInfo()) {
-                            push(Step.FEEDER_INFO)
-                        } else {
-                            push(Step.PLACE_ROLE)
+                        when {
+                            needsFeederInfo() -> push(Step.FEEDER_INFO)
+                            voltage == VoltageLevel.LT && !NetworkCatalog.isAbcConductor(option) -> {
+                                structure = null
+                                push(Step.STRUCTURE)
+                            }
+                            voltage == VoltageLevel.LT -> {
+                                structure = PoleStructure.P1
+                                push(Step.PLACE_ROLE)
+                            }
+                            else -> push(Step.PLACE_ROLE)
                         }
                         render()
                     }
@@ -540,7 +594,7 @@ class SurveyBubbleWizard : DialogFragment() {
         when (v) {
             VoltageLevel.LT -> {
                 material = PoleMaterial.PCC_8M
-                structure = PoleStructure.P1
+                structure = null
                 push(Step.CONDUCTOR)
             }
             else -> push(Step.MATERIAL)
@@ -556,6 +610,9 @@ class SurveyBubbleWizard : DialogFragment() {
         material = preset.material.takeIf { it in materials } ?: NetworkCatalog.defaultMaterial(v)
         structure = preset.structure.takeIf { it in structures } ?: NetworkCatalog.defaultStructure(v)
         conductor = preset.conductor.takeIf { it in conductors } ?: conductors.first()
+        if (v == VoltageLevel.LT && NetworkCatalog.isAbcConductor(conductor)) {
+            structure = PoleStructure.P1
+        }
         if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
         if (sourceSubstation.isNullOrBlank()) {
             sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
@@ -566,8 +623,11 @@ class SurveyBubbleWizard : DialogFragment() {
         val v = voltage ?: lockedSeries?.voltage ?: return
         val s = status ?: lockedSeries?.status ?: return
         val m = material ?: lockedSeries?.material ?: NetworkCatalog.defaultMaterial(v)
-        val st = structure ?: NetworkCatalog.defaultStructure(v)
         val c = conductor ?: lockedSeries?.conductor ?: NetworkCatalog.conductorsFor(v).first()
+        val st = when {
+            v == VoltageLevel.LT && NetworkCatalog.isAbcConductor(c) -> PoleStructure.P1
+            else -> structure ?: NetworkCatalog.defaultStructure(v)
+        }
         if (editing != null) {
             onEdit?.invoke(
                 editing!!.copy(
@@ -651,6 +711,9 @@ class SurveyBubbleWizard : DialogFragment() {
         }
         feederName = preset.feederName.takeIf { it.isNotBlank() }
         sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
+        if (voltage == VoltageLevel.LT && NetworkCatalog.isAbcConductor(conductor)) {
+            structure = PoleStructure.P1
+        }
     }
 
     /**

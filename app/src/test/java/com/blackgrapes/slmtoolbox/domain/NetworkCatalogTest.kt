@@ -36,8 +36,26 @@ class NetworkCatalogTest {
     @Test
     fun ltDefaults() {
         assertEquals(listOf(PoleMaterial.PCC_8M), NetworkCatalog.materialsFor(VoltageLevel.LT))
-        assertEquals(listOf(PoleStructure.P1), NetworkCatalog.structuresFor(VoltageLevel.LT))
+        assertEquals(
+            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
+            NetworkCatalog.structuresFor(VoltageLevel.LT)
+        )
         assertEquals(PoleMaterial.PCC_8M, NetworkCatalog.defaultMaterial(VoltageLevel.LT))
+        assertEquals(listOf("30", "50", "ABC"), NetworkCatalog.conductorsFor(VoltageLevel.LT))
+        assertTrue(NetworkCatalog.isAbcConductor("ABC"))
+        assertFalse(NetworkCatalog.isAbcConductor("30"))
+        assertEquals(
+            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
+            NetworkCatalog.ltPhasesForConductor("50")
+        )
+        assertEquals(listOf(PoleStructure.P1), NetworkCatalog.ltPhasesForConductor("ABC"))
+        assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "ABC", PoleStructure.P3))
+        assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "30", PoleStructure.P3))
+        assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "50", PoleStructure.P2))
+        assertEquals("ABC", NetworkCatalog.ltLineTag(VoltageLevel.LT, "ABC", PoleStructure.P1))
+        assertEquals("3Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "30", PoleStructure.P3))
+        assertEquals("2Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "50", PoleStructure.P2))
+        assertEquals("1Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "30", PoleStructure.P1))
     }
 
     @Test

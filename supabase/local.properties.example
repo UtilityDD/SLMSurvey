@@ -1,0 +1,5 @@
+# Copy these into local.properties (project root) for rental builds.
+# Leave empty / omit for local dev (licensing stays OFF).
+
+# SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+# SUPABASE_ANON_KEY=your_anon_public_key

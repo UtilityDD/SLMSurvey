@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="16dp"
+    android:height="10dp"
+    android:viewportWidth="16"
+    android:viewportHeight="10">
+    <!-- Sharp upward tip pointing at the sat badge -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M8,0 L16,10 L0,10 Z" />
+</vector>

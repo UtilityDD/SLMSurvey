@@ -29,7 +29,9 @@ data class PrintEdge(
     val status: WorkStatus,
     val spanLabel: String?,
     val continuesFromPage: Int? = null,
-    val continuesToPage: Int? = null
+    val continuesToPage: Int? = null,
+    val conductor: String? = null,
+    val structure: PoleStructure? = null
 )
 
 data class PrintLegendItem(
@@ -130,27 +132,29 @@ object PrintableSldBuilder {
                 val toOn = connection.toAssetId in nodeIds
                 val span = SurveyMetrics.spanMetres(connection, byId)
                 val formattedSpan = SurveyMetrics.formatDistance(span, displayUnit, displayDecimals)
+                val styleTo = byId[connection.toAssetId]
+                fun edge(
+                    continuesFromPage: Int? = null,
+                    continuesToPage: Int? = null
+                ) = PrintEdge(
+                    fromAssetId = connection.fromAssetId,
+                    toAssetId = connection.toAssetId,
+                    voltage = connection.voltage,
+                    status = connection.status,
+                    spanLabel = formattedSpan,
+                    continuesFromPage = continuesFromPage,
+                    continuesToPage = continuesToPage,
+                    conductor = styleTo?.conductor,
+                    structure = styleTo?.poleStructure
+                )
                 when {
                     fromOn && toOn -> {
                         pageLength += span
-                        pageEdges += PrintEdge(
-                            fromAssetId = connection.fromAssetId,
-                            toAssetId = connection.toAssetId,
-                            voltage = connection.voltage,
-                            status = connection.status,
-                            spanLabel = formattedSpan
-                        )
+                        pageEdges += edge()
                     }
                     fromOn && !toOn -> {
                         val targetPage = pageIndexOf(connection.toAssetId, chunks)
-                        pageEdges += PrintEdge(
-                            fromAssetId = connection.fromAssetId,
-                            toAssetId = connection.toAssetId,
-                            voltage = connection.voltage,
-                            status = connection.status,
-                            spanLabel = formattedSpan,
-                            continuesToPage = targetPage
-                        )
+                        pageEdges += edge(continuesToPage = targetPage)
                         byId[connection.toAssetId]?.let { asset ->
                             if (positions.none { it.assetId == asset.id }) {
                                 positions += continuityNode(
@@ -164,14 +168,7 @@ object PrintableSldBuilder {
                     }
                     !fromOn && toOn -> {
                         val sourcePage = pageIndexOf(connection.fromAssetId, chunks)
-                        pageEdges += PrintEdge(
-                            fromAssetId = connection.fromAssetId,
-                            toAssetId = connection.toAssetId,
-                            voltage = connection.voltage,
-                            status = connection.status,
-                            spanLabel = formattedSpan,
-                            continuesFromPage = sourcePage
-                        )
+                        pageEdges += edge(continuesFromPage = sourcePage)
                         byId[connection.fromAssetId]?.let { asset ->
                             if (positions.none { it.assetId == asset.id }) {
                                 positions += continuityNode(

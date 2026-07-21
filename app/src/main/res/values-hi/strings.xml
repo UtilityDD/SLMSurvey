@@ -1,6 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SLM ToolBox</string>
+    <string name="license_title">रेंटल लाइसेंस सक्रिय करें</string>
+    <string name="license_subtitle">खरीद के बाद मिला कोड दर्ज करें। सर्वे डेटा इसी फ़ोन पर रहेगा।</string>
+    <string name="license_code_hint">License code</string>
+    <string name="license_code_required">लाइसेंस कोड दर्ज करें</string>
+    <string name="license_activate">सक्रिय करें</string>
+    <string name="license_activated">लाइसेंस सक्रिय हो गया</string>
+    <string name="license_activated_title">लाइसेंस सक्रिय</string>
+    <string name="license_trial_title">ट्रायल लाइसेंस सक्रिय</string>
+    <string name="license_activated_detail">लाइसेंसधारी: %1$s।\n\n%2$s तक मान्य (%3$d दिन शेष)।\nसमाप्ति से पहले नवीनीकरण के लिए विक्रेता से संपर्क करें।</string>
+    <string name="license_activated_trial_detail">यह एक ट्रायल लाइसेंस है।\n\nसमाप्ति: %1$s (%2$d दिन शेष)।\nउससे पहले पूर्ण रेंटल कोड से नवीनीकरण करें।</string>
+    <string name="license_continue">सर्वे पर जाएँ</string>
+    <string name="license_help">लाइसेंस चाहिए? विक्रेता से संपर्क करें। एक कोड सीमित डिवाइस पर रेंटल समाप्ति तक चलता है।</string>
+    <string name="license_status_active">%1$s के लिए सक्रिय · %2$s तक (%3$d दिन शेष)</string>
+    <string name="license_status_trial">ट्रायल लाइसेंस · %1$s तक (%2$d दिन शेष)</string>
+    <string name="license_status_grace">ऑफ़लाइन ग्रेस %1$s तक — एक बार ऑनलाइन होकर जाँचें</string>
+    <string name="license_status_locked">लॉक: %1$s</string>
+    <string name="license_status_dev">Dev mode (licensing off)</string>
+    <string name="license_badge_trial">ट्रायल · समाप्ति %1$s · %2$d दिन शेष</string>
+    <string name="license_badge_rental">लाइसेंस · समाप्ति %1$s · %2$d दिन शेष</string>
+    <string name="license_info_title">लाइसेंस जानकारी</string>
+    <string name="license_info_trial_body">ट्रायल लाइसेंस%1$s\nसमाप्ति: %2$s\nशेष दिन: %3$d\n\nट्रायल खत्म होने से पहले पूर्ण रेंटल के लिए विक्रेता से संपर्क करें।</string>
+    <string name="license_info_rental_body">लाइसेंसधारी: %1$s\nसमाप्ति: %2$s\nशेष दिन: %3$d</string>
+    <string name="license_ok">ठीक है</string>
+    <string name="license_err_invalid">अमान्य लाइसेंस कोड</string>
+    <string name="license_err_expired">लाइसेंस समाप्त — रेंटल नवीनीकरण करें</string>
+    <string name="license_err_blocked">लाइसेंस ब्लॉक — विक्रेता से संपर्क करें</string>
+    <string name="license_err_device_limit">इस लाइसेंस की डिवाइस सीमा पूरी</string>
+    <string name="license_err_not_activated">इस डिवाइस पर सक्रिय नहीं</string>
+    <string name="license_err_functions_missing">लाइसेंस सर्वर सेटअप नहीं — Edge Functions डिप्लॉय करें (supabase/README.md)</string>
+    <string name="license_err_network">नेटवर्क त्रुटि — ऑनलाइन होकर फिर कोशिश करें</string>
+    <string name="license_err_generic">सक्रिय नहीं हो सका (%1$s)</string>
     <string name="survey_title">फील्ड सर्वे</string>
     <string name="save_requires_end">सेव करने से पहले कम से कम एक End पोल जोड़ें</string>
     <string name="sld_preview">SLD</string>
@@ -80,6 +111,20 @@
     <string name="workspace_name_hint">वैकल्पिक नाम</string>
     <string name="my_sld">My Maps</string>
     <string name="my_maps">My Maps</string>
+    <string name="tab_saved_maps">सेव किए मैप</string>
+    <string name="tab_daily_history">दैनिक इतिहास</string>
+    <string name="daily_history_hint">तारीख के अनुसार सारांश — voltage और line type के अनुसार पोल व रूट लंबाई। शेयर के लिए Copy, दिन हटाने के लिए Delete।</string>
+    <string name="daily_history_empty">अभी कोई सर्वे इतिहास नहीं</string>
+    <string name="history_poles_heading">Poles surveyed</string>
+    <string name="history_route_heading">R/L</string>
+    <string name="history_copy">कॉपी</string>
+    <string name="history_delete">हटाएँ</string>
+    <string name="history_copied">सारांश कॉपी हो गया</string>
+    <string name="history_workspaces_count">%1$d workspace</string>
+    <string name="history_delete_day_title">दिन का इतिहास हटाएँ</string>
+    <string name="history_delete_day_confirm">%1$s के सभी सर्वे हटाएँ? यह वापस नहीं हो सकता।</string>
+    <string name="history_total_poles">Total: %1$d</string>
+    <string name="history_total_route">Total: %1$s</string>
     <string name="my_maps_section_title">सेव किए गए मैप</string>
     <string name="my_sld_empty">अभी कोई सेव किया गया मैप नहीं</string>
     <string name="sld_saved">ड्राइंग My Maps में सेव हो गई</string>
@@ -109,6 +154,14 @@
     <string name="bubble_status_hint">इस सीरीज़ के अंत तक लॉक रहेगा</string>
     <string name="bubble_material">पोल प्रकार</string>
     <string name="bubble_structure">Structure</string>
+    <string name="bubble_lt_phase">LT phase</string>
+    <string name="bubble_lt_phase_hint">Bare %1$s — इस पोल के लिए 1 / 2 / 3 phase (अगले पोल पर बदल सकते हैं)</string>
+    <string name="bubble_lt_conductor_hint">ABC = बंडल केबल · 30/50 = bare (फिर phase चुनें)</string>
+    <string name="lt_phase_1p">1-phase</string>
+    <string name="lt_phase_2p">2-phase</string>
+    <string name="lt_phase_3p">3-phase</string>
+    <string name="conductor_abc_label">ABC (bundled)</string>
+    <string name="conductor_bare_size">Bare %1$s</string>
     <string name="bubble_conductor">Conductor size</string>
     <string name="bubble_place">पोल रखें</string>
     <string name="place_continue">Place &amp; Continue</string>
@@ -152,6 +205,8 @@
     <string name="gps_accuracy_weak">±%1$.0fm Weak — wait</string>
     <string name="gps_accuracy_poor">±%1$.0fm Poor — wait</string>
     <string name="gps_accuracy_unknown">GPS warming…</string>
+    <string name="gps_sat_view_hint">सैटेलाइट सिग्नल देखने के लिए यहाँ टैप करें</string>
+    <string name="gps_sat_chip_desc">सैटेलाइट सिग्नल — विवरण के लिए टैप करें</string>
     <string name="gps_fix_poor_toast">GPS accuracy कमज़ोर है। खुले आसमान के नीचे जाएँ या बेहतर fix का इंतज़ार करें।</string>
     <string name="gps_capturing_best">सबसे अच्छा GPS fix कैप्चर हो रहा है…</string>
     <string name="quick_drop_error_no_location">वर्तमान GPS लोकेशन नहीं मिली। Fix का इंतज़ार करें।</string>
@@ -164,7 +219,7 @@
     <string name="preset_pattern">नेटवर्क पैटर्न</string>
     <string name="preset_pattern_standard">Standard</string>
     <string name="preset_pattern_dtr_lt">DTR→LT</string>
-    <string name="preset_pattern_dtr_lt_hint">पहला पोल = DTR (11kV)। अगले सभी पोल = LT 1P only।</string>
+    <string name="preset_pattern_dtr_lt_hint">पहला पोल = DTR (11kV)। अगले सभी पोल = LT। Bare: हर LT पोल पर 1P / 2P / 3P चुनें।</string>
     <string name="preset_settings_title">Preset Configuration</string>
     <string name="enable_presets">Preset उपयोग करें</string>
     <string name="use_preset_title">Preset Template उपयोग करें?</string>

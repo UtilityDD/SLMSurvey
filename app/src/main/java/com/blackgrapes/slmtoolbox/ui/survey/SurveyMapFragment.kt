@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationManager
@@ -21,6 +22,7 @@ import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.PopupWindow
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -43,6 +45,10 @@ import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
 import com.blackgrapes.slmtoolbox.domain.model.SurveyConnection
 import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
+import com.blackgrapes.slmtoolbox.license.LicenseAccess
+import com.blackgrapes.slmtoolbox.license.LicenseApi
+import com.blackgrapes.slmtoolbox.license.LicenseConfig
+import com.blackgrapes.slmtoolbox.license.LicensePreferences
 import com.blackgrapes.slmtoolbox.map.MapStyleConfig
 import com.blackgrapes.slmtoolbox.ui.settings.PresetSettingsDialog
 import com.blackgrapes.slmtoolbox.ui.map.SurveyMapRenderer
@@ -51,6 +57,9 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.LocationSettingsRequest
 import com.google.android.gms.location.Priority
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -66,6 +75,7 @@ import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import com.blackgrapes.slmtoolbox.domain.AccuracyGrade
+import com.blackgrapes.slmtoolbox.domain.EnglishNumbers
 import com.blackgrapes.slmtoolbox.domain.SiteVerification
 import kotlin.coroutines.resume
 import java.util.ArrayDeque
@@ -105,6 +115,8 @@ class SurveyMapFragment : Fragment() {
     )
     private var satelliteList: List<SatInfo> = emptyList()
     private var satBottomSheet: BottomSheetDialog? = null
+    private var satWarmPopup: PopupWindow? = null
+    private var satWarmHintShown = false
     private var gnssCallback: GnssStatus.Callback? = null
 
     private var assetMarkers: Map<Long, Marker> = emptyMap()
@@ -157,6 +169,7 @@ class SurveyMapFragment : Fragment() {
                 scheduleRender()
                 if (_binding != null) {
                     binding.tvGpsAccuracy.text = getString(R.string.gps_accuracy_unknown)
+                    setGpsWarmingHint(true)
                 }
             }
             mapLibreMap.addOnMapLongClickListener { latLng ->
@@ -187,7 +200,10 @@ class SurveyMapFragment : Fragment() {
         binding.btnPresetSettings.setOnClickListener {
             PresetSettingsDialog().show(childFragmentManager, PresetSettingsDialog.TAG)
         }
-        binding.satelliteChip.setOnClickListener { showSatelliteSheet() }
+        binding.satelliteChip.setOnClickListener {
+            dismissSatWarmPopup()
+            showSatelliteSheet()
+        }
         binding.btnMySld.setOnClickListener {
             findNavController().navigate(R.id.action_survey_to_my_sld)
         }
@@ -199,6 +215,8 @@ class SurveyMapFragment : Fragment() {
                 Bundle().apply { putLong("surveyId", id) }
             )
         }
+        binding.tvLicenseBadge.setOnClickListener { showLicenseInfoDialog() }
+        updateLicenseBadge()
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -627,7 +645,8 @@ class SurveyMapFragment : Fragment() {
         // Format: "12.3456° N  78.9012° E" style
         val latLabel = if (lat >= 0) "N" else "S"
         val lonLabel = if (lon >= 0) "E" else "W"
-        binding.tvCoordinates.text = "%.5f° %s   %.5f° %s".format(
+        binding.tvCoordinates.text = EnglishNumbers.format(
+            "%.5f° %s   %.5f° %s",
             Math.abs(lat), latLabel,
             Math.abs(lon), lonLabel
         )
@@ -688,7 +707,7 @@ class SurveyMapFragment : Fragment() {
                 "Near Pole #${detectedTapPole.sequence} (Press + for options)"
             detectedConnection != null && lineFrom != null && lineTo != null ->
                 "Near Line: Pole #${lineFrom.sequence} → Pole #${lineTo.sequence} (Press + for options)"
-            tap != null -> getString(R.string.status_tap_ready, tap.sequence)
+            tap != null -> EnglishNumbers.string(requireContext(), R.string.status_tap_ready, tap.sequence)
             series != null -> getString(R.string.status_series_open, series.voltage.label)
             !gpsReady -> getString(R.string.gps_still_off)
             else -> getString(R.string.status_idle)
@@ -1009,11 +1028,78 @@ class SurveyMapFragment : Fragment() {
     override fun onResume() {
         super.onResume()
         binding.mapView.onResume()
+        enforceLicenseGate()
         if (styleReady) {
             requestLocationOrFallback()
             startLocationUpdates()
         }
         registerGnssCallback()
+    }
+
+    /** Quiet server refresh; if rental is locked, leave the map. */
+    private fun enforceLicenseGate() {
+        if (!LicenseConfig.enabled) {
+            updateLicenseBadge()
+            return
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            val access = LicenseApi.refreshIfNeeded(requireContext())
+            if (!isAdded || _binding == null) return@launch
+            updateLicenseBadge()
+            if (access is LicenseAccess.Locked) {
+                findNavController().navigate(R.id.action_survey_to_license)
+            }
+        }
+    }
+
+    private fun updateLicenseBadge() {
+        if (_binding == null) return
+        if (!LicenseConfig.enabled) {
+            binding.tvLicenseBadge.isVisible = false
+            return
+        }
+        val snap = LicensePreferences.read(requireContext())
+        val access = LicensePreferences.evaluateAccess(requireContext())
+        if (access !is LicenseAccess.Allowed && access !is LicenseAccess.Grace) {
+            binding.tvLicenseBadge.isVisible = false
+            return
+        }
+        val expiresMs = when (access) {
+            is LicenseAccess.Allowed -> access.expiresAtEpochMs
+            is LicenseAccess.Grace -> access.expiresAtEpochMs
+            else -> snap.expiresAtEpochMs
+        }
+        val date = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(expiresMs))
+        val days = snap.daysRemaining()
+        binding.tvLicenseBadge.text = if (snap.isTrial) {
+            getString(R.string.license_badge_trial, date, days)
+        } else {
+            getString(R.string.license_badge_rental, date, days)
+        }
+        binding.tvLicenseBadge.isVisible = true
+    }
+
+    private fun showLicenseInfoDialog() {
+        val snap = LicensePreferences.read(requireContext())
+        if (!snap.activated) return
+        val date = SimpleDateFormat("dd MMM yyyy", Locale.US).format(Date(snap.expiresAtEpochMs))
+        val days = snap.daysRemaining()
+        val body = if (snap.isTrial) {
+            val codePart = if (snap.licenseCode.isNotBlank()) " (${snap.licenseCode})" else ""
+            getString(R.string.license_info_trial_body, codePart, date, days)
+        } else {
+            getString(
+                R.string.license_info_rental_body,
+                snap.customerName.ifBlank { "—" },
+                date,
+                days
+            )
+        }
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.license_info_title)
+            .setMessage(body)
+            .setPositiveButton(R.string.license_ok, null)
+            .show()
     }
 
     override fun onPause() {
@@ -1040,6 +1126,7 @@ class SurveyMapFragment : Fragment() {
 
     override fun onDestroyView() {
         unregisterGnssCallback()
+        dismissSatWarmPopup()
         satBottomSheet?.dismiss()
         satBottomSheet = null
         binding.mapView.onDestroy()
@@ -1454,7 +1541,7 @@ class SurveyMapFragment : Fragment() {
 
             // SNR value
             val snrLabel = TextView(ctx).apply {
-                text = "${"%4.1f".format(sat.snr)} dB"
+                text = "${EnglishNumbers.format("%4.1f", sat.snr)} dB"
                 textSize = 11f
                 setTextColor(Color.parseColor("#64748B"))
                 typeface = android.graphics.Typeface.MONOSPACE
@@ -1507,6 +1594,7 @@ class SurveyMapFragment : Fragment() {
             binding.tvGpsAccuracy.setTextColor(
                 ContextCompat.getColor(requireContext(), R.color.text_secondary)
             )
+            setGpsWarmingHint(true)
             return
         }
         val accuracy = location.accuracy
@@ -1526,9 +1614,10 @@ class SurveyMapFragment : Fragment() {
         binding.tvGpsAccuracy.text = if (grade == AccuracyGrade.UNKNOWN) {
             getString(textRes)
         } else {
-            getString(textRes, accuracy)
+            EnglishNumbers.string(requireContext(), textRes, accuracy)
         }
         binding.tvGpsAccuracy.setTextColor(color)
+        setGpsWarmingHint(grade == AccuracyGrade.UNKNOWN)
 
         val indicatorColor = when (grade) {
             AccuracyGrade.EXCELLENT, AccuracyGrade.GOOD -> Color.GREEN
@@ -1536,6 +1625,64 @@ class SurveyMapFragment : Fragment() {
             else -> Color.RED
         }
         binding.gpsStatusIndicator.setColorFilter(indicatorColor, android.graphics.PorterDuff.Mode.SRC_IN)
+    }
+
+    /** Popup tip under the sat badge while GPS is still warming up. */
+    private fun setGpsWarmingHint(warming: Boolean) {
+        if (warming) {
+            showSatWarmPopupIfNeeded()
+        } else {
+            dismissSatWarmPopup()
+            satWarmHintShown = false
+        }
+    }
+
+    private fun showSatWarmPopupIfNeeded() {
+        if (!isAdded || satWarmHintShown || satWarmPopup?.isShowing == true) return
+        val anchor = _binding?.satelliteChip ?: return
+        if (!anchor.isShown || anchor.width == 0) {
+            anchor.post { showSatWarmPopupIfNeeded() }
+            return
+        }
+        val ctx = context ?: return
+        satWarmHintShown = true
+        val content = LayoutInflater.from(ctx).inflate(R.layout.popup_sat_warm_hint, null, false)
+        content.setOnClickListener {
+            dismissSatWarmPopup()
+            showSatelliteSheet()
+        }
+        content.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        val popup = PopupWindow(
+            content,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            false
+        ).apply {
+            isOutsideTouchable = true
+            isFocusable = false
+            elevation = 10f
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            setOnDismissListener { satWarmPopup = null }
+        }
+        // Align popup under the badge, arrow pointing up at it.
+        val xOff = anchor.width - content.measuredWidth
+        try {
+            popup.showAsDropDown(anchor, xOff, 6)
+            satWarmPopup = popup
+            // Auto-dismiss after a short read time; user can still open sat view anytime.
+            anchor.postDelayed({ dismissSatWarmPopup() }, 6_000L)
+        } catch (_: Exception) {
+            satWarmPopup = null
+            satWarmHintShown = false
+        }
+    }
+
+    private fun dismissSatWarmPopup() {
+        satWarmPopup?.dismiss()
+        satWarmPopup = null
     }
 
     @SuppressLint("MissingPermission")

@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Typeface
+import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.PrintableSldBuilder
 import com.blackgrapes.slmtoolbox.domain.PrintableSldPage
 import com.blackgrapes.slmtoolbox.domain.SurveyMetrics
@@ -88,7 +89,25 @@ object PrintableSldRenderer {
             } else {
                 null
             }
+            linePaint.strokeWidth = if (edge.voltage == VoltageLevel.LT) 2.4f else 2.5f
             canvas.drawLine(from.x, from.y, to.x, to.y, linePaint)
+            NetworkCatalog.ltLineTag(edge.voltage, edge.conductor, edge.structure)?.let { tag ->
+                val tagPaint = Paint(smallPaint).apply {
+                    color = colorFor(edge.voltage)
+                    textSize = 9f
+                    isFakeBoldText = true
+                    textAlign = Paint.Align.CENTER
+                }
+                val halo = Paint(tagPaint).apply {
+                    style = Paint.Style.STROKE
+                    strokeWidth = 2.5f
+                    color = Color.WHITE
+                }
+                val tx = from.x + (to.x - from.x) * 0.32f
+                val ty = from.y + (to.y - from.y) * 0.32f + 3f
+                canvas.drawText(tag, tx, ty, halo)
+                canvas.drawText(tag, tx, ty, tagPaint)
+            }
             edge.spanLabel?.let {
                 canvas.drawText(
                     it,
@@ -225,8 +244,26 @@ object PrintableSldRenderer {
         )
         drawKey("Proposed line", Color.GRAY, dashed = true)
 
+        // LT line tags (same simple stroke; meaning is the tag)
+        keyX = left + 12f
+        val ltKeyY = keyY + 14f
+        canvas.drawText("LT tag", keyX, ltKeyY, textPaint)
+        keyX += 48f
+        val tagPaint = Paint(smallPaint).apply {
+            color = colorFor(VoltageLevel.LT)
+            isFakeBoldText = true
+        }
+        listOf("1Ph", "2Ph", "3Ph", "ABC").forEach { tag ->
+            keyPaint.color = colorFor(VoltageLevel.LT)
+            keyPaint.strokeWidth = 2.2f
+            keyPaint.pathEffect = null
+            canvas.drawLine(keyX, ltKeyY - 3f, keyX + 18f, ltKeyY - 3f, keyPaint)
+            canvas.drawText(tag, keyX + 22f, ltKeyY, tagPaint)
+            keyX += 22f + tagPaint.measureText(tag) + 14f
+        }
+
         // Pole status key
-        val poleKeyY = keyY + 14f
+        val poleKeyY = ltKeyY + 14f
         var poleX = left + 12f
         canvas.drawText("Pole", poleX, poleKeyY, textPaint)
         poleX += 36f
@@ -304,7 +341,7 @@ object PrintableSldRenderer {
             strokeWidth = 1f
         })
         canvas.drawText(
-            "Existing solid · Proposed dashed · Circles show 1P/2P/3P/4P/DTR",
+            "Existing solid · Proposed dashed · LT uses tags 1Ph/2Ph/3Ph/ABC on the line · Circles show structure/phase",
             28f,
             568f,
             smallPaint

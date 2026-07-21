@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
+    android:gravity="end"
+    android:orientation="vertical"
+    android:paddingHorizontal="4dp">
+
+    <!-- Sharp triangle tip pointing up at the sat badge -->
+    <ImageView
+        android:layout_width="16dp"
+        android:layout_height="10dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="-1dp"
+        android:contentDescription="@null"
+        android:scaleType="fitXY"
+        android:src="@drawable/bg_sat_hint_arrow" />
+
+    <TextView
+        android:id="@+id/tvSatHintMessage"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_sat_hint_bubble"
+        android:maxWidth="200dp"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp"
+        android:text="@string/gps_sat_view_hint"
+        android:textColor="@android:color/white"
+        android:textSize="12sp" />
+</LinearLayout>

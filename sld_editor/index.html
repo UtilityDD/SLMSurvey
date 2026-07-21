@@ -26,7 +26,37 @@
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+    <!-- Same rental license as the Android app -->
+    <div id="licenseGate" class="license-gate hidden" aria-modal="true" role="dialog">
+        <div class="license-gate-card">
+            <div class="license-gate-brand">SLM</div>
+            <h1 class="license-gate-title">Activate rental license</h1>
+            <p class="license-gate-sub">
+                Enter the same license code used on the phone app. Survey files stay on this computer.
+            </p>
+            <label class="license-gate-label" for="licenseCodeInput">License code</label>
+            <input
+                type="text"
+                id="licenseCodeInput"
+                class="license-gate-input"
+                placeholder="e.g. SLM-TRIAL-001"
+                autocomplete="off"
+                spellcheck="false"
+            />
+            <p id="licenseStatus" class="license-gate-status"></p>
+            <p id="licenseError" class="license-gate-error"></p>
+            <button type="button" id="licenseActivateBtn" class="btn btn-primary license-gate-btn">
+                Activate
+            </button>
+            <div id="licenseProgress" class="license-gate-progress hidden">Checking…</div>
+            <p class="license-gate-help">
+                Need a code? Contact the seller. One code can cover phone + desktop when the seller allows 2 devices.
+            </p>
+        </div>
+    </div>
+
     <div class="app-container" id="appContainer">
+        <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
         <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
         <!-- Sidebar Panel -->
         <aside class="sidebar" id="sidebar">
@@ -389,6 +419,8 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="./license-config.js"></script>
+    <script src="./license.js"></script>
     <script src="./app.js"></script>
     <script src="./print_layout.js"></script>
 </body>

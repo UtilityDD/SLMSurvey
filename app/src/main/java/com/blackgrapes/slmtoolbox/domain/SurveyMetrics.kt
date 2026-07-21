@@ -5,6 +5,7 @@ import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
 import com.blackgrapes.slmtoolbox.domain.model.SurveyConnection
+import java.util.Locale
 import kotlin.math.roundToInt
 
 object SurveyMetrics {
@@ -56,22 +57,22 @@ object SurveyMetrics {
         return asset.sequence > 0 && asset.sequence % interval == 0
     }
 
-    fun formatCoordinate(value: Double): String = "%.5f".format(value)
+    fun formatCoordinate(value: Double): String =
+        EnglishNumbers.format("%.5f", value)
 
     fun formatRouteLength(metres: Double): String = metres.roundToInt().toString()
 
     fun formatDistance(metres: Double, unit: String, decimals: Int): String {
-        val converted = when (unit.lowercase()) {
+        val converted = when (unit.lowercase(Locale.US)) {
             "foot", "feet", "ft" -> metres * 3.28084
             "km", "kilometer", "kilometers" -> metres / 1000.0
             else -> metres
         }
-        val unitSuffix = when (unit.lowercase()) {
+        val unitSuffix = when (unit.lowercase(Locale.US)) {
             "foot", "feet", "ft" -> "ft"
             "km", "kilometer", "kilometers" -> "km"
             else -> "m"
         }
-        val formatStr = "%.${decimals}f"
-        return "${formatStr.format(converted)} $unitSuffix"
+        return "${EnglishNumbers.format("%.${decimals}f", converted)} $unitSuffix"
     }
 }

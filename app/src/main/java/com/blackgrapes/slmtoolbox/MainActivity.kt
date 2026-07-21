@@ -1,5 +1,6 @@
 package com.blackgrapes.slmtoolbox
 
+import android.content.Context
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.enableEdgeToEdge
@@ -8,11 +9,16 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.navigation.fragment.NavHostFragment
 import com.blackgrapes.slmtoolbox.databinding.ActivityMainBinding
+import com.blackgrapes.slmtoolbox.domain.LanguagePreferences
 import com.blackgrapes.slmtoolbox.ui.survey.SurveyMapFragment
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LanguagePreferences.wrap(newBase))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

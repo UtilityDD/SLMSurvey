@@ -71,7 +71,12 @@ object NetworkCatalog {
             PoleStructure.P4,
             PoleStructure.DTR
         )
-        VoltageLevel.LT -> listOf(PoleStructure.P1)
+        // LT bare conductor: 1-phase / 2-phase / 3-phase line (not pole structure like HT).
+        VoltageLevel.LT -> listOf(
+            PoleStructure.P1,
+            PoleStructure.P2,
+            PoleStructure.P3
+        )
     }
 
     fun conductorsFor(voltage: VoltageLevel): List<String> = when (voltage) {
@@ -80,12 +85,53 @@ object NetworkCatalog {
         VoltageLevel.LT -> listOf("30", "50", "ABC")
     }
 
+    fun isAbcConductor(conductor: String?): Boolean =
+        conductor?.equals("ABC", ignoreCase = true) == true
+
+    /** LT phase options after conductor: ABC has no phase choice; bare allows 1P/2P/3P. */
+    fun ltPhasesForConductor(conductor: String?): List<PoleStructure> =
+        if (isAbcConductor(conductor)) {
+            listOf(PoleStructure.P1)
+        } else {
+            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
+        }
+
     fun defaultMaterial(voltage: VoltageLevel): PoleMaterial = materialsFor(voltage).first()
 
     fun defaultStructure(voltage: VoltageLevel): PoleStructure = structuresFor(voltage).first()
 
     fun assetTypeFor(structure: PoleStructure): AssetType =
         if (structure == PoleStructure.DTR) AssetType.DT else AssetType.POLE
+
+    /**
+     * How many parallel strokes to draw for a span.
+     * LT uses a single simple line for all phases/ABC — tags carry the meaning.
+     */
+    fun lineParallelCount(
+        voltage: VoltageLevel,
+        conductor: String?,
+        structure: PoleStructure?
+    ): Int = 1
+
+    fun lineStrokeWidth(
+        voltage: VoltageLevel,
+        conductor: String?,
+        structure: PoleStructure?
+    ): Float = when (voltage) {
+        VoltageLevel.LT -> 7f
+        else -> 8f
+    }
+
+    /** In-line tag for LT spans: 1Ph / 2Ph / 3Ph / ABC. */
+    fun ltLineTag(voltage: VoltageLevel, conductor: String?, structure: PoleStructure?): String? {
+        if (voltage != VoltageLevel.LT) return null
+        if (isAbcConductor(conductor)) return "ABC"
+        return when (structure) {
+            PoleStructure.P2 -> "2Ph"
+            PoleStructure.P3 -> "3Ph"
+            else -> "1Ph"
+        }
+    }
 
     fun seriesConfigFrom(asset: SurveyAsset): SeriesConfig? {
         val material = asset.material ?: return null

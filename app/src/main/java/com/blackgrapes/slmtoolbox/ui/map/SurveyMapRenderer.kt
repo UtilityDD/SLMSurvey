@@ -9,6 +9,7 @@ import android.location.Location
 import android.util.LruCache
 import androidx.core.content.ContextCompat
 import com.blackgrapes.slmtoolbox.R
+import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.SurveyMetrics
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.Survey
@@ -28,6 +29,7 @@ object SurveyMapRenderer {
 
     private val markerCache = object : LruCache<String, Bitmap>(96) {}
     private val spanLabelCache = object : LruCache<Int, Bitmap>(48) {}
+    private val lineTagCache = object : LruCache<String, Bitmap>(16) {}
 
     /**
      * Renders the survey onto the map.
@@ -59,23 +61,32 @@ object SurveyMapRenderer {
                     }
                 )
             }
+            val styleAsset = to
+            val width = NetworkCatalog.lineStrokeWidth(
+                connection.voltage,
+                styleAsset.conductor,
+                styleAsset.poleStructure
+            )
+            val color = colorFor(connection.voltage, context)
+            val a = LatLng(from.latitude, from.longitude)
+            val b = LatLng(to.latitude, to.longitude)
+            val distM = measuredMetres.toDouble()
+            // All LT (1Ph/2Ph/3Ph/ABC) share the same simple stroke.
             if (connection.status == WorkStatus.PROPOSED) {
                 addDottedLine(
                     map = map,
-                    from = LatLng(from.latitude, from.longitude),
-                    to = LatLng(to.latitude, to.longitude),
-                    distanceMetres = measuredMetres.toDouble(),
-                    color = colorFor(connection.voltage, context)
+                    from = a,
+                    to = b,
+                    distanceMetres = distM,
+                    color = color,
+                    width = width
                 )
             } else {
                 map.addPolyline(
                     PolylineOptions()
-                        .add(
-                            LatLng(from.latitude, from.longitude),
-                            LatLng(to.latitude, to.longitude)
-                        )
-                        .color(colorFor(connection.voltage, context))
-                        .width(8f)
+                        .add(a, b)
+                        .color(color)
+                        .width(width)
                 )
             }
             val spanMetres = connection.spanLengthM
@@ -93,6 +104,19 @@ object SurveyMapRenderer {
                     .snippet("Pole ${from.sequence} → ${to.sequence}")
                     .icon(iconFactory.fromBitmap(createSpanLabelBitmap(spanMetres)))
             )
+            // Phase/ABC tag sits on the line (not a chip like span length).
+            NetworkCatalog.ltLineTag(
+                connection.voltage,
+                styleAsset.conductor,
+                styleAsset.poleStructure
+            )?.let { tag ->
+                map.addMarker(
+                    MarkerOptions()
+                        .position(interpolate(a, b, 0.32))
+                        .title(tag)
+                        .icon(iconFactory.fromBitmap(createLineTagBitmap(tag, color)))
+                )
+            }
         }
 
         survey.assets.forEach { asset ->
@@ -145,7 +169,8 @@ object SurveyMapRenderer {
         from: LatLng,
         to: LatLng,
         distanceMetres: Double,
-        color: Int
+        color: Int,
+        width: Float = 8f
     ) {
         val dashGap = 8.0
         val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 20)
@@ -159,7 +184,7 @@ object SurveyMapRenderer {
                         interpolate(from, to, endFraction)
                     )
                     .color(color)
-                    .width(8f)
+                    .width(width)
             )
         }
     }
@@ -291,6 +316,36 @@ object SurveyMapRenderer {
         }
         canvas.drawRoundRect(1f, 1f, width - 1f, height - 1f, 8f, 8f, background)
         canvas.drawText(label, width / 2f, 24f, textPaint)
+        return bitmap
+    }
+
+    /**
+     * Phase/ABC mark drawn as wire text (line colour + light halo), not a span chip.
+     */
+    private fun createLineTagBitmap(tag: String, lineColor: Int): Bitmap {
+        val cacheKey = "$tag|$lineColor"
+        lineTagCache.get(cacheKey)?.let { return it }
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = lineColor
+            textSize = 26f
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+        val halo = Paint(textPaint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 5f
+            color = Color.WHITE
+        }
+        val width = (textPaint.measureText(tag) + 16f).toInt().coerceAtLeast(40)
+        val height = 36
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val cx = width / 2f
+        val cy = height / 2f + 8f
+        canvas.drawText(tag, cx, cy, halo)
+        canvas.drawText(tag, cx, cy, textPaint)
+        lineTagCache.put(cacheKey, bitmap)
         return bitmap
     }
 

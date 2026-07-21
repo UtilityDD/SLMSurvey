@@ -1,5 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="license_title">Activate rental license</string>
+    <string name="license_subtitle">Enter the license code you received after purchase. Survey data stays on this phone.</string>
+    <string name="license_code_hint">License code</string>
+    <string name="license_code_required">Enter your license code</string>
+    <string name="license_activate">Activate</string>
+    <string name="license_activated">License activated</string>
+    <string name="license_activated_title">License activated</string>
+    <string name="license_trial_title">Trial license activated</string>
+    <string name="license_activated_detail">Licensed to %1$s.\n\nValid until %2$s (%3$d days left).\nContact the seller to renew before expiry.</string>
+    <string name="license_activated_trial_detail">This is a TRIAL license.\n\nExpires on %1$s (%2$d days left).\nSurvey features work until then — renew with a full rental code before expiry.</string>
+    <string name="license_continue">Continue to survey</string>
+    <string name="license_help">Need a license? Contact the seller. One code works on a limited number of devices until the rental end date.</string>
+    <string name="license_status_active">Active for %1$s · until %2$s (%3$d days left)</string>
+    <string name="license_status_trial">Trial license · until %1$s (%2$d days left)</string>
+    <string name="license_status_grace">Offline grace until %1$s — connect once to renew check</string>
+    <string name="license_status_locked">Locked: %1$s</string>
+    <string name="license_status_dev">Dev mode (licensing off)</string>
+    <string name="license_badge_trial">Trial · expires %1$s · %2$d days left</string>
+    <string name="license_badge_rental">License · expires %1$s · %2$d days left</string>
+    <string name="license_info_title">License info</string>
+    <string name="license_info_trial_body">Trial license%1$s\nExpires: %2$s\nDays left: %3$d\n\nContact the seller for a full rental before the trial ends.</string>
+    <string name="license_info_rental_body">Licensed to: %1$s\nExpires: %2$s\nDays left: %3$d</string>
+    <string name="license_ok">OK</string>
+    <string name="license_err_invalid">Invalid license code</string>
+    <string name="license_err_expired">License expired — renew rental</string>
+    <string name="license_err_blocked">License blocked — contact seller</string>
+    <string name="license_err_device_limit">Device limit reached for this license</string>
+    <string name="license_err_not_activated">Not activated on this device</string>
+    <string name="license_err_functions_missing">License server not set up — deploy Edge Functions (see supabase/README.md)</string>
+    <string name="license_err_network">Network error — try again when online</string>
+    <string name="license_err_generic">Could not activate (%1$s)</string>
     <string name="app_name">SLM ToolBox</string>
     <string name="survey_title">Field Survey</string>
     <string name="save_requires_end">Add at least one End pole before saving</string>
@@ -80,6 +111,20 @@
     <string name="workspace_name_hint">Optional custom name</string>
     <string name="my_sld">My Maps</string>
     <string name="my_maps">My Maps</string>
+    <string name="tab_saved_maps">Saved maps</string>
+    <string name="tab_daily_history">Daily history</string>
+    <string name="daily_history_hint">Date-wise clean summary — poles and route length by voltage &amp; line type. Copy to share, or delete the day.</string>
+    <string name="daily_history_empty">No survey history yet</string>
+    <string name="history_poles_heading">Poles surveyed</string>
+    <string name="history_route_heading">R/L</string>
+    <string name="history_copy">Copy</string>
+    <string name="history_delete">Delete</string>
+    <string name="history_copied">Summary copied</string>
+    <string name="history_workspaces_count">%1$d workspace(s)</string>
+    <string name="history_delete_day_title">Delete day history</string>
+    <string name="history_delete_day_confirm">Delete all surveys for %1$s? This cannot be undone.</string>
+    <string name="history_total_poles">Total: %1$d</string>
+    <string name="history_total_route">Total: %1$s</string>
     <string name="my_maps_section_title">Saved maps</string>
     <string name="my_sld_empty">No saved maps yet</string>
     <string name="sld_saved">Drawing saved to My Maps</string>
@@ -109,6 +154,14 @@
     <string name="bubble_status_hint">Stays locked until this series ends</string>
     <string name="bubble_material">Pole type</string>
     <string name="bubble_structure">Structure</string>
+    <string name="bubble_lt_phase">LT phase</string>
+    <string name="bubble_lt_phase_hint">Bare %1$s — pick 1 / 2 / 3 phase for this pole (can change next pole)</string>
+    <string name="bubble_lt_conductor_hint">ABC = bundled cable · 30/50 = bare (then choose phase)</string>
+    <string name="lt_phase_1p">1-phase</string>
+    <string name="lt_phase_2p">2-phase</string>
+    <string name="lt_phase_3p">3-phase</string>
+    <string name="conductor_abc_label">ABC (bundled)</string>
+    <string name="conductor_bare_size">Bare %1$s</string>
     <string name="bubble_conductor">Conductor size</string>
     <string name="bubble_place">Place pole</string>
     <string name="place_continue">Place &amp; Continue</string>
@@ -152,6 +205,8 @@
     <string name="gps_accuracy_weak">±%1$.0fm Weak — wait</string>
     <string name="gps_accuracy_poor">±%1$.0fm Poor — wait</string>
     <string name="gps_accuracy_unknown">GPS warming…</string>
+    <string name="gps_sat_view_hint">Tap here to see satellite signals</string>
+    <string name="gps_sat_chip_desc">Satellite signals — tap for details</string>
     <string name="gps_fix_poor_toast">GPS accuracy is weak. Move to open sky or wait for a better fix.</string>
     <string name="gps_capturing_best">Capturing best GPS fix…</string>
     <string name="quick_drop_error_no_location">Unable to fetch current GPS location. Please wait for a fix.</string>
@@ -164,7 +219,7 @@
     <string name="preset_pattern">Network pattern</string>
     <string name="preset_pattern_standard">Standard</string>
     <string name="preset_pattern_dtr_lt">DTR→LT</string>
-    <string name="preset_pattern_dtr_lt_hint">First pole = DTR (11kV). All next poles = LT 1P only.</string>
+    <string name="preset_pattern_dtr_lt_hint">First pole = DTR (11kV). All next poles = LT. Bare: choose 1P / 2P / 3P on each LT pole.</string>
     <string name="preset_settings_title">Preset Configuration</string>
     <string name="enable_presets">Use presets</string>
     <string name="use_preset_title">Use Preset Template?</string>

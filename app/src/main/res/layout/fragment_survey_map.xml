@@ -107,7 +107,7 @@
                 android:paddingVertical="3dp"
                 android:clickable="true"
                 android:focusable="true"
-                android:contentDescription="Satellite signals — tap for details">
+                android:contentDescription="@string/gps_sat_chip_desc">
 
                 <ImageView
                     android:layout_width="11dp"
@@ -130,6 +130,25 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <TextView
+        android:id="@+id/tvLicenseBadge"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="14dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_satellite_chip"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp"
+        android:textColor="@color/primary"
+        android:textSize="11sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/statusChip" />
 
     <LinearLayout
         android:id="@+id/sideControls"
@@ -140,7 +159,7 @@
         android:gravity="center_horizontal"
         app:layout_constraintBottom_toTopOf="@id/bottomBar"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/statusChip"
+        app:layout_constraintTop_toBottomOf="@id/tvLicenseBadge"
         app:layout_constraintVertical_bias="0.50">
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton

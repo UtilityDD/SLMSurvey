@@ -1,0 +1,8 @@
+# Minimal Supabase CLI config for Edge Function deploys.
+# Project id is set when you run: supabase link --project-ref ...
+
+[functions.license-activate]
+verify_jwt = false
+
+[functions.license-validate]
+verify_jwt = false

@@ -1,6 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SLM ToolBox</string>
+    <string name="license_title">রেন্টাল লাইসেন্স চালু করুন</string>
+    <string name="license_subtitle">কেনার পর যে কোড পেয়েছেন তা লিখুন। সার্ভে ডেটা এই ফোনেই থাকবে।</string>
+    <string name="license_code_hint">License code</string>
+    <string name="license_code_required">লাইসেন্স কোড লিখুন</string>
+    <string name="license_activate">চালু করুন</string>
+    <string name="license_activated">লাইসেন্স চালু হয়েছে</string>
+    <string name="license_activated_title">লাইসেন্স চালু হয়েছে</string>
+    <string name="license_trial_title">ট্রায়াল লাইসেন্স চালু হয়েছে</string>
+    <string name="license_activated_detail">লাইসেন্সধারী: %1$s।\n\nমেয়াদ %2$s পর্যন্ত (%3$d দিন বাকি)।\nমেয়াদ শেষের আগে নবায়নের জন্য বিক্রেতার সাথে যোগাযোগ করুন।</string>
+    <string name="license_activated_trial_detail">এটি একটি ট্রায়াল লাইসেন্স।\n\nমেয়াদ শেষ: %1$s (%2$d দিন বাকি)।\nতার আগে পূর্ণ রেন্টাল কোড দিয়ে নবায়ন করুন।</string>
+    <string name="license_continue">সার্ভেতে যান</string>
+    <string name="license_help">লাইসেন্স লাগবে? বিক্রেতার সাথে যোগাযোগ করুন। একটি কোড সীমিত ডিভাইসে রেন্টাল শেষ তারিখ পর্যন্ত কাজ করে।</string>
+    <string name="license_status_active">%1$s-এর জন্য চালু · %2$s পর্যন্ত (%3$d দিন বাকি)</string>
+    <string name="license_status_trial">ট্রায়াল লাইসেন্স · %1$s পর্যন্ত (%2$d দিন বাকি)</string>
+    <string name="license_status_grace">অফলাইন গ্রেস %1$s পর্যন্ত — একবার অনলাইন হয়ে চেক করুন</string>
+    <string name="license_status_locked">লক: %1$s</string>
+    <string name="license_status_dev">Dev mode (licensing off)</string>
+    <string name="license_badge_trial">ট্রায়াল · মেয়াদ %1$s · %2$d দিন বাকি</string>
+    <string name="license_badge_rental">লাইসেন্স · মেয়াদ %1$s · %2$d দিন বাকি</string>
+    <string name="license_info_title">লাইসেন্স তথ্য</string>
+    <string name="license_info_trial_body">ট্রায়াল লাইসেন্স%1$s\nমেয়াদ শেষ: %2$s\nবাকি দিন: %3$d\n\nট্রায়াল শেষের আগে পূর্ণ রেন্টালের জন্য বিক্রেতার সাথে যোগাযোগ করুন।</string>
+    <string name="license_info_rental_body">লাইসেন্সধারী: %1$s\nমেয়াদ শেষ: %2$s\nবাকি দিন: %3$d</string>
+    <string name="license_ok">ঠিক আছে</string>
+    <string name="license_err_invalid">অবৈধ লাইসেন্স কোড</string>
+    <string name="license_err_expired">লাইসেন্সের মেয়াদ শেষ — রেন্টাল নবায়ন করুন</string>
+    <string name="license_err_blocked">লাইসেন্স ব্লক — বিক্রেতার সাথে যোগাযোগ করুন</string>
+    <string name="license_err_device_limit">এই লাইসেন্সের ডিভাইস সীমা পূর্ণ</string>
+    <string name="license_err_not_activated">এই ডিভাইসে চালু হয়নি</string>
+    <string name="license_err_functions_missing">লাইসেন্স সার্ভার সেটআপ নেই — Edge Functions ডিপ্লয় করুন (supabase/README.md)</string>
+    <string name="license_err_network">নেটওয়ার্ক সমস্যা — অনলাইন হয়ে আবার চেষ্টা করুন</string>
+    <string name="license_err_generic">চালু করা যায়নি (%1$s)</string>
     <string name="survey_title">ফিল্ড সার্ভে</string>
     <string name="save_requires_end">সেভ করার আগে অন্তত একটি End পোল যোগ করুন</string>
     <string name="sld_preview">SLD</string>
@@ -80,6 +111,20 @@
     <string name="workspace_name_hint">ঐচ্ছিক নাম</string>
     <string name="my_sld">My Maps</string>
     <string name="my_maps">My Maps</string>
+    <string name="tab_saved_maps">সংরক্ষিত মানচিত্র</string>
+    <string name="tab_daily_history">দৈনিক ইতিহাস</string>
+    <string name="daily_history_hint">তারিখ অনুযায়ী সারাংশ — voltage ও line type অনুযায়ী পোল ও রুট দৈর্ঘ্য। শেয়ার করতে Copy, দিন মুছতে Delete।</string>
+    <string name="daily_history_empty">এখনও কোনো সার্ভে ইতিহাস নেই</string>
+    <string name="history_poles_heading">Poles surveyed</string>
+    <string name="history_route_heading">R/L</string>
+    <string name="history_copy">কপি</string>
+    <string name="history_delete">মুছুন</string>
+    <string name="history_copied">সারাংশ কপি হয়েছে</string>
+    <string name="history_workspaces_count">%1$d workspace</string>
+    <string name="history_delete_day_title">দিনের ইতিহাস মুছুন</string>
+    <string name="history_delete_day_confirm">%1$s-এর সব সার্ভে মুছবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।</string>
+    <string name="history_total_poles">Total: %1$d</string>
+    <string name="history_total_route">Total: %1$s</string>
     <string name="my_maps_section_title">সংরক্ষিত মানচিত্র</string>
     <string name="my_sld_empty">এখনও কোনো সংরক্ষিত মানচিত্র নেই</string>
     <string name="sld_saved">অঙ্কন My Maps-এ সংরক্ষিত হয়েছে</string>
@@ -109,6 +154,14 @@
     <string name="bubble_status_hint">এই সিরিজ শেষ না হওয়া পর্যন্ত লক থাকবে</string>
     <string name="bubble_material">পোলের ধরন</string>
     <string name="bubble_structure">Structure</string>
+    <string name="bubble_lt_phase">LT phase</string>
+    <string name="bubble_lt_phase_hint">Bare %1$s — এই পোলের জন্য 1 / 2 / 3 phase (পরের পোলে বদলানো যাবে)</string>
+    <string name="bubble_lt_conductor_hint">ABC = বান্ডেল কেবল · 30/50 = bare (পরে phase বেছে নিন)</string>
+    <string name="lt_phase_1p">1-phase</string>
+    <string name="lt_phase_2p">2-phase</string>
+    <string name="lt_phase_3p">3-phase</string>
+    <string name="conductor_abc_label">ABC (bundled)</string>
+    <string name="conductor_bare_size">Bare %1$s</string>
     <string name="bubble_conductor">Conductor size</string>
     <string name="bubble_place">পোল রাখুন</string>
     <string name="place_continue">Place &amp; Continue</string>
@@ -152,6 +205,8 @@
     <string name="gps_accuracy_weak">±%1$.0fm Weak — wait</string>
     <string name="gps_accuracy_poor">±%1$.0fm Poor — wait</string>
     <string name="gps_accuracy_unknown">GPS warming…</string>
+    <string name="gps_sat_view_hint">স্যাটেলাইট সিগন্যাল দেখতে এখানে ট্যাপ করুন</string>
+    <string name="gps_sat_chip_desc">স্যাটেলাইট সিগন্যাল — বিবরণের জন্য ট্যাপ করুন</string>
     <string name="gps_fix_poor_toast">GPS accuracy দুর্বল। খোলা আকাশের নিচে যান বা ভালো fix-এর জন্য অপেক্ষা করুন।</string>
     <string name="gps_capturing_best">সেরা GPS fix ধরা হচ্ছে…</string>
     <string name="quick_drop_error_no_location">বর্তমান GPS অবস্থান পাওয়া যায়নি। Fix-এর জন্য অপেক্ষা করুন।</string>
@@ -164,7 +219,7 @@
     <string name="preset_pattern">নেটওয়ার্ক প্যাটার্ন</string>
     <string name="preset_pattern_standard">Standard</string>
     <string name="preset_pattern_dtr_lt">DTR→LT</string>
-    <string name="preset_pattern_dtr_lt_hint">প্রথম পোল = DTR (11kV)। পরের সব পোল = LT 1P only।</string>
+    <string name="preset_pattern_dtr_lt_hint">প্রথম পোল = DTR (11kV)। পরের সব পোল = LT। Bare: প্রতিটি LT পোলে 1P / 2P / 3P বেছে নিন।</string>
     <string name="preset_settings_title">Preset Configuration</string>
     <string name="enable_presets">Preset ব্যবহার করুন</string>
     <string name="use_preset_title">Preset Template ব্যবহার করবেন?</string>
