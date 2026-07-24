@@ -15,79 +15,64 @@
         app:layout_constraintTop_toTopOf="parent"
         app:navigationIcon="?attr/homeAsUpIndicator"
         app:title="@string/my_maps"
-        app:titleTextColor="@color/text_primary" />
-
-    <LinearLayout
-        android:id="@+id/languageSection"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="@color/surface"
-        android:orientation="vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingBottom="8dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/toolbar">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/language_section_title"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="@string/language_section_hint"
-            android:textColor="@color/text_secondary"
-            android:textSize="12sp" />
+        app:titleTextColor="@color/text_primary">
 
         <com.google.android.material.chip.ChipGroup
             android:id="@+id/languageChipGroup"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="4dp"
+            app:chipSpacingHorizontal="4dp"
             app:selectionRequired="true"
-            app:singleSelection="true">
+            app:singleSelection="true"
+            app:singleLine="true">
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chipLangEn"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="32dp"
                 android:checked="true"
-                android:text="@string/language_english" />
+                android:text="@string/language_english_short"
+                android:textSize="12sp"
+                app:chipMinHeight="32dp"
+                app:ensureMinTouchTargetSize="false" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chipLangBn"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/language_bangla" />
+                android:layout_height="32dp"
+                android:text="@string/language_bangla_short"
+                android:textSize="12sp"
+                app:chipMinHeight="32dp"
+                app:ensureMinTouchTargetSize="false" />
 
             <com.google.android.material.chip.Chip
                 android:id="@+id/chipLangHi"
                 style="@style/Widget.Material3.Chip.Filter"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/language_hindi" />
+                android:layout_height="32dp"
+                android:text="@string/language_hindi_short"
+                android:textSize="12sp"
+                app:chipMinHeight="32dp"
+                app:ensureMinTouchTargetSize="false" />
         </com.google.android.material.chip.ChipGroup>
-    </LinearLayout>
+    </com.google.android.material.appbar.MaterialToolbar>
 
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/mapsTabs"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="44dp"
         android:background="@color/surface"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/languageSection"
+        app:layout_constraintTop_toBottomOf="@id/toolbar"
         app:tabGravity="fill"
+        app:tabIndicatorFullWidth="true"
         app:tabMode="fixed"
-        app:tabIndicatorFullWidth="true">
+        app:tabTextAppearance="@style/TextAppearance.Material3.LabelLarge">
 
         <com.google.android.material.tabs.TabItem
             android:layout_width="wrap_content"
@@ -100,6 +85,15 @@
             android:text="@string/tab_daily_history" />
     </com.google.android.material.tabs.TabLayout>
 
+    <View
+        android:id="@+id/tabsDivider"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:background="@color/surface_variant"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mapsTabs" />
+
     <FrameLayout
         android:id="@+id/tabContent"
         android:layout_width="0dp"
@@ -107,105 +101,60 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/mapsTabs">
+        app:layout_constraintTop_toBottomOf="@id/tabsDivider">
 
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/mapsPanel"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:orientation="vertical">
+            android:layout_height="match_parent">
+
+            <ListView
+                android:id="@+id/sldList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:divider="@color/surface_variant"
+                android:dividerHeight="1dp"
+                android:paddingBottom="12dp" />
 
             <TextView
-                android:id="@+id/mapsSectionTitle"
-                android:layout_width="match_parent"
+                android:id="@+id/emptyText"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@color/surface"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="8dp"
-                android:text="@string/my_maps_section_title"
-                android:textColor="@color/text_primary"
-                android:textSize="14sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/historyHint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:background="@color/surface"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="10dp"
-                android:text="@string/my_sld_history_hint"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/my_sld_empty"
                 android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
+                android:textSize="14sp" />
+        </FrameLayout>
 
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1">
-
-                <ListView
-                    android:id="@+id/sldList"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false"
-                    android:divider="@android:color/transparent"
-                    android:dividerHeight="0dp"
-                    android:paddingVertical="4dp" />
-
-                <TextView
-                    android:id="@+id/emptyText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="@string/my_sld_empty"
-                    android:textAppearance="?attr/textAppearanceBodyLarge"
-                    android:textColor="@color/text_secondary" />
-            </FrameLayout>
-        </LinearLayout>
-
-        <LinearLayout
+        <FrameLayout
             android:id="@+id/historyPanel"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:orientation="vertical"
             android:visibility="gone">
 
+            <ListView
+                android:id="@+id/historyList"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:divider="@color/surface_variant"
+                android:dividerHeight="1dp"
+                android:paddingBottom="12dp" />
+
             <TextView
-                android:layout_width="match_parent"
+                android:id="@+id/historyEmptyText"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:background="@color/surface"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="10dp"
-                android:text="@string/daily_history_hint"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/daily_history_empty"
                 android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1">
-
-                <ListView
-                    android:id="@+id/historyList"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:clipToPadding="false"
-                    android:divider="@android:color/transparent"
-                    android:dividerHeight="0dp"
-                    android:paddingVertical="4dp" />
-
-                <TextView
-                    android:id="@+id/historyEmptyText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="@string/daily_history_empty"
-                    android:textAppearance="?attr/textAppearanceBodyLarge"
-                    android:textColor="@color/text_secondary" />
-            </FrameLayout>
-        </LinearLayout>
+                android:textSize="14sp" />
+        </FrameLayout>
     </FrameLayout>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

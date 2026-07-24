@@ -34,7 +34,19 @@
     <string name="license_err_generic">চালু করা যায়নি (%1$s)</string>
     <string name="survey_title">ফিল্ড সার্ভে</string>
     <string name="save_requires_end">সেভ করার আগে অন্তত একটি End পোল যোগ করুন</string>
-    <string name="sld_preview">SLD</string>
+    <string name="sld_preview">প্রিভিউ</string>
+    <string name="sld_preview_title">ওয়ার্কস্পেস প্রিভিউ</string>
+    <string name="exit">প্রস্থান</string>
+    <string name="network_summary">নেটওয়ার্ক সারাংশ</string>
+    <string name="preview_empty">প্রিভিউ করার মতো কোনো পোল নেই</string>
+    <string name="preview_legend_hint">জুম করতে পিঞ্চ করুন · লেজেন্ড ম্যাপে আঁকা</string>
+    <string name="legend_existing_pole">বিদ্যমান পোল (ভরা)</string>
+    <string name="legend_proposed_pole">প্রস্তাবিত পোল (ফাঁপা)</string>
+    <string name="preview_summary_poles">পোল: %1$d</string>
+    <string name="preview_summary_spans">স্প্যান: %1$d</string>
+    <string name="preview_summary_route">রুট: %1$s</string>
+    <string name="workspace_replaced">My Maps-এ ম্যাপ আপডেট হয়েছে</string>
+    <string name="workspace_created">My Maps-এ ম্যাপ সংরক্ষিত হয়েছে</string>
     <string name="add_asset">অ্যাসেট যোগ করুন</string>
     <string name="edit_asset">অ্যাসেট সম্পাদনা</string>
     <string name="save">সংরক্ষণ</string>
@@ -48,7 +60,8 @@
     <string name="share_summary_short">সারাংশ</string>
     <string name="share_csv_short">CSV</string>
     <string name="share_png_short">PNG</string>
-    <string name="share_json_short">JSON</string>
+    <string name="share_json_short">Save</string>
+    <string name="share_json_for_desktop">ডেস্কটপে সেভ</string>
     <string name="share_more">আরও…</string>
     <string name="export_processing_json">Workspace JSON প্রস্তুত হচ্ছে…</string>
     <string name="open_workspace">খুলুন</string>
@@ -68,8 +81,8 @@
     <string name="dt_capacity">DT capacity (kVA)</string>
     <string name="stay_type">Stay type</string>
     <string name="earthing_type">Earthing type</string>
-    <string name="lineman_name">লাইনম্যানের নাম</string>
-    <string name="lineman_mobile">মোবাইল</string>
+    <string name="lineman_name">সার্ভেয়ারের নাম</string>
+    <string name="lineman_mobile">সার্ভেয়ারের মোবাইল</string>
     <string name="survey_name">সার্ভের নাম</string>
     <string name="connect_mode">সংযোগ</string>
     <string name="add_mode">যোগ</string>
@@ -92,7 +105,9 @@
     <string name="legend">Legend</string>
     <string name="new_survey">নতুন সার্ভে</string>
     <string name="continue_draft">খসড়া চালিয়ে যান</string>
-    <string name="geographic_sld">Printable SLD</string>
+    <string name="geographic_sld">সার্ভে প্রিভিউ</string>
+    <string name="save_requires_surveyor">সেভ করতে সার্ভেয়ারের নাম ও মোবাইল লিখুন</string>
+    <string name="preview_low_memory">মেমোরি কম — প্রিভিউ দেখানো যায়নি</string>
     <string name="sld_map_description">রাস্তা, ল্যান্ডমার্ক, পোলের অবস্থান ও পরিমাপিত span</string>
     <string name="sld_map_summary">%1$d assets · %2$d spans · road/landmark basemap</string>
     <string name="voltage_33kv">33kV</string>
@@ -107,7 +122,7 @@
     <string name="more_details">আরও বিবরণ</string>
     <string name="hide_details">বিবরণ লুকান</string>
     <string name="save_to_my_sld">My Maps-এ সংরক্ষণ</string>
-    <string name="save_workspace_title">সম্পাদনযোগ্য SLD workspace সংরক্ষণ</string>
+    <string name="save_workspace_title">ম্যাপ সেভ করুন</string>
     <string name="workspace_name_hint">ঐচ্ছিক নাম</string>
     <string name="my_sld">My Maps</string>
     <string name="my_maps">My Maps</string>
@@ -135,6 +150,9 @@
     <string name="language_english">English</string>
     <string name="language_bangla">বাংলা</string>
     <string name="language_hindi">हिन्दी</string>
+    <string name="language_english_short">EN</string>
+    <string name="language_bangla_short">বাং</string>
+    <string name="language_hindi_short">हिं</string>
     <string name="language_applied">ভাষা আপডেট হয়েছে</string>
     <string name="clear_drawing">অঙ্কন মুছুন</string>
     <string name="clear_drawing_confirm">এই অঙ্কন থেকে সব পোল ও লাইন মুছে ফেলবেন? এটি পূর্বাবস্থায় ফেরানো যাবে না।</string>
@@ -226,7 +244,8 @@
     <string name="preset_summary_hint">সংরক্ষিত ডিফল্ট দিয়ে নতুন সিরিজ রাখে</string>
     <string name="change_details">বিবরণ কাস্টমাইজ…</string>
     <string name="preset_saved_toast">Preset সফলভাবে সংরক্ষিত</string>
-    <string name="share_workspace_json">Workspace (.json) শেয়ার করুন</string>
+    <string name="share_workspace_json">ডেস্কটপ এডিটরে সেভ করুন</string>
+    <string name="share_workspace_json_caption">ডেস্কটপ এডিটরের জন্য SLM ম্যাপ ফাইল: %1$s</string>
     <string name="export_options_title">আরও শেয়ার অপশন</string>
     <string name="export_option_png">PNG — দ্রুত প্রিভিউ ছবি</string>
     <string name="export_option_gps_csv">CSV — সব GPS point ও পোল নম্বর</string>
@@ -234,5 +253,5 @@
     <string name="export_option_workspace">Workspace JSON — Desktop Editor-এর জন্য</string>
     <string name="export_processing_png">PNG প্রস্তুত হচ্ছে…</string>
     <string name="export_processing_csv">GPS CSV প্রস্তুত হচ্ছে…</string>
-    <string name="export_desktop_hint">প্রিন্ট-কোয়ালিটি CAD শিট: Desktop Editor ব্যবহার করুন।</string>
+    <string name="export_desktop_hint">প্রিন্ট-কোয়ালিটি ম্যাপ: Desktop Editor-এ তৈরি করুন।</string>
 </resources>

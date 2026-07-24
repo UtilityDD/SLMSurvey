@@ -37,11 +37,17 @@ object SurveyMetrics {
         val counts = linkedMapOf<PoleStructure, Int>()
         PoleStructure.entries.forEach { counts[it] = 0 }
         survey.assets.forEach { asset ->
-            val structure = asset.poleStructure ?: PoleStructure.P1
+            val structure = when {
+                asset.poleStructure != null -> asset.poleStructure!!
+                else -> PoleStructure.P1
+            }
             counts[structure] = (counts[structure] ?: 0) + 1
         }
         return counts.filterValues { it > 0 }
     }
+
+    fun extraPoleCount(survey: Survey): Int =
+        survey.assets.count { it.poleStructure == PoleStructure.P1N }
 
     fun shouldShowCoordinates(
         asset: SurveyAsset,

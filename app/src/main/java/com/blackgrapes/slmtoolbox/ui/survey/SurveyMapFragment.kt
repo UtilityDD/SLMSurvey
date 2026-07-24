@@ -20,7 +20,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ProgressBar
@@ -50,7 +49,6 @@ import com.blackgrapes.slmtoolbox.license.LicenseApi
 import com.blackgrapes.slmtoolbox.license.LicenseConfig
 import com.blackgrapes.slmtoolbox.license.LicensePreferences
 import com.blackgrapes.slmtoolbox.map.MapStyleConfig
-import com.blackgrapes.slmtoolbox.ui.settings.PresetSettingsDialog
 import com.blackgrapes.slmtoolbox.ui.map.SurveyMapRenderer
 import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.location.LocationRequest
@@ -72,8 +70,10 @@ import org.maplibre.android.annotations.Marker
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.geometry.LatLngBounds
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
+import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.AccuracyGrade
 import com.blackgrapes.slmtoolbox.domain.EnglishNumbers
 import com.blackgrapes.slmtoolbox.domain.SiteVerification
@@ -97,6 +97,13 @@ class SurveyMapFragment : Fragment() {
     private val recentFixes = ArrayDeque<Location>(12)
     private var renderJob: Job? = null
     private var cameraMoving = false
+    /** Keep map centered on GPS while walking in the field. */
+    private var gpsFollowEnabled = true
+    /** User dragged the map — pause follow until they tap My location. */
+    private var followPausedByUser = false
+    /** Where + places poles: live GPS or map-center crosshair. */
+    private var dropMode: DropMode = DropMode.GPS
+    private var programmaticCameraMove = false
     private var lastRenderedSurveyId: Long? = null
     private var lastRenderedUpdatedAt: Long = -1L
     private var lastRenderedSelectedId: Long? = null
@@ -159,14 +166,29 @@ class SurveyMapFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.mapView.onCreate(savedInstanceState)
         viewModel.ensureDraft()
+        // Opening a saved workspace: keep GPS from stealing the camera before poles are framed.
+        // After Save, pending GPS recenter wins — go straight to current location for next survey.
+        if (viewModel.hasPendingGpsRecenter()) {
+            followPausedByUser = false
+            gpsFollowEnabled = true
+        } else if (viewModel.hasPendingWorkspaceFrame()) {
+            followPausedByUser = true
+        }
 
         binding.mapView.getMapAsync { mapLibreMap ->
             map = mapLibreMap
             mapLibreMap.uiSettings.isAttributionEnabled = true
             mapLibreMap.setStyle(Style.Builder().fromUri(MapStyleConfig.STYLE_URL)) {
-        styleReady = true
+                styleReady = true
                 requestLocationOrFallback()
                 scheduleRender()
+                // Opened from My Maps while the map view was destroyed — frame once style is ready.
+                val survey = viewModel.survey.value
+                if (survey != null && viewModel.hasPendingWorkspaceFrame() && frameOpenedWorkspace(survey)) {
+                    viewModel.consumePendingWorkspaceFrame()
+                }
+                applyPendingGpsRecenterIfNeeded()
+                updateMyLocationMarker()
                 if (_binding != null) {
                     binding.tvGpsAccuracy.text = getString(R.string.gps_accuracy_unknown)
                     setGpsWarmingHint(true)
@@ -186,19 +208,55 @@ class SurveyMapFragment : Fragment() {
                 updateDynamicSpanHint()
                 updateCoordinateChip()
             }
+            mapLibreMap.addOnCameraMoveStartedListener { reason ->
+                if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    // Manual drag/zoom — pause follow; switch to map-drop so crosshair aiming works.
+                    followPausedByUser = true
+                    if (dropMode != DropMode.MAP) {
+                        dropMode = DropMode.MAP
+                        binding.tgDropMode.check(R.id.btnDropMap)
+                        updateDropModeHint()
+                    }
+                }
+            }
             mapLibreMap.addOnCameraIdleListener {
                 cameraMoving = false
+                programmaticCameraMove = false
             }
             // Show initial coordinates as soon as the map is ready
             updateCoordinateChip()
         }
 
-        binding.btnRecenter.setOnClickListener { requestLocationOrFallback() }
+        binding.btnRecenter.setOnClickListener {
+            // Resume walking follow and snap to GPS.
+            followPausedByUser = false
+            gpsFollowEnabled = true
+            dropMode = DropMode.GPS
+            binding.tgDropMode.check(R.id.btnDropGps)
+            updateDropModeHint()
+            requestLocationOrFallback()
+            Toast.makeText(requireContext(), R.string.gps_follow_resumed, Toast.LENGTH_SHORT).show()
+        }
+        binding.tgDropMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (!isChecked) return@addOnButtonCheckedListener
+            dropMode = if (checkedId == R.id.btnDropMap) DropMode.MAP else DropMode.GPS
+            if (dropMode == DropMode.MAP) {
+                followPausedByUser = true
+                Toast.makeText(requireContext(), R.string.drop_mode_map_toast, Toast.LENGTH_SHORT).show()
+            } else {
+                followPausedByUser = false
+                gpsFollowEnabled = true
+                requestLocationOrFallback()
+                Toast.makeText(requireContext(), R.string.drop_mode_gps_toast, Toast.LENGTH_SHORT).show()
+            }
+            updateDropModeHint()
+        }
+        updateDropModeHint()
         binding.btnUndo.setOnClickListener { viewModel.undo() }
         binding.btnClearDrawing.setOnClickListener { confirmClearDrawing() }
         binding.btnQuickDrop.setOnClickListener { performQuickDrop() }
         binding.btnPresetSettings.setOnClickListener {
-            PresetSettingsDialog().show(childFragmentManager, PresetSettingsDialog.TAG)
+            findNavController().navigate(R.id.action_survey_to_preset_settings)
         }
         binding.satelliteChip.setOnClickListener {
             dismissSatWarmPopup()
@@ -228,6 +286,10 @@ class SurveyMapFragment : Fragment() {
                         binding.liveSiteBanner.isVisible =
                             survey.assets.isNotEmpty() && !survey.isLiveAtSite
                         scheduleRender()
+                        if (viewModel.hasPendingWorkspaceFrame() && frameOpenedWorkspace(survey)) {
+                            viewModel.consumePendingWorkspaceFrame()
+                        }
+                        applyPendingGpsRecenterIfNeeded()
                         updateDynamicSpanHint()
                     }
                 }
@@ -335,7 +397,13 @@ class SurveyMapFragment : Fragment() {
             return
         }
         val tip = viewModel.selectedTapPole() ?: viewModel.activeOpenTip()
-        val wizard = SurveyBubbleWizard.forContinue(lat, lng, series, tip?.id)
+        val wizard = SurveyBubbleWizard.forContinue(
+            lat,
+            lng,
+            series,
+            tip?.id,
+            tipStructure = tip?.poleStructure
+        )
         wizard.onPlace = { draft -> placeWithEvidence(draft) }
         wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
     }
@@ -397,7 +465,29 @@ class SurveyMapFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
             val evidence = captureEvidence(draft.latitude, draft.longitude)
-            val grade = SiteVerification.accuracyGrade(evidence.deviceAccuracyM)
+            // GPS mode: snap standing poles to live fix. Map mode: keep crosshair coords.
+            val placeDraft =
+                if (dropMode == DropMode.GPS &&
+                    draft.splitConnectionId == null &&
+                    evidence.deviceLatitude != null &&
+                    evidence.deviceLongitude != null
+                ) {
+                    draft.copy(
+                        latitude = evidence.deviceLatitude,
+                        longitude = evidence.deviceLongitude
+                    )
+                } else {
+                    draft
+                }
+            val placeEvidence =
+                if (placeDraft.latitude == evidence.deviceLatitude &&
+                    placeDraft.longitude == evidence.deviceLongitude
+                ) {
+                    evidence.copy(distanceFromDeviceM = 0f)
+                } else {
+                    evidence
+                }
+            val grade = SiteVerification.accuracyGrade(placeEvidence.deviceAccuracyM)
             if (grade == AccuracyGrade.POOR || grade == AccuracyGrade.UNKNOWN) {
                 Toast.makeText(
                     requireContext(),
@@ -405,8 +495,9 @@ class SurveyMapFragment : Fragment() {
                     Toast.LENGTH_LONG
                 ).show()
             }
-            viewModel.placePole(draft, evidence)
+            viewModel.placePole(placeDraft, placeEvidence)
             updateDynamicSpanHint()
+            ensureMyLocationMarker(forceRecreate = true)
             if (viewModel.hasPendingProposedBranch()) {
                 Toast.makeText(
                     requireContext(),
@@ -608,31 +699,19 @@ class SurveyMapFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val suggestedName = WorkspaceNameResolver.suggest(requireContext(), survey)
             if (!isAdded) return@launch
-            val input = EditText(requireContext()).apply {
-                hint = getString(R.string.workspace_name_hint)
-                setText(suggestedName)
-                selectAll()
-                setPadding(48, 20, 48, 20)
-                isSingleLine = true
-            }
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.save_workspace_title)
-                .setView(input)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.save) { _, _ ->
-                    val name = input.text?.toString()?.trim().orEmpty().ifBlank { suggestedName }
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        viewModel.saveWorkspaceAndStartNew(name)
-                        if (isAdded) {
-                            Toast.makeText(
-                                requireContext(),
-                                R.string.sld_saved_new_started,
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
+            SaveWorkspaceDialog.show(this@SurveyMapFragment, survey, suggestedName) { name, surveyor, mobile ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.updateMeta(title = name, linemanName = surveyor, linemanMobile = mobile)
+                    val replaced = viewModel.saveWorkspaceAndStartNew(name)
+                    if (isAdded) {
+                        Toast.makeText(
+                            requireContext(),
+                            if (replaced) R.string.workspace_replaced else R.string.workspace_created,
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
-                .show()
+            }
         }
     }
 
@@ -657,7 +736,7 @@ class SurveyMapFragment : Fragment() {
         val tap = viewModel.selectedTapPole()
         val series = viewModel.activeSeriesConfig()
         val tip = tap ?: viewModel.activeOpenTip()
-        val centerLatLng = map?.cameraPosition?.target
+        val centerLatLng = surveyDropLatLng() ?: map?.cameraPosition?.target
         
         val isIdle = (series == null && tap == null)
         var detectedTapPole: SurveyAsset? = null
@@ -710,7 +789,10 @@ class SurveyMapFragment : Fragment() {
             tap != null -> EnglishNumbers.string(requireContext(), R.string.status_tap_ready, tap.sequence)
             series != null -> getString(R.string.status_series_open, series.voltage.label)
             !gpsReady -> getString(R.string.gps_still_off)
-            else -> getString(R.string.status_idle)
+            else -> getString(
+                if (dropMode == DropMode.MAP) R.string.drop_mode_map_hint
+                else R.string.drop_mode_gps_hint
+            )
         }
         
         if (tip != null && (series != null || tap != null) && centerLatLng != null) {
@@ -837,6 +919,19 @@ class SurveyMapFragment : Fragment() {
         }
     }
 
+    /**
+     * MapLibre annotations die with the MapView. Clear caches so we never skip
+     * a redraw or update a dead "my location" marker after navigating back.
+     */
+    private fun invalidateAnnotationState() {
+        myLocationMarker = null
+        assetMarkers = emptyMap()
+        lastRenderedSurveyId = null
+        lastRenderedUpdatedAt = -1L
+        lastRenderedSelectedId = null
+        lastRenderedSnappedId = null
+    }
+
     private fun renderCurrentSurvey() {
         val mapLibreMap = map ?: return
         val survey = viewModel.survey.value ?: return
@@ -852,9 +947,12 @@ class SurveyMapFragment : Fragment() {
             snappedId == lastRenderedSnappedId &&
             assetMarkers.isNotEmpty()
         ) {
+            // Still ensure GPS dot survived (map.clear races / dialog overlays).
+            ensureMyLocationMarker()
             return
         }
 
+        // map.clear() inside render wipes the GPS annotation — always recreate after.
         myLocationMarker = null
         assetMarkers = SurveyMapRenderer.render(
             context = requireContext(),
@@ -868,7 +966,28 @@ class SurveyMapFragment : Fragment() {
         lastRenderedUpdatedAt = survey.updatedAt
         lastRenderedSelectedId = selectedId
         lastRenderedSnappedId = snappedId
-        updateMyLocationMarker()
+        ensureMyLocationMarker(forceRecreate = true)
+    }
+
+    /** When opening a saved map, frame poles so they are visible (not off-screen at GPS). */
+    private fun frameOpenedWorkspace(survey: Survey): Boolean {
+        if (!styleReady || map == null) return false
+        if (survey.assets.isEmpty()) return true
+        followPausedByUser = true
+        val builder = LatLngBounds.Builder()
+        survey.assets.forEach { builder.include(LatLng(it.latitude, it.longitude)) }
+        val padding = (56 * resources.displayMetrics.density).toInt()
+        programmaticCameraMove = true
+        try {
+            map?.animateCamera(
+                CameraUpdateFactory.newLatLngBounds(builder.build(), padding),
+                700
+            )
+        } catch (_: Exception) {
+            val first = survey.assets.first()
+            moveCamera(first.latitude, first.longitude, animate = true)
+        }
+        return true
     }
 
     private fun requestLocationOrFallback() {
@@ -980,45 +1099,109 @@ class SurveyMapFragment : Fragment() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun centerOnCurrentLocation() {
+    private fun centerOnCurrentLocation(force: Boolean = false) {
         val client = LocationServices.getFusedLocationProviderClient(requireContext())
         client.lastLocation.addOnSuccessListener { location ->
             if (location != null) {
                 lastDeviceLocation = location
-                moveCamera(location.latitude, location.longitude)
+                rememberFix(location)
+                updateMyLocationMarker()
+                // Don't yank camera away from a workspace we just opened / user panned.
+                if (force || !followPausedByUser) {
+                    moveCamera(location.latitude, location.longitude, animate = true)
+                }
             } else {
                 val token = CancellationTokenSource()
                 client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token)
                     .addOnSuccessListener { current ->
                         if (current != null) {
                             lastDeviceLocation = current
-                            moveCamera(current.latitude, current.longitude)
+                            rememberFix(current)
+                            updateMyLocationMarker()
+                            if (force || !followPausedByUser) {
+                                moveCamera(current.latitude, current.longitude, animate = true)
+                            }
                         } else {
                             Toast.makeText(
                                 requireContext(),
                                 R.string.location_unavailable,
                                 Toast.LENGTH_SHORT
                             ).show()
-                            moveCamera(
-                                MapStyleConfig.DEFAULT_LATITUDE,
-                                MapStyleConfig.DEFAULT_LONGITUDE
-                            )
+                            if (force || !followPausedByUser) {
+                                moveCamera(
+                                    MapStyleConfig.DEFAULT_LATITUDE,
+                                    MapStyleConfig.DEFAULT_LONGITUDE,
+                                    animate = true
+                                )
+                            }
                         }
                     }
             }
         }
     }
 
-    private fun moveCamera(lat: Double, lng: Double) {
+    private fun moveCamera(lat: Double, lng: Double, animate: Boolean = true) {
         val mapLibreMap = map ?: return
-        mapLibreMap.cameraPosition = CameraPosition.Builder()
-            .target(LatLng(lat, lng))
-            .zoom(MapStyleConfig.FIELD_ZOOM)
-            .build()
-        mapLibreMap.animateCamera(
-            CameraUpdateFactory.newLatLngZoom(LatLng(lat, lng), MapStyleConfig.FIELD_ZOOM)
+        programmaticCameraMove = true
+        val update = CameraUpdateFactory.newLatLngZoom(LatLng(lat, lng), MapStyleConfig.FIELD_ZOOM)
+        if (animate) {
+            mapLibreMap.animateCamera(update, 600)
+        } else {
+            mapLibreMap.moveCamera(update)
+        }
+    }
+
+    /** Pan only (keep current zoom) while walking — smoother than re-zooming every fix. */
+    private fun followCameraToGps(location: Location) {
+        if (!gpsFollowEnabled || followPausedByUser) return
+        if (!styleReady) return
+        val mapLibreMap = map ?: return
+        val target = mapLibreMap.cameraPosition.target ?: return
+        val delta = FloatArray(1)
+        Location.distanceBetween(
+            target.latitude,
+            target.longitude,
+            location.latitude,
+            location.longitude,
+            delta
+        )
+        // Ignore tiny GPS jitter; move when you've walked ~1.5 m.
+        if (delta[0] < 1.5f) {
+            updateMyLocationMarker()
+            return
+        }
+        programmaticCameraMove = true
+        mapLibreMap.easeCamera(
+            CameraUpdateFactory.newLatLng(LatLng(location.latitude, location.longitude)),
+            350
         )
     }
+
+    /**
+     * Drop / survey point.
+     * GPS mode: live position. Map mode: crosshair (map center).
+     */
+    private fun surveyDropLatLng(): LatLng? {
+        if (dropMode == DropMode.MAP) {
+            return map?.cameraPosition?.target
+        }
+        val loc = lastDeviceLocation
+        val now = System.currentTimeMillis()
+        if (loc != null && loc.time > 0L && now - loc.time <= 8_000L) {
+            return LatLng(loc.latitude, loc.longitude)
+        }
+        return map?.cameraPosition?.target
+    }
+
+    private fun updateDropModeHint() {
+        if (_binding == null) return
+        binding.hintText.setText(
+            if (dropMode == DropMode.MAP) R.string.drop_mode_map_hint
+            else R.string.drop_mode_gps_hint
+        )
+    }
+
+    private enum class DropMode { GPS, MAP }
 
     override fun onStart() {
         super.onStart()
@@ -1030,10 +1213,27 @@ class SurveyMapFragment : Fragment() {
         binding.mapView.onResume()
         enforceLicenseGate()
         if (styleReady) {
-            requestLocationOrFallback()
+            // Restore blue dot immediately from last known fix while fused GPS restarts.
+            ensureMyLocationMarker()
+            if (viewModel.hasPendingGpsRecenter()) {
+                applyPendingGpsRecenterIfNeeded()
+            } else {
+                requestLocationOrFallback()
+            }
             startLocationUpdates()
         }
         registerGnssCallback()
+    }
+
+    /** After Save → new draft: resume GPS follow and center on current location. */
+    private fun applyPendingGpsRecenterIfNeeded() {
+        if (!viewModel.hasPendingGpsRecenter()) return
+        if (!styleReady || map == null) return
+        viewModel.consumePendingGpsRecenter()
+        followPausedByUser = false
+        gpsFollowEnabled = true
+        centerOnCurrentLocation(force = true)
+        if (gpsReady) startLocationUpdates()
     }
 
     /** Quiet server refresh; if rental is locked, leave the map. */
@@ -1047,7 +1247,20 @@ class SurveyMapFragment : Fragment() {
             if (!isAdded || _binding == null) return@launch
             updateLicenseBadge()
             if (access is LicenseAccess.Locked) {
-                findNavController().navigate(R.id.action_survey_to_license)
+                val nav = try {
+                    findNavController()
+                } catch (_: Exception) {
+                    return@launch
+                }
+                if (nav.currentDestination?.id == R.id.surveyMapFragment &&
+                    nav.currentDestination?.getAction(R.id.action_survey_to_license) != null
+                ) {
+                    try {
+                        nav.navigate(R.id.action_survey_to_license)
+                    } catch (_: IllegalArgumentException) {
+                        // Already left survey or action unavailable
+                    }
+                }
             }
         }
     }
@@ -1129,10 +1342,13 @@ class SurveyMapFragment : Fragment() {
         dismissSatWarmPopup()
         satBottomSheet?.dismiss()
         satBottomSheet = null
+        stopLocationUpdates()
         binding.mapView.onDestroy()
         _binding = null
         map = null
         styleReady = false
+        // Annotations are tied to the destroyed MapView — must not reuse them.
+        invalidateAnnotationState()
         super.onDestroyView()
     }
 
@@ -1154,31 +1370,44 @@ class SurveyMapFragment : Fragment() {
 
     private fun performQuickDrop() {
         viewLifecycleOwner.lifecycleScope.launch {
-            viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
-            val location = collectBestGpsFix()
-            if (location == null) {
-                viewModel.setProcessing(false)
-                Toast.makeText(requireContext(), R.string.quick_drop_error_no_location, Toast.LENGTH_LONG).show()
-                return@launch
+            if (dropMode == DropMode.GPS) {
+                viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
+                val location = collectBestGpsFix()
+                if (location == null) {
+                    viewModel.setProcessing(false)
+                    Toast.makeText(requireContext(), R.string.quick_drop_error_no_location, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                lastDeviceLocation = location
+                rememberFix(location)
+                updateGpsAccuracyUi(location)
+                followPausedByUser = false
+                followCameraToGps(location)
+            } else {
+                // Map / crosshair mode: keep aimed camera; refresh GPS evidence if available.
+                viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
+                val location = lastDeviceLocation ?: fetchFreshLocation()
+                if (location != null) {
+                    lastDeviceLocation = location
+                    rememberFix(location)
+                    updateGpsAccuracyUi(location)
+                }
             }
-            lastDeviceLocation = location
-            rememberFix(location)
-            updateGpsAccuracyUi(location)
-            
-            val centerLatLng = map?.cameraPosition?.target
-            if (centerLatLng == null) {
+
+            val dropLatLng = surveyDropLatLng()
+            if (dropLatLng == null) {
                 viewModel.setProcessing(false)
                 Toast.makeText(requireContext(), "Map is not ready yet", Toast.LENGTH_SHORT).show()
                 return@launch
             }
-            
+
             viewModel.setProcessing(false)
 
             // After inserting on an Existing line: next + starts Proposed branch from the joint.
             if (viewModel.hasPendingProposedBranch()) {
                 val source = viewModel.consumePendingProposedBranch()
                 if (source != null) {
-                    openTappingBubble(centerLatLng.latitude, centerLatLng.longitude, source)
+                    openTappingBubble(dropLatLng.latitude, dropLatLng.longitude, source)
                     return@launch
                 }
             }
@@ -1186,20 +1415,20 @@ class SurveyMapFragment : Fragment() {
             val series = viewModel.activeSeriesConfig()
             val tap = viewModel.selectedTapPole()
             val isIdle = (series == null && tap == null)
-            
+
             var nearestPole: SurveyAsset? = null
             var nearestLine: SurveyConnection? = null
             var lineCandidates: List<SurveyAsset> = emptyList()
-            
+
             if (isIdle) {
-                val pole = nearestConnectablePole(centerLatLng.latitude, centerLatLng.longitude)
+                val pole = nearestConnectablePole(dropLatLng.latitude, dropLatLng.longitude)
                 if (pole != null) {
                     val results = FloatArray(1)
                     android.location.Location.distanceBetween(
                         pole.latitude,
                         pole.longitude,
-                        centerLatLng.latitude,
-                        centerLatLng.longitude,
+                        dropLatLng.latitude,
+                        dropLatLng.longitude,
                         results
                     )
                     val distance = results[0]
@@ -1207,8 +1436,8 @@ class SurveyMapFragment : Fragment() {
                         nearestPole = pole
                     }
                 }
-                
-                val nearLine = nearestCompletedConnection(centerLatLng.latitude, centerLatLng.longitude)
+
+                val nearLine = nearestCompletedConnection(dropLatLng.latitude, dropLatLng.longitude)
                 if (nearLine != null) {
                     val survey = viewModel.survey.value
                     if (survey != null) {
@@ -1221,16 +1450,21 @@ class SurveyMapFragment : Fragment() {
                     }
                 }
             }
-            
+
             if (nearestPole != null || nearestLine != null) {
-                showConsolidatedActions(nearestPole, nearestLine, lineCandidates, LatLng(centerLatLng.latitude, centerLatLng.longitude))
+                showConsolidatedActions(
+                    nearestPole,
+                    nearestLine,
+                    lineCandidates,
+                    LatLng(dropLatLng.latitude, dropLatLng.longitude)
+                )
                 return@launch
             }
-            
+
             if (series != null) {
-                openContinueBubble(centerLatLng.latitude, centerLatLng.longitude)
+                openContinueBubble(dropLatLng.latitude, dropLatLng.longitude)
             } else {
-                openNewNetworkBubble(centerLatLng.latitude, centerLatLng.longitude)
+                openNewNetworkBubble(dropLatLng.latitude, dropLatLng.longitude)
             }
         }
     }
@@ -1583,7 +1817,9 @@ class SurveyMapFragment : Fragment() {
             lastDeviceLocation = location
             rememberFix(location)
             updateGpsAccuracyUi(location)
+            followCameraToGps(location)
             updateMyLocationMarker()
+            updateCoordinateChip()
         }
     }
 
@@ -1689,13 +1925,22 @@ class SurveyMapFragment : Fragment() {
     private fun startLocationUpdates() {
         if (!gpsReady) return
         val client = LocationServices.getFusedLocationProviderClient(requireContext())
-        // Faster updates while surveying; internet assists A-GPS / fused location.
+        // Avoid stacking callbacks across pause/resume navigations.
+        client.removeLocationUpdates(locationCallback)
+        // Deliver fixes promptly after returning to the map (don't wait forever for "accurate").
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_500L)
             .setMinUpdateIntervalMillis(750L)
             .setMinUpdateDistanceMeters(0.5f)
-            .setWaitForAccurateLocation(true)
+            .setWaitForAccurateLocation(false)
             .build()
         client.requestLocationUpdates(request, locationCallback, android.os.Looper.getMainLooper())
+        // Seed the blue dot immediately from last known fix while updates start.
+        client.lastLocation.addOnSuccessListener { location ->
+            if (location != null && isAdded) {
+                lastDeviceLocation = location
+                ensureMyLocationMarker()
+            }
+        }
     }
 
     private fun stopLocationUpdates() {
@@ -1703,18 +1948,26 @@ class SurveyMapFragment : Fragment() {
         client.removeLocationUpdates(locationCallback)
     }
 
+    private fun ensureMyLocationMarker(forceRecreate: Boolean = false) {
+        if (forceRecreate) myLocationMarker = null
+        updateMyLocationMarker()
+    }
+
     private fun updateMyLocationMarker() {
         val mapLibreMap = map ?: return
+        if (!styleReady) return
         val location = lastDeviceLocation ?: return
         val context = context ?: return
         val iconFactory = IconFactory.getInstance(context)
-        
+
         val blinkOn = viewModel.blinkState.value
         val bitmap = SurveyMapRenderer.createMyLocationMarkerBitmap(context, blinkOn)
         val icon = iconFactory.fromBitmap(bitmap)
-        
+
         val marker = myLocationMarker
-        if (marker == null) {
+        // After MapView recreate / map.clear(), the old Marker instance is dead.
+        val stillOnMap = marker != null && mapLibreMap.markers.contains(marker)
+        if (!stillOnMap) {
             myLocationMarker = mapLibreMap.addMarker(
                 org.maplibre.android.annotations.MarkerOptions()
                     .position(LatLng(location.latitude, location.longitude))
@@ -1722,7 +1975,7 @@ class SurveyMapFragment : Fragment() {
                     .icon(icon)
             )
         } else {
-            marker.position = LatLng(location.latitude, location.longitude)
+            marker!!.position = LatLng(location.latitude, location.longitude)
             marker.setIcon(icon)
         }
     }

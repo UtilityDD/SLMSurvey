@@ -2,28 +2,16 @@ package com.blackgrapes.slmtoolbox.ui.export
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.pdf.PdfDocument
 import android.util.Log
 import com.blackgrapes.slmtoolbox.data.entity.SeriesMetaEntity
 import com.blackgrapes.slmtoolbox.domain.GisAccuracyReport
 import com.blackgrapes.slmtoolbox.domain.PrintableSldBuilder
 import com.blackgrapes.slmtoolbox.domain.model.Survey
-import com.blackgrapes.slmtoolbox.domain.model.SurveyStamp
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-data class ExportResult(
-    val pngFile: File,
-    val pdfFile: File
-)
-
-data class GisDataSheetExport(
-    val pdfFile: File,
-    val csvFile: File
-)
 
 object ExportHelper {
     private const val TAG = "ExportHelper"
@@ -74,128 +62,6 @@ object ExportHelper {
             csvFile
         } catch (e: Exception) {
             Log.e(TAG, "GPS CSV export failed", e)
-            null
-        }
-    }
-
-    fun exportPrintableSld(
-        context: Context,
-        survey: Survey,
-        stamp: SurveyStamp,
-        seriesMeta: List<SeriesMetaEntity> = emptyList()
-    ): ExportResult? {
-        return try {
-            val preset = com.blackgrapes.slmtoolbox.domain.PresetPreferences.get(context)
-            val sldDoc = PrintableSldBuilder.build(
-                survey,
-                seriesMeta,
-                displayUnit = preset.displayUnit,
-                displayDecimals = preset.displayDecimals
-            )
-
-            val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(stamp.timestamp))
-            val baseName = "sld_print_${survey.id}_$stampSuffix"
-            val dir = exportDirectory(context)
-            val pngFile = File(dir, "$baseName.png")
-            val pdfFile = File(dir, "$baseName.pdf")
-
-            val pdfDocument = PdfDocument()
-            var pageIndex = 0
-
-            val scale = 4f
-            sldDoc.pages.forEach { pageData ->
-                val bitmap = PrintableSldRenderer.renderPage(pageData, scale)
-
-                if (pageIndex == 0) {
-                    FileOutputStream(pngFile).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                }
-
-                val pageInfo = PdfDocument.PageInfo.Builder(
-                    PrintableSldBuilder.PAGE_WIDTH.toInt(),
-                    PrintableSldBuilder.PAGE_HEIGHT.toInt(),
-                    pageIndex + 1
-                ).create()
-
-                val page = pdfDocument.startPage(pageInfo)
-                val pdfCanvas = page.canvas
-                pdfCanvas.save()
-                pdfCanvas.scale(1f / scale, 1f / scale)
-                pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
-                pdfCanvas.restore()
-                pdfDocument.finishPage(page)
-                bitmap.recycle()
-                pageIndex++
-            }
-
-            // Appendix: GIS accuracy data sheet pages
-            val dataSheet = GisAccuracyReport.build(survey)
-            val sheetScale = 2f
-            GisDataSheetRenderer.renderPages(dataSheet, sheetScale).forEach { bitmap ->
-                val pageInfo = PdfDocument.PageInfo.Builder(
-                    GisDataSheetRenderer.PAGE_WIDTH.toInt(),
-                    GisDataSheetRenderer.PAGE_HEIGHT.toInt(),
-                    pageIndex + 1
-                ).create()
-                val page = pdfDocument.startPage(pageInfo)
-                val pdfCanvas = page.canvas
-                pdfCanvas.save()
-                pdfCanvas.scale(1f / sheetScale, 1f / sheetScale)
-                pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
-                pdfCanvas.restore()
-                pdfDocument.finishPage(page)
-                bitmap.recycle()
-                pageIndex++
-            }
-
-            FileOutputStream(pdfFile).use { pdfDocument.writeTo(it) }
-            pdfDocument.close()
-
-            ExportResult(pngFile, pdfFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "Export failed", e)
-            null
-        }
-    }
-
-    fun exportGisDataSheet(context: Context, survey: Survey): GisDataSheetExport? {
-        return try {
-            val sheet = GisAccuracyReport.build(survey)
-            val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
-                .format(Date(sheet.generatedAt))
-            val baseName = "gis_datasheet_${survey.id}_$stampSuffix"
-            val dir = exportDirectory(context)
-            val pdfFile = File(dir, "$baseName.pdf")
-            val csvFile = File(dir, "$baseName.csv")
-
-            val pdfDocument = PdfDocument()
-            val scale = 2f
-            GisDataSheetRenderer.renderPages(sheet, scale).forEachIndexed { index, bitmap ->
-                val pageInfo = PdfDocument.PageInfo.Builder(
-                    GisDataSheetRenderer.PAGE_WIDTH.toInt(),
-                    GisDataSheetRenderer.PAGE_HEIGHT.toInt(),
-                    index + 1
-                ).create()
-                val page = pdfDocument.startPage(pageInfo)
-                val pdfCanvas = page.canvas
-                pdfCanvas.save()
-                pdfCanvas.scale(1f / scale, 1f / scale)
-                pdfCanvas.drawBitmap(bitmap, 0f, 0f, null)
-                pdfCanvas.restore()
-                pdfDocument.finishPage(page)
-                bitmap.recycle()
-            }
-            FileOutputStream(pdfFile).use { pdfDocument.writeTo(it) }
-            pdfDocument.close()
-
-            FileOutputStream(csvFile).use { out ->
-                out.write(GisAccuracyReport.toCsv(sheet).toByteArray(Charsets.UTF_8))
-            }
-
-            GisDataSheetExport(pdfFile, csvFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "GIS data sheet export failed", e)
             null
         }
     }

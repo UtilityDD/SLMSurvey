@@ -34,7 +34,19 @@
     <string name="license_err_generic">सक्रिय नहीं हो सका (%1$s)</string>
     <string name="survey_title">फील्ड सर्वे</string>
     <string name="save_requires_end">सेव करने से पहले कम से कम एक End पोल जोड़ें</string>
-    <string name="sld_preview">SLD</string>
+    <string name="sld_preview">प्रीव्यू</string>
+    <string name="sld_preview_title">वर्कस्पेस प्रीव्यू</string>
+    <string name="exit">बाहर जाएँ</string>
+    <string name="network_summary">नेटवर्क सारांश</string>
+    <string name="preview_empty">प्रीव्यू के लिए कोई पोल नहीं</string>
+    <string name="preview_legend_hint">ज़ूम के लिए पिंच करें · लेजेंड मैप पर है</string>
+    <string name="legend_existing_pole">मौजूदा पोल (भरा)</string>
+    <string name="legend_proposed_pole">प्रस्तावित पोल (खोखला)</string>
+    <string name="preview_summary_poles">पोल: %1$d</string>
+    <string name="preview_summary_spans">स्पैन: %1$d</string>
+    <string name="preview_summary_route">रूट: %1$s</string>
+    <string name="workspace_replaced">My Maps में मैप अपडेट हुआ</string>
+    <string name="workspace_created">My Maps में मैप सेव हुआ</string>
     <string name="add_asset">एसेट जोड़ें</string>
     <string name="edit_asset">एसेट संपादित करें</string>
     <string name="save">सेव करें</string>
@@ -48,7 +60,8 @@
     <string name="share_summary_short">सारांश</string>
     <string name="share_csv_short">CSV</string>
     <string name="share_png_short">PNG</string>
-    <string name="share_json_short">JSON</string>
+    <string name="share_json_short">Save</string>
+    <string name="share_json_for_desktop">डेस्कटॉप पर सेव</string>
     <string name="share_more">और…</string>
     <string name="export_processing_json">Workspace JSON तैयार हो रहा है…</string>
     <string name="open_workspace">खोलें</string>
@@ -68,8 +81,8 @@
     <string name="dt_capacity">DT capacity (kVA)</string>
     <string name="stay_type">Stay type</string>
     <string name="earthing_type">Earthing type</string>
-    <string name="lineman_name">लाइनमैन का नाम</string>
-    <string name="lineman_mobile">मोबाइल</string>
+    <string name="lineman_name">सर्वेयर नाम</string>
+    <string name="lineman_mobile">सर्वेयर मोबाइल</string>
     <string name="survey_name">सर्वे का नाम</string>
     <string name="connect_mode">कनेक्ट</string>
     <string name="add_mode">जोड़ें</string>
@@ -92,7 +105,9 @@
     <string name="legend">Legend</string>
     <string name="new_survey">नया सर्वे</string>
     <string name="continue_draft">ड्राफ्ट जारी रखें</string>
-    <string name="geographic_sld">Printable SLD</string>
+    <string name="geographic_sld">सर्वे प्रीव्यू</string>
+    <string name="save_requires_surveyor">सेव करने के लिए सर्वेयर नाम और मोबाइल लिखें</string>
+    <string name="preview_low_memory">मेमोरी कम — प्रीव्यू नहीं बन सका</string>
     <string name="sld_map_description">सड़कें, लैंडमार्क, पोल स्थिति और मापे गए span</string>
     <string name="sld_map_summary">%1$d assets · %2$d spans · road/landmark basemap</string>
     <string name="voltage_33kv">33kV</string>
@@ -107,7 +122,7 @@
     <string name="more_details">और विवरण</string>
     <string name="hide_details">विवरण छिपाएँ</string>
     <string name="save_to_my_sld">My Maps में सेव करें</string>
-    <string name="save_workspace_title">संपादन योग्य SLD workspace सेव करें</string>
+    <string name="save_workspace_title">मैप सेव करें</string>
     <string name="workspace_name_hint">वैकल्पिक नाम</string>
     <string name="my_sld">My Maps</string>
     <string name="my_maps">My Maps</string>
@@ -135,6 +150,9 @@
     <string name="language_english">English</string>
     <string name="language_bangla">বাংলা</string>
     <string name="language_hindi">हिन्दी</string>
+    <string name="language_english_short">EN</string>
+    <string name="language_bangla_short">বাং</string>
+    <string name="language_hindi_short">हिं</string>
     <string name="language_applied">भाषा अपडेट हो गई</string>
     <string name="clear_drawing">ड्राइंग साफ़ करें</string>
     <string name="clear_drawing_confirm">इस ड्राइंग से सभी पोल और लाइन हटाएँ? यह वापस नहीं हो सकता।</string>
@@ -226,7 +244,8 @@
     <string name="preset_summary_hint">सेव किए गए डिफ़ॉल्ट से नई सीरीज़ रखता है</string>
     <string name="change_details">विवरण कस्टमाइज़…</string>
     <string name="preset_saved_toast">Preset सफलतापूर्वक सेव</string>
-    <string name="share_workspace_json">Workspace (.json) शेयर करें</string>
+    <string name="share_workspace_json">डेस्कटॉप एडिटर में सेव करें</string>
+    <string name="share_workspace_json_caption">डेस्कटॉप एडिटर के लिए SLM मैप फ़ाइल: %1$s</string>
     <string name="export_options_title">और शेयर विकल्प</string>
     <string name="export_option_png">PNG — त्वरित प्रीव्यू छवि</string>
     <string name="export_option_gps_csv">CSV — सभी GPS point और पोल नंबर</string>
@@ -234,5 +253,5 @@
     <string name="export_option_workspace">Workspace JSON — Desktop Editor के लिए</string>
     <string name="export_processing_png">PNG तैयार हो रहा है…</string>
     <string name="export_processing_csv">GPS CSV तैयार हो रहा है…</string>
-    <string name="export_desktop_hint">प्रिंट-क्वालिटी CAD शीट: Desktop Editor उपयोग करें।</string>
+    <string name="export_desktop_hint">प्रिंट-क्वालिटी मैप: Desktop Editor पर बनाएँ।</string>
 </resources>

@@ -78,7 +78,9 @@ enum class PoleStructure(val label: String) {
     P2("2P"),
     P3("3P"),
     P4("4P"),
-    DTR("DTR");
+    DTR("DTR"),
+    /** Extra / newly added LT pole in post-exec LT conversion (separate legend count). */
+    P1N("1NP");
 
     companion object {
         fun fromLabel(value: String?): PoleStructure? {

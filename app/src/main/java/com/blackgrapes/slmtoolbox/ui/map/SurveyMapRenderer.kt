@@ -226,7 +226,8 @@ object SurveyMapRenderer {
 
         val baseColor = colorFor(asset.voltage, context)
         val isProposed = asset.status == WorkStatus.PROPOSED
-        val radius = 34f
+        val isExtra = structure == PoleStructure.P1N
+        val radius = if (isExtra) 30f else 34f
         val cx = size / 2f
         val cy = size / 2f
 
@@ -246,7 +247,26 @@ object SurveyMapRenderer {
             canvas.drawCircle(cx, cy, 48f, ring)
         }
 
-        if (isProposed) {
+        if (isExtra) {
+            // Clean diamond-ish square for Extra (1NP) poles.
+            val half = radius
+            val path = android.graphics.Path().apply {
+                moveTo(cx, cy - half)
+                lineTo(cx + half, cy)
+                lineTo(cx, cy + half)
+                lineTo(cx - half, cy)
+                close()
+            }
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.FILL
+            })
+            canvas.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = baseColor
+                style = Paint.Style.STROKE
+                strokeWidth = 6f
+            })
+        } else if (isProposed) {
             val hollowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
                 style = Paint.Style.FILL
@@ -289,9 +309,17 @@ object SurveyMapRenderer {
         }
 
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isProposed) baseColor else Color.WHITE
+            color = when {
+                isExtra -> baseColor
+                isProposed -> baseColor
+                else -> Color.WHITE
+            }
             textAlign = Paint.Align.CENTER
-            textSize = if (structure == PoleStructure.DTR) 22f else 26f
+            textSize = when (structure) {
+                PoleStructure.DTR -> 22f
+                PoleStructure.P1N -> 18f
+                else -> 26f
+            }
             isFakeBoldText = true
         }
         canvas.drawText(structure.label, cx, cy + 9f, textPaint)
@@ -382,23 +410,41 @@ object SurveyMapRenderer {
     fun createMyLocationMarkerBitmap(context: Context, isBlinking: Boolean): Bitmap {
         val key = "myloc|$isBlinking"
         markerCache.get(key)?.let { return it }
-        val size = 64
+        val size = 72
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ContextCompat.getColor(context, R.color.primary)
-            style = Paint.Style.FILL
-            alpha = if (isBlinking) 255 else 100
-        }
-        val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            style = Paint.Style.STROKE
-            strokeWidth = 3f
-        }
         val cx = size / 2f
         val cy = size / 2f
-        canvas.drawCircle(cx, cy, 18f, paint)
-        canvas.drawCircle(cx, cy, 18f, stroke)
+        // Soft halo so the dot stays visible on busy map backgrounds.
+        canvas.drawCircle(
+            cx,
+            cy,
+            if (isBlinking) 26f else 22f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.argb(if (isBlinking) 90 else 55, 21, 101, 192)
+                style = Paint.Style.FILL
+            }
+        )
+        // Always solid core — never fade out (old blink alpha made the dot look "gone").
+        canvas.drawCircle(
+            cx,
+            cy,
+            16f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = ContextCompat.getColor(context, R.color.primary)
+                style = Paint.Style.FILL
+            }
+        )
+        canvas.drawCircle(
+            cx,
+            cy,
+            16f,
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = if (isBlinking) 4.5f else 3f
+            }
+        )
         markerCache.put(key, bitmap)
         return bitmap
     }

@@ -27,6 +27,9 @@ class LicenseFragment : Fragment() {
     private var _binding: FragmentLicenseBinding? = null
     private val binding get() = _binding!!
 
+    /** Prevents double navigate (sync + coroutine) which crashes the app on open. */
+    private var navigatedToSurvey = false
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -43,7 +46,6 @@ class LicenseFragment : Fragment() {
         }
 
         refreshStatusLabel()
-        maybeEnterIfAlreadyAllowed()
 
         binding.btnActivate.setOnClickListener {
             val code = binding.etLicenseCode.text?.toString()?.trim().orEmpty()
@@ -57,26 +59,27 @@ class LicenseFragment : Fragment() {
                 when (val result = LicenseApi.activate(requireContext(), code)) {
                     is LicenseResult.Success -> showActivatedDialog()
                     is LicenseResult.Failure -> {
+                        if (_binding == null) return@launch
                         binding.tvLicenseStatus.text = errorMessage(result.code)
                         Toast.makeText(requireContext(), errorMessage(result.code), Toast.LENGTH_LONG)
                             .show()
                     }
                 }
-                setBusy(false)
+                if (_binding != null) setBusy(false)
             }
         }
 
-        // Quiet revalidate if already activated
+        // Single path: refresh once, then enter if allowed (avoids double navigate crash).
         viewLifecycleOwner.lifecycleScope.launch {
             LicenseApi.refreshIfNeeded(requireContext())
-            if (_binding == null) return@launch
+            if (!isAdded || _binding == null || navigatedToSurvey) return@launch
             refreshStatusLabel()
             maybeEnterIfAlreadyAllowed()
         }
     }
 
     private fun showActivatedDialog() {
-        if (!isAdded) return
+        if (!isAdded || navigatedToSurvey) return
         val snap = LicensePreferences.read(requireContext())
         val date = formatDate(snap.expiresAtEpochMs)
         val days = snap.daysRemaining()
@@ -99,7 +102,7 @@ class LicenseFragment : Fragment() {
             .setPositiveButton(R.string.license_continue) { _, _ -> goToSurvey() }
             .setCancelable(false)
             .show()
-        refreshStatusLabel()
+        if (_binding != null) refreshStatusLabel()
     }
 
     private fun maybeEnterIfAlreadyAllowed() {
@@ -110,8 +113,9 @@ class LicenseFragment : Fragment() {
     }
 
     private fun refreshStatusLabel() {
+        val b = _binding ?: return
         val snap = LicensePreferences.read(requireContext())
-        binding.tvLicenseStatus.text = when (val access = LicensePreferences.evaluateAccess(requireContext())) {
+        b.tvLicenseStatus.text = when (val access = LicensePreferences.evaluateAccess(requireContext())) {
             is LicenseAccess.Allowed -> {
                 val date = formatDate(access.expiresAtEpochMs)
                 val days = snap.daysRemaining()
@@ -136,14 +140,27 @@ class LicenseFragment : Fragment() {
     }
 
     private fun setBusy(busy: Boolean) {
-        binding.progressLicense.isVisible = busy
-        binding.btnActivate.isEnabled = !busy
-        binding.etLicenseCode.isEnabled = !busy
+        val b = _binding ?: return
+        b.progressLicense.isVisible = busy
+        b.btnActivate.isEnabled = !busy
+        b.etLicenseCode.isEnabled = !busy
     }
 
     private fun goToSurvey() {
-        if (!isAdded) return
-        findNavController().navigate(R.id.action_license_to_survey)
+        if (!isAdded || navigatedToSurvey) return
+        val nav = try {
+            findNavController()
+        } catch (_: Exception) {
+            return
+        }
+        if (nav.currentDestination?.id != R.id.licenseFragment) return
+        if (nav.currentDestination?.getAction(R.id.action_license_to_survey) == null) return
+        navigatedToSurvey = true
+        try {
+            nav.navigate(R.id.action_license_to_survey)
+        } catch (_: IllegalArgumentException) {
+            navigatedToSurvey = false
+        }
     }
 
     private fun formatDate(epochMs: Long): String =

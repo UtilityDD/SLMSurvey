@@ -38,7 +38,9 @@ data class PlacementDraft(
     val sourceAssetId: Long? = null,
     val splitConnectionId: Long? = null,
     val feederName: String = "",
-    val sourceSubstation: String = ""
+    val sourceSubstation: String = "",
+    val dtCapacityKva: String? = null,
+    val remarks: String? = null
 )
 
 object NetworkCatalog {
@@ -82,11 +84,14 @@ object NetworkCatalog {
     fun conductorsFor(voltage: VoltageLevel): List<String> = when (voltage) {
         VoltageLevel.KV_33 -> listOf("100", "150", "200")
         VoltageLevel.KV_11 -> listOf("30", "50", "100", "ABC")
-        VoltageLevel.LT -> listOf("30", "50", "ABC")
+        VoltageLevel.LT -> listOf("30", "50", "ABC", "PVC")
     }
 
     fun isAbcConductor(conductor: String?): Boolean =
         conductor?.equals("ABC", ignoreCase = true) == true
+
+    fun isPvcConductor(conductor: String?): Boolean =
+        conductor?.equals("PVC", ignoreCase = true) == true
 
     /** LT phase options after conductor: ABC has no phase choice; bare allows 1P/2P/3P. */
     fun ltPhasesForConductor(conductor: String?): List<PoleStructure> =
@@ -126,6 +131,7 @@ object NetworkCatalog {
     fun ltLineTag(voltage: VoltageLevel, conductor: String?, structure: PoleStructure?): String? {
         if (voltage != VoltageLevel.LT) return null
         if (isAbcConductor(conductor)) return "ABC"
+        if (isPvcConductor(conductor)) return "PVC"
         return when (structure) {
             PoleStructure.P2 -> "2Ph"
             PoleStructure.P3 -> "3Ph"

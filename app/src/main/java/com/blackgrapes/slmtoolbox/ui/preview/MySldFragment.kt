@@ -161,7 +161,7 @@ class MySldFragment : Fragment() {
                         context = requireContext(),
                         files = listOf(jsonFile),
                         title = getString(R.string.share_workspace_json),
-                        caption = "SLM Workspace JSON for Desktop Editor: ${survey.title}",
+                        caption = getString(R.string.share_workspace_json_caption, survey.title),
                         mimeType = "application/json"
                     )
                     Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
@@ -245,16 +245,15 @@ class MySldFragment : Fragment() {
 
             val survey = items[position]
             val ctx = parent.context
-            binding.tvDayLabel.text = SurveyShareSummary.formatSurveyDayKey(survey)
             binding.tvTitle.text = survey.title
-            binding.tvDate.text = SurveyShareSummary.formatSurveyDate(survey)
-            binding.tvStats.text = SurveyShareSummary.compactStats(ctx, survey)
+            binding.tvMeta.text = buildString {
+                append(SurveyShareSummary.formatSurveyDate(survey))
+                append(" · ")
+                append(SurveyShareSummary.compactStats(ctx, survey))
+            }
 
             val showWarn = survey.assets.isNotEmpty() && !survey.isLiveAtSite
             binding.tvLiveWarning.isVisible = showWarn
-            if (showWarn) {
-                binding.tvLiveWarning.text = ctx.getString(R.string.not_live_at_site)
-            }
 
             binding.btnOpen.setOnClickListener { onOpen(survey) }
             binding.btnShareSummary.setOnClickListener { onShareSummary(survey) }
@@ -295,41 +294,22 @@ class MySldFragment : Fragment() {
             val entry = items[position]
             val ctx = parent.context
             val preset = PresetPreferences.get(ctx)
-
-            binding.tvDayTitle.text = entry.displayDate
-            binding.tvWorkspaceCount.text = ctx.getString(
-                R.string.history_workspaces_count,
-                entry.surveys.size
-            )
-
-            val polesBody = buildString {
-                appendLine(ctx.getString(R.string.history_total_poles, entry.totalPoles))
-                entry.polesByType.forEach { (cat, count) ->
-                    appendLine("  $cat: $count")
-                }
-            }.trimEnd()
-            binding.tvPolesBreakdown.text = polesBody
-
-            val totalRoute = SurveyMetrics.formatDistance(
+            val route = SurveyMetrics.formatDistance(
                 entry.totalRouteM,
                 preset.displayUnit,
                 preset.displayDecimals
             )
-            val routeBody = buildString {
-                appendLine(ctx.getString(R.string.history_total_route, totalRoute))
-                entry.routeByTypeM.forEach { (cat, metres) ->
-                    appendLine(
-                        "  $cat: ${
-                            SurveyMetrics.formatDistance(
-                                metres,
-                                preset.displayUnit,
-                                preset.displayDecimals
-                            )
-                        }"
-                    )
-                }
-            }.trimEnd()
-            binding.tvRouteBreakdown.text = routeBody
+
+            binding.tvDayTitle.text = entry.displayDate
+            binding.tvDaySummary.text = ctx.getString(
+                R.string.history_day_summary,
+                entry.totalPoles,
+                route,
+                entry.surveys.size
+            )
+            binding.tvDayBreakdown.text = entry.polesByType.joinToString(" · ") { (cat, count) ->
+                "$cat $count"
+            }.ifBlank { "—" }
 
             binding.btnCopyDay.setOnClickListener { onCopy(entry) }
             binding.btnDeleteDay.setOnClickListener { onDelete(entry) }

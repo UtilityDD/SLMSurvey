@@ -70,11 +70,19 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
     private val _blinkState = MutableStateFlow(false)
     val blinkState: StateFlow<Boolean> = _blinkState.asStateFlow()
 
+    /** One-shot: map should frame poles after openWorkspace(). */
+    private val _pendingWorkspaceFrame = MutableStateFlow(false)
+
+    /** One-shot: after save, snap map to GPS for the next survey. */
+    private val _pendingGpsRecenter = MutableStateFlow(false)
+
     val survey: StateFlow<Survey?> = surveyId
         .flatMapLatest { id ->
             if (id == null) flowOf(null) else repository.observeSurvey(id)
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        // Eager: keep active survey in sync when opening a workspace from My Maps
+        // while the map fragment is stopped (no collectors).
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val savedWorkspaces: StateFlow<List<Survey>> =
         repository.observeSavedWorkspaces()
@@ -124,17 +132,45 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         _pendingProposedBranchFromId.value = null
         undoStack.clear()
         surveyId.value = workspaceId
+        _pendingWorkspaceFrame.value = true
     }
 
-    suspend fun saveWorkspaceAndStartNew(name: String) {
-        val id = surveyId.value ?: return
+    fun consumePendingWorkspaceFrame(): Boolean {
+        if (!_pendingWorkspaceFrame.value) return false
+        _pendingWorkspaceFrame.value = false
+        return true
+    }
+
+    fun hasPendingWorkspaceFrame(): Boolean = _pendingWorkspaceFrame.value
+
+    fun hasPendingGpsRecenter(): Boolean = _pendingGpsRecenter.value
+
+    fun consumePendingGpsRecenter(): Boolean {
+        if (!_pendingGpsRecenter.value) return false
+        _pendingGpsRecenter.value = false
+        return true
+    }
+
+    /**
+     * Saves current survey to My Maps.
+     * Already-saved workspaces are updated in place (replace); drafts become a new My Maps entry.
+     * Then starts a fresh draft for the next survey and requests GPS recenter on the map.
+     * @return true if an existing My Maps entry was replaced; false if newly created.
+     */
+    suspend fun saveWorkspaceAndStartNew(name: String): Boolean {
+        val id = surveyId.value ?: return false
         setProcessing(true, "Saving Workspace...")
-        try {
+        return try {
+            val existing = repository.getSurvey(id)
+            val replaced = existing?.isSavedWorkspace == true
             repository.saveWorkspace(id, name)
             undoStack.clear()
             _selectedTapPoleId.value = null
             _pendingProposedBranchFromId.value = null
+            _pendingWorkspaceFrame.value = false
             surveyId.value = repository.createSurvey("Field Survey").id
+            _pendingGpsRecenter.value = true
+            replaced
         } finally {
             setProcessing(false)
         }
@@ -441,6 +477,8 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                     spanLengthM = resolvedSpan,
                     structure = structure.label,
                     seriesId = seriesId,
+                    dtCapacityKva = draft.dtCapacityKva,
+                    remarks = draft.remarks,
                     deviceLatitude = evidence.deviceLatitude,
                     deviceLongitude = evidence.deviceLongitude,
                     deviceAccuracyM = evidence.deviceAccuracyM,

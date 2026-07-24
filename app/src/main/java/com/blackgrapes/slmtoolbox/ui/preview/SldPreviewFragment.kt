@@ -5,10 +5,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.Toast
 import androidx.core.view.isVisible
-import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
@@ -18,19 +16,23 @@ import androidx.navigation.fragment.findNavController
 import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.SlmApp
 import com.blackgrapes.slmtoolbox.databinding.FragmentSldPreviewBinding
-import com.blackgrapes.slmtoolbox.domain.PrintableSldBuilder
-import com.blackgrapes.slmtoolbox.domain.PrintableSldDocument
+import com.blackgrapes.slmtoolbox.domain.PresetPreferences
+import com.blackgrapes.slmtoolbox.domain.SurveyMetrics
 import com.blackgrapes.slmtoolbox.domain.SurveyShareSummary
-import com.blackgrapes.slmtoolbox.domain.SurveyStampFactory
 import com.blackgrapes.slmtoolbox.domain.model.PoleRole
-import com.blackgrapes.slmtoolbox.ui.export.ExportHelper
-import com.blackgrapes.slmtoolbox.ui.export.PrintableSldRenderer
-import com.blackgrapes.slmtoolbox.ui.export.ShareHelper
+import com.blackgrapes.slmtoolbox.domain.model.Survey
+import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
+import com.blackgrapes.slmtoolbox.ui.survey.SaveWorkspaceDialog
 import com.blackgrapes.slmtoolbox.ui.survey.SurveyViewModel
 import com.blackgrapes.slmtoolbox.ui.survey.WorkspaceNameResolver
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Clean, read-only workspace preview: zoomable map sketch, legend, network summary,
+ * Save to My Maps, and Exit. Share / SLD / desktop export live on My Maps only.
+ */
 class SldPreviewFragment : Fragment() {
 
     private var _binding: FragmentSldPreviewBinding? = null
@@ -40,9 +42,6 @@ class SldPreviewFragment : Fragment() {
         SurveyViewModel.Factory((requireActivity().application as SlmApp).repository)
     }
 
-    private var ignoringMeta = false
-    private var pageIndex = 0
-    private var currentDocument: PrintableSldDocument? = null
     private var currentBitmap: Bitmap? = null
 
     override fun onCreateView(
@@ -56,216 +55,78 @@ class SldPreviewFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
-        binding.btnShareSummary.setOnClickListener { shareSurveySummary() }
-        binding.btnShareCsv.setOnClickListener { shareGpsCsv() }
-        binding.btnSharePng.setOnClickListener { sharePreviewPng() }
-        binding.btnExport.setOnClickListener { shareJsonWorkspace() }
-        binding.btnSaveSld.setOnClickListener { saveToMySld() }
-        binding.btnPrevPage.setOnClickListener {
-            if (pageIndex > 0) {
-                pageIndex--
-                showPage()
-            }
-        }
-        binding.btnNextPage.setOnClickListener {
-            val doc = currentDocument ?: return@setOnClickListener
-            if (pageIndex < doc.pages.lastIndex) {
-                pageIndex++
-                showPage()
-            }
-        }
-
-        binding.linemanNameInput.doAfterTextChanged {
-            if (!ignoringMeta) persistMeta()
-        }
-        binding.linemanMobileInput.doAfterTextChanged {
-            if (!ignoringMeta) persistMeta()
-        }
+        binding.btnExit.setOnClickListener { findNavController().navigateUp() }
+        binding.btnSaveSld.setOnClickListener { saveToMyMaps() }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.survey.collect { survey ->
                     if (survey == null) return@collect
-                    ignoringMeta = true
-                    if (binding.linemanNameInput.text?.toString() != survey.linemanName) {
-                        binding.linemanNameInput.setText(survey.linemanName)
-                    }
-                    if (binding.linemanMobileInput.text?.toString() != survey.linemanMobile) {
-                        binding.linemanMobileInput.setText(survey.linemanMobile)
-                    }
-                    ignoringMeta = false
                     binding.btnSaveSld.isVisible =
                         survey.assets.any { it.poleRole == PoleRole.END }
                     binding.liveSiteBanner.isVisible =
                         survey.assets.isNotEmpty() && !survey.isLiveAtSite
-                    
-                    val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
-                    val preset = com.blackgrapes.slmtoolbox.domain.PresetPreferences.get(requireContext())
-                    currentDocument = PrintableSldBuilder.build(
-                        survey,
-                        seriesMeta,
-                        displayUnit = preset.displayUnit,
-                        displayDecimals = preset.displayDecimals
-                    )
-                    showPage()
-                    
-                    val center = survey.assets.firstOrNull()
-                    val stamp = SurveyStampFactory.create(
-                        requireContext(),
-                        binding.linemanNameInput.text?.toString().orEmpty(),
-                        binding.linemanMobileInput.text?.toString().orEmpty(),
-                        center?.latitude,
-                        center?.longitude
-                    )
-                    binding.stampText.text = stamp.asReadableLines().joinToString("\n")
+                    binding.tvNetworkSummary.text = buildNetworkSummary(survey)
+                    renderPreview(survey)
                 }
             }
         }
     }
 
-    private fun persistMeta() {
-        val survey = viewModel.survey.value ?: return
-        viewModel.updateMeta(
-            title = survey.title,
-            linemanName = binding.linemanNameInput.text?.toString().orEmpty(),
-            linemanMobile = binding.linemanMobileInput.text?.toString().orEmpty()
+    private fun buildNetworkSummary(survey: Survey): String {
+        val preset = PresetPreferences.get(requireContext())
+        val route = SurveyMetrics.formatDistance(
+            SurveyMetrics.routeLengthMetres(survey),
+            preset.displayUnit,
+            preset.displayDecimals
         )
+        val existing = survey.assets.count { it.status == WorkStatus.EXISTING }
+        val proposed = survey.assets.size - existing
+        val structures = SurveyMetrics.structureCounts(survey)
+            .entries
+            .joinToString(" · ") { "${it.key.label} ${it.value}" }
+            .ifBlank { "—" }
+        return buildString {
+            append(survey.title.ifBlank { getString(R.string.sld_preview_title) })
+            append('\n')
+            append(SurveyShareSummary.compactStats(requireContext(), survey))
+            append('\n')
+            append("Existing $existing · Proposed $proposed · $route")
+            append('\n')
+            append(structures)
+            val extra = SurveyMetrics.extraPoleCount(survey)
+            if (extra > 0) {
+                append('\n')
+                append(getString(R.string.legend_extra_poles, extra))
+            }
+        }
     }
 
-    private fun showPage() {
-        val doc = currentDocument ?: return
-        if (doc.pages.isEmpty()) return
-        
-        pageIndex = pageIndex.coerceIn(0, doc.pages.lastIndex)
-        
-        // Recycle old bitmap to save memory
-        currentBitmap?.recycle()
-        
-        try {
-            val bitmap = PrintableSldRenderer.renderPage(doc.pages[pageIndex])
+    private fun renderPreview(survey: Survey) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val bitmap = try {
+                withContext(Dispatchers.Default) {
+                    WorkspacePreviewRenderer.render(requireContext(), survey)
+                }
+            } catch (_: OutOfMemoryError) {
+                null
+            }
+            if (!isAdded || _binding == null) {
+                bitmap?.recycle()
+                return@launch
+            }
+            if (bitmap == null) {
+                Toast.makeText(requireContext(), R.string.preview_low_memory, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            currentBitmap?.recycle()
             currentBitmap = bitmap
             binding.previewImage.setImageBitmap(bitmap)
-            
-            binding.pageText.text = getString(
-                R.string.page_of,
-                pageIndex + 1,
-                doc.pages.size
-            )
-            binding.btnPrevPage.isEnabled = pageIndex > 0
-            binding.btnNextPage.isEnabled = pageIndex < doc.pages.lastIndex
-        } catch (e: OutOfMemoryError) {
-            Toast.makeText(requireContext(), "Low memory: could not render page", Toast.LENGTH_SHORT).show()
+            binding.previewImage.resetZoom()
         }
     }
 
-    private fun sharePreviewPng() {
-        val survey = viewModel.survey.value ?: return
-        if (survey.assets.isEmpty()) {
-            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            return
-        }
-        viewModel.setProcessing(true, getString(R.string.export_processing_png))
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
-                val pngFile = ExportHelper.exportPreviewPng(requireContext(), survey, seriesMeta)
-                if (pngFile != null) {
-                    val caption = SurveyShareSummary.build(requireContext(), survey)
-                    ShareHelper.sharePng(
-                        context = requireContext(),
-                        pngFile = pngFile,
-                        title = survey.title,
-                        caption = caption
-                    )
-                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-                }
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            } finally {
-                viewModel.setProcessing(false)
-            }
-        }
-    }
-
-    private fun shareGpsCsv() {
-        val survey = viewModel.survey.value ?: return
-        if (survey.assets.isEmpty()) {
-            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            return
-        }
-        viewModel.setProcessing(true, getString(R.string.export_processing_csv))
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val csvFile = ExportHelper.exportGpsCsv(requireContext(), survey)
-                if (csvFile != null) {
-                    val caption = SurveyShareSummary.build(requireContext(), survey)
-                    ShareHelper.shareFiles(
-                        context = requireContext(),
-                        files = listOf(csvFile),
-                        title = "${survey.title} GPS Points",
-                        caption = caption,
-                        mimeType = "text/csv"
-                    )
-                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-                }
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            } finally {
-                viewModel.setProcessing(false)
-            }
-        }
-    }
-
-    private fun shareSurveySummary() {
-        val survey = viewModel.survey.value ?: return
-        if (survey.assets.isEmpty()) {
-            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val summary = SurveyShareSummary.build(requireContext(), survey)
-        ShareHelper.shareText(
-            context = requireContext(),
-            text = summary,
-            title = "${survey.title} — Survey Summary"
-        )
-    }
-
-    private fun shareJsonWorkspace() {
-        val survey = viewModel.survey.value ?: return
-        if (survey.assets.isEmpty()) {
-            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            return
-        }
-        viewModel.setProcessing(true, getString(R.string.export_processing_json))
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
-                val jsonFile = ExportHelper.exportJsonWorkspace(requireContext(), survey, seriesMeta)
-                if (jsonFile != null) {
-                    ShareHelper.shareFiles(
-                        context = requireContext(),
-                        files = listOf(jsonFile),
-                        title = getString(R.string.share_workspace_json),
-                        caption = "SLM Workspace JSON for Desktop Editor: ${survey.title}",
-                        mimeType = "application/json"
-                    )
-                    Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-                }
-            } catch (_: Exception) {
-                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            } finally {
-                viewModel.setProcessing(false)
-            }
-        }
-    }
-
-    private fun saveToMySld() {
+    private fun saveToMyMaps() {
         val survey = viewModel.survey.value ?: return
         if (survey.assets.none { it.poleRole == PoleRole.END }) {
             Toast.makeText(requireContext(), R.string.save_requires_end, Toast.LENGTH_SHORT).show()
@@ -274,39 +135,26 @@ class SldPreviewFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val suggestedName = WorkspaceNameResolver.suggest(requireContext(), survey)
             if (!isAdded) return@launch
-            val input = EditText(requireContext()).apply {
-                hint = getString(R.string.workspace_name_hint)
-                setText(suggestedName)
-                selectAll()
-                setPadding(48, 20, 48, 20)
-                isSingleLine = true
-            }
-            MaterialAlertDialogBuilder(requireContext())
-                .setTitle(R.string.save_workspace_title)
-                .setView(input)
-                .setNegativeButton(R.string.cancel, null)
-                .setPositiveButton(R.string.save) { _, _ ->
-                    val name = input.text?.toString()?.trim().orEmpty().ifBlank { suggestedName }
-                    viewLifecycleOwner.lifecycleScope.launch {
-                        viewModel.saveWorkspaceAndStartNew(name)
-                        if (isAdded) {
-                            Toast.makeText(
-                                requireContext(),
-                                R.string.sld_saved_new_started,
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            findNavController().navigateUp()
-                        }
+            SaveWorkspaceDialog.show(this@SldPreviewFragment, survey, suggestedName) { name, surveyor, mobile ->
+                viewLifecycleOwner.lifecycleScope.launch {
+                    viewModel.updateMeta(title = name, linemanName = surveyor, linemanMobile = mobile)
+                    val replaced = viewModel.saveWorkspaceAndStartNew(name)
+                    if (isAdded) {
+                        Toast.makeText(
+                            requireContext(),
+                            if (replaced) R.string.workspace_replaced else R.string.workspace_created,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        findNavController().navigateUp()
                     }
                 }
-                .show()
+            }
         }
     }
 
     override fun onDestroyView() {
         currentBitmap?.recycle()
         currentBitmap = null
-        currentDocument = null
         _binding = null
         super.onDestroyView()
     }

@@ -17,6 +17,7 @@ import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.PlacementDraft
 import com.blackgrapes.slmtoolbox.domain.SeriesConfig
 import com.blackgrapes.slmtoolbox.domain.PresetPreferences
+import com.blackgrapes.slmtoolbox.domain.PostExecPreferences
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
 import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
@@ -48,6 +49,10 @@ class SurveyBubbleWizard : DialogFragment() {
     private var wantTapping: Boolean? = null
     private var feederName: String? = null
     private var sourceSubstation: String? = null
+    private var dtCapacityKva: String? = null
+    private var remarks: String? = null
+    /** Tip pole structure when continuing (detect first span after DTR). */
+    private var tipStructure: PoleStructure? = null
     /** When branching from an existing network, voltage is a line property and cannot change. */
     private var voltageLocked: Boolean = false
     /** Line voltage/status for mid-span insert (NEAR_LINE). */
@@ -103,6 +108,8 @@ class SurveyBubbleWizard : DialogFragment() {
             )
         }
         candidatePoles = requireArguments().getParcelableArrayListCompat(ARG_CANDIDATES).orEmpty()
+        tipStructure = requireArguments().getString(ARG_TIP_STRUCTURE)
+            ?.let { PoleStructure.fromLabel(it) }
         // Prefill locked voltage for tapping-from-existing (passed as ARG_LOCKED_VOLTAGE alone).
         if (mode == Mode.TAPPING_BRANCH && lockedVoltage != null && lockedSeries == null) {
             voltage = VoltageLevel.fromLabel(lockedVoltage)
@@ -160,17 +167,32 @@ class SurveyBubbleWizard : DialogFragment() {
             mode == Mode.NEAR_LINE -> push(Step.LINE_ACTION_CHOICE)
             lockedSeries != null -> {
                 val series = lockedSeries!!
+                val ltConv = PostExecPreferences.isLtConversionAbc(requireContext())
+                val afterDtr = series.startStructure == PoleStructure.DTR &&
+                    (tipStructure == PoleStructure.DTR || tipStructure == null && series.startStructure == PoleStructure.DTR)
                 val dtrLtContinue = series.startStructure == PoleStructure.DTR &&
-                    PresetPreferences.isDtrLt(requireContext())
-                if (dtrLtContinue) {
+                    (ltConv || PresetPreferences.isDtrLt(requireContext()))
+                if (ltConv && dtrLtContinue) {
+                    voltage = VoltageLevel.LT
+                    status = if (mode == Mode.TAPPING_BRANCH) {
+                        WorkStatus.EXISTING
+                    } else {
+                        series.status
+                    }
+                    material = PoleMaterial.PCC_8M
+                    if (tipStructure == PoleStructure.DTR) {
+                        push(Step.LT_CONV_FIRST_SPAN)
+                    } else {
+                        conductor = "ABC"
+                        push(Step.LT_CONV_POLE_KIND)
+                    }
+                } else if (dtrLtContinue) {
                     val preset = PresetPreferences.get(requireContext())
                     val (v, _, m) = preset.continueAfterDtr()
                     voltage = v
-                    // Status locked from previous pole / series tip — never re-ask.
                     status = series.status
                     material = m
                     conductor = preset.continueAfterDtrConductor()
-                    // LT phase may change on every pole (bare only).
                     if (NetworkCatalog.isAbcConductor(conductor)) {
                         structure = PoleStructure.P1
                         push(Step.PLACE_ROLE)
@@ -184,7 +206,6 @@ class SurveyBubbleWizard : DialogFragment() {
                     material = series.material
                     conductor = series.conductor
                     if (series.voltage == VoltageLevel.LT) {
-                        // Conductor locked for the series; phase selectable each pole for bare.
                         if (NetworkCatalog.isAbcConductor(series.conductor)) {
                             structure = PoleStructure.P1
                             push(Step.PLACE_ROLE)
@@ -198,17 +219,26 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             mode == Mode.TAPPING_BRANCH -> {
-                // Branch from existing network: voltage locked to source line.
                 voltage = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
                 voltageLocked = true
-                // If tapping from a Proposed pole (e.g. after inserting Proposed on Existing line),
-                // inherit Proposed automatically — never re-ask Existing/Proposed.
-                if (sourcePoleStatus == WorkStatus.PROPOSED) {
+                if (PostExecPreferences.isLtConversionAbc(requireContext())) {
+                    // Post-exec LT conversion: tapping stays Existing only.
+                    status = WorkStatus.EXISTING
+                    voltage = VoltageLevel.LT
+                    material = PoleMaterial.PCC_8M
+                    conductor = "ABC"
+                    push(Step.LT_CONV_POLE_KIND)
+                } else if (sourcePoleStatus == WorkStatus.PROPOSED) {
                     status = WorkStatus.PROPOSED
                     advanceAfterStatusChoice()
                 } else {
                     push(Step.STATUS)
                 }
+            }
+            PostExecPreferences.isLtConversionAbc(requireContext()) &&
+                editing == null &&
+                mode == Mode.NEW_NETWORK -> {
+                push(Step.LT_CONV_START_DTR)
             }
             PresetPreferences.isEnabled(requireContext()) && editing == null && mode == Mode.NEW_NETWORK -> {
                 applyPresetForNewNetwork()
@@ -533,6 +563,113 @@ class SurveyBubbleWizard : DialogFragment() {
                     render()
                 }
             }
+            Step.LT_CONV_START_DTR -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_start_dtr)
+                binding.bubbleSubtitle.text = getString(R.string.lt_conv_start_dtr_hint)
+                addChoice(getString(R.string.yes)) {
+                    voltage = VoltageLevel.KV_11
+                    status = WorkStatus.EXISTING
+                    structure = PoleStructure.DTR
+                    conductor = NetworkCatalog.conductorsFor(VoltageLevel.KV_11).first()
+                    push(Step.LT_CONV_DTR_CAPACITY)
+                    render()
+                }
+                addChoice(getString(R.string.no)) {
+                    voltage = VoltageLevel.LT
+                    status = WorkStatus.PROPOSED
+                    material = PoleMaterial.PCC_8M
+                    conductor = "ABC"
+                    push(Step.LT_CONV_POLE_KIND)
+                    render()
+                }
+            }
+            Step.LT_CONV_DTR_CAPACITY -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_capacity)
+                binding.bubbleSubtitle.text = "Existing DTR"
+                listOf("25", "63", "100").forEach { kva ->
+                    addChoice("${kva}kVA") {
+                        dtCapacityKva = kva
+                        push(Step.LT_CONV_DTR_CODE)
+                        render()
+                    }
+                }
+            }
+            Step.LT_CONV_DTR_CODE -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_code)
+                binding.bubbleSubtitle.text = getString(R.string.lt_conv_dtr_code_hint)
+                showFeederInputs(true)
+                binding.bubbleChoices.isVisible = true
+                binding.tilFeederName.hint = getString(R.string.lt_conv_dtr_code)
+                binding.tilSourceSs.isVisible = false
+                binding.etFeederName.setText(remarks.orEmpty())
+                binding.btnFeederConfirm.text = getString(R.string.next)
+                binding.btnFeederConfirm.setOnClickListener {
+                    remarks = binding.etFeederName.text?.toString()?.trim()?.ifBlank { null }
+                    binding.tilSourceSs.isVisible = true
+                    binding.tilFeederName.hint = getString(R.string.hint_feeder_name)
+                    showFeederInputs(false)
+                    push(Step.LT_CONV_DTR_POLE)
+                    render()
+                }
+                addChoice(getString(R.string.lt_conv_dtr_code_skip)) {
+                    remarks = null
+                    binding.tilSourceSs.isVisible = true
+                    binding.tilFeederName.hint = getString(R.string.hint_feeder_name)
+                    showFeederInputs(false)
+                    push(Step.LT_CONV_DTR_POLE)
+                    render()
+                }
+            }
+            Step.LT_CONV_DTR_POLE -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_pole)
+                binding.bubbleSubtitle.text = "DTR ${dtCapacityKva ?: ""}kVA"
+                listOf(
+                    PoleMaterial.PCC_8M,
+                    PoleMaterial.PCC_9M,
+                    PoleMaterial.RAIL,
+                    PoleMaterial.H_POLE
+                ).forEach { mat ->
+                    addChoice(mat.label) {
+                        material = mat
+                        push(Step.PLACE_ROLE)
+                        render()
+                    }
+                }
+            }
+            Step.LT_CONV_FIRST_SPAN -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_first_span)
+                binding.bubbleSubtitle.text = getString(R.string.lt_conv_first_span_hint)
+                addChoice(getString(R.string.lt_conv_span_pvc)) {
+                    conductor = "PVC"
+                    material = PoleMaterial.PCC_8M
+                    push(Step.LT_CONV_POLE_KIND)
+                    render()
+                }
+                addChoice(getString(R.string.lt_conv_span_abc)) {
+                    conductor = "ABC"
+                    material = PoleMaterial.PCC_8M
+                    push(Step.LT_CONV_POLE_KIND)
+                    render()
+                }
+            }
+            Step.LT_CONV_POLE_KIND -> {
+                binding.bubbleTitle.text = getString(R.string.lt_conv_pole_kind)
+                binding.bubbleSubtitle.text = getString(R.string.lt_conv_pole_kind_hint)
+                addChoice(getString(R.string.lt_conv_pole_old)) {
+                    structure = PoleStructure.P1
+                    material = material ?: PoleMaterial.PCC_8M
+                    if (conductor.isNullOrBlank()) conductor = "ABC"
+                    push(Step.PLACE_ROLE)
+                    render()
+                }
+                addChoice(getString(R.string.lt_conv_pole_extra)) {
+                    structure = PoleStructure.P1N
+                    material = material ?: PoleMaterial.PCC_8M
+                    if (conductor.isNullOrBlank()) conductor = "ABC"
+                    push(Step.PLACE_ROLE)
+                    render()
+                }
+            }
         }
     }
 
@@ -625,7 +762,10 @@ class SurveyBubbleWizard : DialogFragment() {
         val m = material ?: lockedSeries?.material ?: NetworkCatalog.defaultMaterial(v)
         val c = conductor ?: lockedSeries?.conductor ?: NetworkCatalog.conductorsFor(v).first()
         val st = when {
-            v == VoltageLevel.LT && NetworkCatalog.isAbcConductor(c) -> PoleStructure.P1
+            structure == PoleStructure.P1N -> PoleStructure.P1N
+            v == VoltageLevel.LT &&
+                (NetworkCatalog.isAbcConductor(c) || NetworkCatalog.isPvcConductor(c)) ->
+                structure ?: PoleStructure.P1
             else -> structure ?: NetworkCatalog.defaultStructure(v)
         }
         if (editing != null) {
@@ -637,7 +777,9 @@ class SurveyBubbleWizard : DialogFragment() {
                     structure = st.label,
                     conductor = c,
                     type = NetworkCatalog.assetTypeFor(st),
-                    poleRole = role
+                    poleRole = role,
+                    dtCapacityKva = dtCapacityKva ?: editing!!.dtCapacityKva,
+                    remarks = remarks ?: editing!!.remarks
                 )
             )
             dismiss()
@@ -665,7 +807,9 @@ class SurveyBubbleWizard : DialogFragment() {
                 sourceAssetId = sourceAssetId,
                 splitConnectionId = splitConnectionId,
                 feederName = feederName ?: "",
-                sourceSubstation = sourceSubstation ?: ""
+                sourceSubstation = sourceSubstation ?: "",
+                dtCapacityKva = dtCapacityKva,
+                remarks = remarks
             )
         )
         dismiss()
@@ -691,7 +835,9 @@ class SurveyBubbleWizard : DialogFragment() {
     enum class Mode { NEW_NETWORK, CONTINUE_SERIES, NEAR_LINE, TAPPING_BRANCH }
     private enum class Step {
         VOLTAGE, STATUS, MATERIAL, STRUCTURE, CONDUCTOR, FEEDER_INFO, PRESET_SUMMARY, PLACE_ROLE,
-        TAPPING_YES_NO, SOURCE_POLE, EDIT_MENU, CONFIRM_DELETE, LINE_ACTION_CHOICE
+        TAPPING_YES_NO, SOURCE_POLE, EDIT_MENU, CONFIRM_DELETE, LINE_ACTION_CHOICE,
+        LT_CONV_START_DTR, LT_CONV_DTR_CAPACITY, LT_CONV_DTR_CODE, LT_CONV_DTR_POLE,
+        LT_CONV_FIRST_SPAN, LT_CONV_POLE_KIND
     }
 
     /** Apply saved preset values for a brand-new series (START pole). */
@@ -755,6 +901,7 @@ class SurveyBubbleWizard : DialogFragment() {
         private const val ARG_LINE_STATUS = "line_status"
         private const val ARG_SOURCE_STATUS = "source_status"
         private const val ARG_DIRECT_INSERT = "direct_insert"
+        private const val ARG_TIP_STRUCTURE = "tip_structure"
 
         fun forNew(lat: Double, lng: Double): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
@@ -769,7 +916,8 @@ class SurveyBubbleWizard : DialogFragment() {
             lat: Double,
             lng: Double,
             series: SeriesConfig,
-            sourceId: Long?
+            sourceId: Long?,
+            tipStructure: PoleStructure? = null
         ): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
                 arguments = bundleOf(
@@ -782,7 +930,8 @@ class SurveyBubbleWizard : DialogFragment() {
                     ARG_LOCKED_CONDUCTOR to series.conductor,
                     ARG_LOCKED_SERIES to series.seriesId,
                     ARG_LOCKED_START_STRUCTURE to (series.startStructure?.label ?: ""),
-                    ARG_SOURCE_ID to (sourceId ?: -1L)
+                    ARG_SOURCE_ID to (sourceId ?: -1L),
+                    ARG_TIP_STRUCTURE to tipStructure?.label
                 )
             }
 

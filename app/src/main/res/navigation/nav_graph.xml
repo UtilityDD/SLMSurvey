@@ -29,11 +29,20 @@
             android:id="@+id/action_survey_to_my_sld"
             app:destination="@id/mySldFragment" />
         <action
+            android:id="@+id/action_survey_to_preset_settings"
+            app:destination="@id/presetSettingsFragment" />
+        <action
             android:id="@+id/action_survey_to_license"
             app:destination="@id/licenseFragment"
             app:popUpTo="@id/surveyMapFragment"
             app:popUpToInclusive="true" />
     </fragment>
+
+    <fragment
+        android:id="@+id/presetSettingsFragment"
+        android:name="com.blackgrapes.slmtoolbox.ui.settings.PresetSettingsFragment"
+        android:label="@string/preset_settings_title"
+        tools:layout="@layout/fragment_preset_settings" />
 
     <fragment
         android:id="@+id/sldPreviewFragment"
