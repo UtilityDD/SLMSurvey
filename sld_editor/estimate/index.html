@@ -42,6 +42,9 @@
             <button type="button" id="licenseActivateBtn" class="est-btn est-btn-primary license-gate-btn">
                 Activate
             </button>
+            <button type="button" id="licenseSignOutBtn" class="est-btn est-btn-ghost license-gate-signout">
+                Sign out / switch license
+            </button>
             <div id="licenseProgress" class="license-gate-progress hidden">Checking…</div>
         </div>
     </div>
@@ -58,13 +61,20 @@
                 </div>
             </div>
             <div class="est-top-actions">
-                <button type="button" class="est-btn est-btn-ghost" id="btnExportKits">Export kits</button>
-                <button type="button" class="est-btn est-btn-ghost" id="btnImportKits">Import kits</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnGuide" title="How Assembly Builder works">User guide</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnExportKits" title="Download a backup of kit edits from this browser">Export kits</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnImportKits" title="Load a kit backup into this browser">Import kits</button>
                 <input type="file" id="importKitsFile" accept=".json" hidden>
-                <button type="button" class="est-btn est-btn-ghost" id="btnPublishCatalog" title="Push rate book + kits to Supabase for the mobile app">Publish to app</button>
-                <button type="button" class="est-btn est-btn-primary" id="btnResetKits" title="Reset kit edits to empty matrix">Reset edits</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnPublishCatalog" title="Push rate book + kits online for the phone app" disabled>Publish to app</button>
+                <button type="button" class="est-btn est-btn-primary" id="btnResetKits" title="Clear kit edits on this computer">Reset edits</button>
             </div>
         </header>
+
+        <div class="est-perm-bar" id="estPermBar" aria-live="polite">
+            <span id="estPermRole">Checking permissions…</span>
+            <span class="est-perm-chips" id="estPermChips"></span>
+            <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSignOutLicense" title="Clear this browser license and enter another code">Sign out</button>
+        </div>
 
         <div class="est-stats" id="estStats"></div>
 
@@ -232,6 +242,45 @@
                     </div>
                 </div>
             </section>
+        </div>
+    </div>
+
+    <div class="est-modal hidden" id="guideModal" role="dialog" aria-modal="true">
+        <div class="est-modal-card est-guide-card">
+            <h3>Assembly Builder — user guide</h3>
+            <p class="est-modal-sub">Simple flow. You do not need user accounts — only a license code.</p>
+
+            <ol class="est-guide-steps">
+                <li><strong>Activate</strong> with your license code (same as the phone).</li>
+                <li><strong>Edit kits</strong> — open a structure / conductor / guarding kit and add Mat &amp; Lab items. Save stays on this computer.</li>
+                <li><strong>Custom structure</strong> — for poles not in the standard list (+ Custom structure).</li>
+                <li><strong>Suggest change</strong> (if allowed) — send your kit edit for review. Does not go to phones yet.</li>
+                <li><strong>Accept / Reject</strong> (approver) — on the Suggestions tab. Accept merges into this builder.</li>
+                <li><strong>Publish to app</strong> (admin) — uploads Mat/Lab + kits online so phones can download.</li>
+            </ol>
+
+            <h4 class="est-guide-h">What each button does</h4>
+            <table class="est-guide-table">
+                <tr><th>Button</th><th>Does</th><th>Who</th></tr>
+                <tr><td>Export kits</td><td>Download a backup JSON from this browser</td><td>Anyone unlocked</td></tr>
+                <tr><td>Import kits</td><td>Restore a backup into this browser</td><td>Anyone unlocked</td></tr>
+                <tr><td>Reset edits</td><td>Clear local kit changes (not the online catalog)</td><td>Anyone unlocked</td></tr>
+                <tr><td>Suggest change</td><td>Send one kit for approval</td><td><code>can_suggest</code></td></tr>
+                <tr><td>Suggestions tab</td><td>Review pending kit edits</td><td><code>can_approve</code> (or own list if suggestor)</td></tr>
+                <tr><td>Publish to app</td><td>Push catalog to phones</td><td><code>can_approve</code> + publish key</td></tr>
+            </table>
+
+            <h4 class="est-guide-h">Permissions on your license</h4>
+            <ul class="est-guide-list">
+                <li><strong>Unlocked only</strong> — edit kits locally; Export / Import / Reset.</li>
+                <li><strong>Suggest</strong> — also Suggest change.</li>
+                <li><strong>Approve (admin)</strong> — Suggestions tab + Publish to app.</li>
+            </ul>
+            <p class="est-modal-sub">Greyed-out buttons mean your license does not include that permission. Ask the seller to turn on <code>can_suggest</code> or <code>can_approve</code>.</p>
+
+            <div class="est-modal-actions">
+                <button type="button" class="est-btn est-btn-primary" id="btnGuideClose">Got it</button>
+            </div>
         </div>
     </div>
 

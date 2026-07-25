@@ -733,6 +733,10 @@ body {
     margin-bottom: 12px;
 }
 .license-gate-btn { width: 100%; padding: 12px 16px; }
+.license-gate-signout {
+    width: 100%;
+    margin-top: 10px;
+}
 .license-gate-progress {
     text-align: center;
     margin-top: 12px;
@@ -860,6 +864,63 @@ body {
 .est-chip.pending { background: #fff7ed; color: #c2410c; }
 .est-chip.accepted { background: #ecfdf3; color: #166534; }
 .est-chip.rejected { background: #fef2f2; color: #b91c1c; }
+
+.est-perm-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 0.9rem;
+}
+.est-perm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.est-btn:disabled,
+.est-btn.is-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+.est-guide-card {
+    width: min(640px, 100%);
+    max-height: 85vh;
+    overflow: auto;
+}
+.est-guide-steps {
+    margin: 12px 0 16px 1.2rem;
+    line-height: 1.55;
+}
+.est-guide-steps li { margin-bottom: 8px; }
+.est-guide-h {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    margin: 16px 0 8px;
+}
+.est-guide-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+.est-guide-table th,
+.est-guide-table td {
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    padding: 8px 6px;
+    vertical-align: top;
+}
+.est-guide-table th { color: var(--muted); font-weight: 600; }
+.est-guide-list {
+    margin: 0 0 8px 1.2rem;
+    line-height: 1.5;
+}
 
 @media (max-width: 720px) {
     .est-rate-row {

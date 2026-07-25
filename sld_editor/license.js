@@ -276,6 +276,47 @@
     }
   }
 
+  function clearLicenseLocal() {
+    try {
+      localStorage.removeItem(PREFS_KEY);
+    } catch (_) {}
+  }
+
+  /**
+   * Sign out of the stored license on this browser (keeps device id).
+   * Shows the activate gate again so a different code can be entered.
+   */
+  function signOut(opts) {
+    opts = opts || {};
+    if (!opts.silent) {
+      var prefs = readPrefs();
+      var code = prefs.licenseCode || "this license";
+      if (
+        !confirm(
+          "Sign out of " +
+            code +
+            " on this computer?\n\nYou can activate again with another code (e.g. admin)."
+        )
+      ) {
+        return false;
+      }
+    }
+    clearLicenseLocal();
+    showGate(true);
+    refreshStatus();
+    updateBadge();
+    var input = $("licenseCodeInput");
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    var errEl = $("licenseError");
+    if (errEl) errEl.textContent = "";
+    var status = $("licenseStatus");
+    if (status) status.textContent = "Signed out — enter a license code";
+    return true;
+  }
+
   function updateBadge() {
     var badge = $("licenseBadge");
     if (!badge) return;
@@ -292,10 +333,10 @@
     var date = formatDate(prefs.expiresAtEpochMs);
     var days = daysRemaining(prefs);
     badge.textContent = isTrial(prefs)
-      ? "Trial · expires " + date + " · " + days + "d left"
-      : "License · expires " + date + " · " + days + "d left";
+      ? "Trial · expires " + date + " · " + days + "d left · tap to switch"
+      : "License · expires " + date + " · " + days + "d left · tap to switch";
     badge.classList.remove("hidden");
-    badge.title = "Same rental key as the mobile app";
+    badge.title = "Tap to view license or sign out / switch code";
   }
 
   async function onActivateClick() {
@@ -313,6 +354,11 @@
       if (result.ok) {
         refreshStatus();
         unlockEditor();
+        if (typeof global.dispatchEvent === "function") {
+          try {
+            global.dispatchEvent(new CustomEvent("slm-license-changed"));
+          } catch (_) {}
+        }
       } else {
         if (errEl) errEl.textContent = errorMessage(result.error);
         refreshStatus();
@@ -333,27 +379,35 @@
         if (e.key === "Enter") onActivateClick();
       });
     }
+    var signOutBtn = $("licenseSignOutBtn");
+    if (signOutBtn) {
+      signOutBtn.addEventListener("click", function () {
+        signOut();
+      });
+    }
     var badge = $("licenseBadge");
     if (badge) {
       badge.addEventListener("click", function () {
         var prefs = readPrefs();
         var date = formatDate(prefs.expiresAtEpochMs);
         var days = daysRemaining(prefs);
-        var msg = isTrial(prefs)
-          ? "Trial license" +
-            (prefs.licenseCode ? " (" + prefs.licenseCode + ")" : "") +
-            "\nExpires: " +
-            date +
-            "\nDays left: " +
-            days +
-            "\n\nUse the same code on the phone app."
-          : "Licensed to: " +
-            (prefs.customerName || "—") +
-            "\nExpires: " +
-            date +
-            "\nDays left: " +
-            days;
-        alert(msg);
+        var info =
+          (isTrial(prefs) ? "Trial" : "License") +
+          (prefs.licenseCode ? " (" + prefs.licenseCode + ")" : "") +
+          "\n" +
+          (prefs.customerName ? "Name: " + prefs.customerName + "\n" : "") +
+          "Expires: " +
+          date +
+          " (" +
+          days +
+          " days left)" +
+          "\n\nSign out and enter a different code?";
+        if (confirm(info)) {
+          signOut({ silent: true });
+          try {
+            global.dispatchEvent(new CustomEvent("slm-license-changed"));
+          } catch (_) {}
+        }
       });
     }
   }
@@ -405,6 +459,7 @@
     enabled: ENABLED,
     deviceId: deviceId,
     readPrefs: readPrefs,
+    signOut: signOut,
     canSuggest: function () {
       return !!readPrefs().canSuggest;
     },

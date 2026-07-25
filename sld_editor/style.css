@@ -137,6 +137,23 @@ body {
     font-size: 1rem;
 }
 
+.license-gate-signout {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    background: transparent;
+    border: 1px solid var(--border-color, #d8e0ea);
+    color: var(--text-secondary, #64748b);
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.license-gate-signout:hover {
+    color: var(--text-primary, #0f172a);
+    border-color: var(--text-secondary, #64748b);
+}
+
 .license-gate-progress {
     text-align: center;
     margin-top: 12px;

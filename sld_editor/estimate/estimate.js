@@ -642,6 +642,93 @@
     if (!btn) return;
     const can = !!(window.SlmLicense && window.SlmLicense.canSuggest());
     btn.classList.toggle("hidden", !can);
+    btn.disabled = !can;
+    btn.title = can
+      ? "Send this kit edit for approval"
+      : "Needs can_suggest on your license";
+  }
+
+  function setBtnEnabled(el, enabled, whenOffTitle, whenOnTitle) {
+    if (!el) return;
+    el.disabled = !enabled;
+    el.classList.toggle("is-disabled", !enabled);
+    if (!enabled && whenOffTitle) el.title = whenOffTitle;
+    else if (enabled && whenOnTitle) el.title = whenOnTitle;
+  }
+
+  function hasPublishKeyConfigured() {
+    const cfg = window.SLM_LICENSE_CONFIG || {};
+    if ((cfg.CATALOG_PUBLISH_KEY || "").trim()) return true;
+    try {
+      if ((sessionStorage.getItem("slm_catalog_publish_key") || "").trim()) return true;
+    } catch (_) {}
+    return false;
+  }
+
+  function updatePermissionUi() {
+    const L = window.SlmLicense;
+    const licensedOff = !L || !L.enabled;
+    const prefs = L?.readPrefs?.() || {};
+    const canSuggest = licensedOff ? true : !!(L && L.canSuggest());
+    const canApprove = licensedOff ? true : !!(L && L.canApprove());
+    // Dev mode (no Supabase): treat as full admin for local testing.
+    const canPublish = licensedOff ? true : canApprove;
+
+    const roleEl = $("estPermRole");
+    const chips = $("estPermChips");
+    let roleLabel = "Local edit only";
+    if (licensedOff) roleLabel = "Dev mode (licensing off) — all tools enabled";
+    else if (canApprove && canSuggest) roleLabel = "Admin — suggest, approve, publish";
+    else if (canApprove) roleLabel = "Approver — review suggestions & publish";
+    else if (canSuggest) roleLabel = "Suggestor — edit kits & suggest changes";
+    else roleLabel = "Editor — local kits only (Export / Import / Reset)";
+    if (roleEl) {
+      const code = prefs.licenseCode ? ` · ${prefs.licenseCode}` : "";
+      roleEl.textContent = roleLabel + code;
+    }
+    if (chips) {
+      chips.innerHTML = `
+        <span class="est-chip ${canSuggest ? "complete" : "disabled"}">Suggest ${canSuggest ? "ON" : "OFF"}</span>
+        <span class="est-chip ${canApprove ? "complete" : "disabled"}">Approve ${canApprove ? "ON" : "OFF"}</span>
+        <span class="est-chip ${canPublish ? "complete" : "disabled"}">Publish ${canPublish ? "ON" : "OFF"}</span>
+      `;
+    }
+
+    setBtnEnabled(
+      $("btnPublishCatalog"),
+      canPublish,
+      "Publish needs can_approve on your license (admin)",
+      hasPublishKeyConfigured()
+        ? "Push rate book + kits online for the phone app"
+        : "Push to phones (you will be asked for the publish key)"
+    );
+    setBtnEnabled(
+      $("btnExportKits"),
+      true,
+      "",
+      "Download a backup of kit edits from this browser"
+    );
+    setBtnEnabled(
+      $("btnImportKits"),
+      true,
+      "",
+      "Load a kit backup into this browser"
+    );
+    setBtnEnabled(
+      $("btnResetKits"),
+      true,
+      "",
+      "Clear kit edits on this computer"
+    );
+    setBtnEnabled(
+      $("btnAddCustomStructure"),
+      true,
+      "",
+      "Create a non-standard structure kit"
+    );
+
+    updateSuggestButton();
+    updateSuggestionsTabVisibility();
   }
 
   function closeEditor() {
@@ -1354,6 +1441,10 @@
   }
 
   async function publishCatalog() {
+    if (window.SlmLicense?.enabled && !window.SlmLicense.canApprove()) {
+      toast("Publish needs admin (can_approve) on your license");
+      return;
+    }
     const cfg = window.SLM_LICENSE_CONFIG || {};
     const base = (cfg.SUPABASE_URL || "").replace(/\/$/, "");
     const anon = cfg.SUPABASE_ANON_KEY || "";
@@ -1466,7 +1557,7 @@
     populateConductorFilter();
     populateDtrCapacityFilter();
     renderStats();
-    updateSuggestionsTabVisibility();
+    updatePermissionUi();
     refreshPendingBadge();
     showTab("structure");
 
@@ -1482,6 +1573,21 @@
     $("btnCloseEditor").addEventListener("click", closeEditor);
     $("btnSaveKit").addEventListener("click", saveKit);
     $("btnSuggestKit")?.addEventListener("click", submitSuggestion);
+    $("btnGuide")?.addEventListener("click", () =>
+      $("guideModal")?.classList.remove("hidden")
+    );
+    $("btnGuideClose")?.addEventListener("click", () =>
+      $("guideModal")?.classList.add("hidden")
+    );
+    $("guideModal")?.addEventListener("click", (e) => {
+      if (e.target === $("guideModal")) $("guideModal").classList.add("hidden");
+    });
+    $("btnSignOutLicense")?.addEventListener("click", () => {
+      if (window.SlmLicense?.signOut()) {
+        updatePermissionUi();
+      }
+    });
+    window.addEventListener("slm-license-changed", () => updatePermissionUi());
     $("btnDeleteCustomKit")?.addEventListener("click", () => {
       if (state.activeKitId) deleteCustomKit(state.activeKitId);
     });
