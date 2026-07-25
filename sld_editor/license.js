@@ -71,6 +71,8 @@
       lastValidatedAtMs: 0,
       graceDays: GRACE_DAYS_DEFAULT,
       lastError: null,
+      canSuggest: false,
+      canApprove: false,
     };
   }
 
@@ -134,6 +136,8 @@
     prefs.lastValidatedAtMs = Date.now();
     prefs.graceDays = json.grace_days || GRACE_DAYS_DEFAULT;
     prefs.lastError = null;
+    prefs.canSuggest = json.can_suggest === true;
+    prefs.canApprove = json.can_approve === true;
     var code = (json.code || fallbackCode || "").toString().trim().toUpperCase();
     if (code) prefs.licenseCode = code;
     writePrefs(prefs);
@@ -254,9 +258,12 @@
 
   function showGate(show) {
     var gate = $("licenseGate");
-    var app = $("appContainer");
+    var app = $("appContainer") || $("estShell") || document.querySelector(".est-shell");
     if (gate) gate.classList.toggle("hidden", !show);
-    if (app) app.classList.toggle("license-locked", show);
+    if (app) {
+      if (app.id === "appContainer") app.classList.toggle("license-locked", show);
+      else app.classList.toggle("license-locked", show);
+    }
   }
 
   function unlockEditor() {
@@ -397,5 +404,19 @@
     ensureLicensed: ensureLicensed,
     enabled: ENABLED,
     deviceId: deviceId,
+    readPrefs: readPrefs,
+    canSuggest: function () {
+      return !!readPrefs().canSuggest;
+    },
+    canApprove: function () {
+      return !!readPrefs().canApprove;
+    },
+    post: post,
+    urlBase: function () {
+      return URL_BASE;
+    },
+    anonKey: function () {
+      return ANON;
+    },
   };
 })(window);

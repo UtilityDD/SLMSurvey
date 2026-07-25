@@ -11,6 +11,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.databinding.FragmentLicenseBinding
+import com.blackgrapes.slmtoolbox.estimate.CatalogApi
 import com.blackgrapes.slmtoolbox.license.LicenseAccess
 import com.blackgrapes.slmtoolbox.license.LicenseApi
 import com.blackgrapes.slmtoolbox.license.LicenseConfig
@@ -57,7 +58,10 @@ class LicenseFragment : Fragment() {
             setBusy(true)
             viewLifecycleOwner.lifecycleScope.launch {
                 when (val result = LicenseApi.activate(requireContext(), code)) {
-                    is LicenseResult.Success -> showActivatedDialog()
+                    is LicenseResult.Success -> {
+                        CatalogApi.syncBestEffort(requireContext())
+                        showActivatedDialog()
+                    }
                     is LicenseResult.Failure -> {
                         if (_binding == null) return@launch
                         binding.tvLicenseStatus.text = errorMessage(result.code)

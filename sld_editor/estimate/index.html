@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLM Estimate — Assembly Builder</title>
+    <script>
+        (function () {
+            var path = location.pathname || '/';
+            if (
+                location.hostname.endsWith('github.io') &&
+                path &&
+                !path.endsWith('/') &&
+                !/\.[a-z0-9]+$/i.test(path)
+            ) {
+                location.replace(path + '/' + location.search + location.hash);
+            }
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./estimate.css">
+</head>
+<body>
+    <div id="licenseGate" class="license-gate hidden" aria-modal="true" role="dialog">
+        <div class="license-gate-card">
+            <div class="license-gate-brand">SLM</div>
+            <h1 class="license-gate-title">Activate rental license</h1>
+            <p class="license-gate-sub">
+                Enter the same license code used on the phone app. Kit suggestions use your license permissions.
+            </p>
+            <label class="license-gate-label" for="licenseCodeInput">License code</label>
+            <input
+                type="text"
+                id="licenseCodeInput"
+                class="license-gate-input"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="SLM-…"
+            >
+            <p id="licenseStatus" class="license-gate-status"></p>
+            <p id="licenseError" class="license-gate-error"></p>
+            <button type="button" id="licenseActivateBtn" class="est-btn est-btn-primary license-gate-btn">
+                Activate
+            </button>
+            <div id="licenseProgress" class="license-gate-progress hidden">Checking…</div>
+        </div>
+    </div>
+
+    <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
+
+    <div class="est-shell" id="estShell">
+        <header class="est-top">
+            <div class="est-brand-block">
+                <a class="est-back" href="../index.html">← CAD Editor</a>
+                <div>
+                    <div class="est-brand">SLM Estimate</div>
+                    <p class="est-tagline">Build structure, conductor, and site kits from your rate book</p>
+                </div>
+            </div>
+            <div class="est-top-actions">
+                <button type="button" class="est-btn est-btn-ghost" id="btnExportKits">Export kits</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnImportKits">Import kits</button>
+                <input type="file" id="importKitsFile" accept=".json" hidden>
+                <button type="button" class="est-btn est-btn-ghost" id="btnPublishCatalog" title="Push rate book + kits to Supabase for the mobile app">Publish to app</button>
+                <button type="button" class="est-btn est-btn-primary" id="btnResetKits" title="Reset kit edits to empty matrix">Reset edits</button>
+            </div>
+        </header>
+
+        <div class="est-stats" id="estStats"></div>
+
+        <nav class="est-tabs" role="tablist">
+            <button type="button" class="est-tab active" data-tab="structure">
+                Structure kits <span class="est-tab-count" id="tabCountStructure">0</span>
+            </button>
+            <button type="button" class="est-tab" data-tab="conductor">
+                Conductor kits <span class="est-tab-count" id="tabCountConductor">0</span>
+            </button>
+            <button type="button" class="est-tab" data-tab="addon">
+                Guarding add-ons <span class="est-tab-count" id="tabCountAddon">0</span>
+            </button>
+            <button type="button" class="est-tab" data-tab="ratebook">
+                Rate book <span class="est-tab-count" id="tabCountRatebook">0</span>
+            </button>
+            <button type="button" class="est-tab hidden" data-tab="suggestions" id="tabSuggestions">
+                Suggestions <span class="est-tab-count" id="tabCountSuggestions">0</span>
+            </button>
+        </nav>
+
+        <div class="est-body">
+            <section class="est-board" id="boardPanel">
+                <div class="est-filters">
+                    <input type="search" id="boardSearch" class="est-input" placeholder="Filter kits…">
+                    <select id="filterVoltage" class="est-select">
+                        <option value="">All voltages</option>
+                        <option>33kV</option>
+                        <option>11kV</option>
+                        <option>LT</option>
+                    </select>
+                    <select id="filterStructure" class="est-select">
+                        <option value="">All structures</option>
+                        <option value="1P">1P</option>
+                        <option value="2P">2P</option>
+                        <option value="3P">3P</option>
+                        <option value="4P">4P</option>
+                        <option value="DTR2P">DTR on 2P</option>
+                        <option value="DTR4P">DTR on 4P</option>
+                        <option value="CUSTOM">Custom</option>
+                    </select>
+                    <select id="filterOrigin" class="est-select">
+                        <option value="">Matrix + custom</option>
+                        <option value="matrix">Matrix only</option>
+                        <option value="custom">Custom only</option>
+                    </select>
+                    <select id="filterConductor" class="est-select">
+                        <option value="">All conductors</option>
+                    </select>
+                    <select id="filterDtrCapacity" class="est-select">
+                        <option value="">All DTR kVA</option>
+                    </select>
+                    <select id="filterWire" class="est-select">
+                        <option value="">All wires</option>
+                        <option value="2W">2 wire</option>
+                        <option value="3W">3 wire</option>
+                        <option value="4W">4 wire</option>
+                        <option value="cable">cable</option>
+                    </select>
+                    <select id="filterLocation" class="est-select">
+                        <option value="">All locations</option>
+                        <option value="Tangent">Tangent</option>
+                        <option value="Angular">Angular</option>
+                        <option value="Dead-end">Dead-end</option>
+                    </select>
+                    <select id="filterArrangement" class="est-select">
+                        <option value="">All arrangements</option>
+                        <option value="InlineArr">In-line arr.</option>
+                        <option value="Sectional">Sectional</option>
+                    </select>
+                    <select id="filterExtension" class="est-select">
+                        <option value="">All extension</option>
+                        <option value="NoExt">No ext</option>
+                        <option value="WithExt">With ext</option>
+                    </select>
+                    <select id="filterStatus" class="est-select">
+                        <option value="">All status</option>
+                        <option value="empty">Empty</option>
+                        <option value="complete">Complete</option>
+                        <option value="partial">In progress</option>
+                        <option value="disabled">Disabled</option>
+                    </select>
+                </div>
+                <div class="est-board-summary" id="boardSummary"></div>
+                <div class="est-board-toolbar" id="boardToolbar">
+                    <button type="button" class="est-btn est-btn-primary est-btn-sm" id="btnAddCustomStructure">+ Custom structure</button>
+                </div>
+                <div class="est-board-list" id="boardList"></div>
+            </section>
+
+            <section class="est-editor hidden" id="editorPanel">
+                <div class="ed-top">
+                    <button type="button" class="est-btn est-btn-ghost" id="btnCloseEditor">← Back</button>
+                    <div class="ed-top-main">
+                        <h2 class="est-editor-title" id="editorTitle">Kit</h2>
+                        <p class="est-editor-sub" id="editorSub"></p>
+                        <div class="ed-summary-chips" id="editorSummaryChips"></div>
+                    </div>
+                    <div class="ed-top-actions">
+                        <button type="button" class="est-btn est-btn-ghost hidden" id="btnSuggestKit" title="Send this kit edit for approval">Suggest change</button>
+                        <button type="button" class="est-btn est-btn-ghost hidden" id="btnDeleteCustomKit" title="Remove this custom kit">Delete custom</button>
+                        <button type="button" class="est-btn est-btn-ghost" id="btnMoreActions" title="More">More</button>
+                        <button type="button" class="est-btn est-btn-primary" id="btnSaveKit">Save</button>
+                    </div>
+                </div>
+
+                <div class="ed-more-panel hidden" id="edMorePanel">
+                    <label class="est-check"><input type="checkbox" id="kitEnabled"> Use this kit in estimates</label>
+                    <label class="est-check"><input type="checkbox" id="kitComplete"> Mark as reviewed</label>
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedConductor" hidden>Fill conductor item</button>
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedFittings" hidden>Fill suggested fittings</button>
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnCopyFrom">Copy from similar kit…</button>
+                    <textarea id="kitNotes" class="est-notes" placeholder="Optional note for this kit"></textarea>
+                </div>
+
+                <div class="ed-view-tabs" role="tablist">
+                    <button type="button" class="ed-view-tab active" data-ed-view="review">Review list</button>
+                    <button type="button" class="ed-view-tab" data-ed-view="add">Add item</button>
+                </div>
+
+                <div class="ed-body">
+                    <div class="ed-review" id="edReviewView">
+                        <div id="kitLines" class="est-lines"></div>
+                    </div>
+                    <div class="ed-add hidden" id="edAddView">
+                        <p class="ed-help">Search and tap an item to add it to this kit.</p>
+                        <div class="est-catalog-tabs">
+                            <button type="button" class="est-mini-tab active" data-cat="material">Materials</button>
+                            <button type="button" class="est-mini-tab" data-cat="labour">Labour</button>
+                            <button type="button" class="est-mini-tab" data-cat="poles">Poles</button>
+                            <button type="button" class="est-mini-tab" data-cat="all">All</button>
+                        </div>
+                        <input type="search" id="catalogSearch" class="est-input w-full" placeholder="Type name or code…">
+                        <div id="catalogList" class="est-catalog-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="est-ratebook hidden" id="ratebookPanel">
+                <div class="est-filters">
+                    <input type="search" id="rateSearch" class="est-input" placeholder="Search materials & labour…">
+                    <select id="rateType" class="est-select">
+                        <option value="">All types</option>
+                        <option value="material">Materials</option>
+                        <option value="labour">Labour</option>
+                    </select>
+                </div>
+                <div id="rateList" class="est-rate-list"></div>
+            </section>
+
+            <section class="est-suggestions hidden" id="suggestionsPanel">
+                <div class="est-filters sug-filters">
+                    <select id="sugStatusFilter" class="est-select">
+                        <option value="pending">Pending</option>
+                        <option value="">All statuses</option>
+                        <option value="accepted">Accepted</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                    <button type="button" class="est-btn est-btn-ghost" id="btnRefreshSuggestions">Refresh</button>
+                </div>
+                <div class="sug-layout">
+                    <div id="sugList" class="sug-list"></div>
+                    <div id="sugDetail" class="sug-detail">
+                        <p class="ed-help">Select a suggestion to compare with the current kit.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div class="est-modal hidden" id="customModal" role="dialog" aria-modal="true">
+        <div class="est-modal-card">
+            <h3>New custom structure</h3>
+            <p class="est-modal-sub">
+                For non-standard poles/structures. Build the BOQ from Mat/Lab after creating.
+                Custom kits publish with the catalog and are not wiped when the matrix is regenerated.
+            </p>
+            <label class="license-gate-label" for="customLabel">Name</label>
+            <input type="text" id="customLabel" class="est-input w-full" placeholder="e.g. 11kV H-pole special road crossing">
+            <label class="license-gate-label" for="customVoltage">Voltage</label>
+            <select id="customVoltage" class="est-select w-full">
+                <option>11kV</option>
+                <option>33kV</option>
+                <option>LT</option>
+            </select>
+            <label class="license-gate-label" for="customLocation">Location (optional)</label>
+            <select id="customLocation" class="est-select w-full">
+                <option value="">—</option>
+                <option>Tangent</option>
+                <option>Angular</option>
+                <option>Dead-end</option>
+            </select>
+            <label class="license-gate-label" for="customConductorNote">Conductor note (optional)</label>
+            <input type="text" id="customConductorNote" class="est-input w-full" placeholder="e.g. Dog 100 / mixed">
+            <label class="license-gate-label" for="customPoleHint">Pole / height hint (optional)</label>
+            <input type="text" id="customPoleHint" class="est-input w-full" placeholder="e.g. 11m PSC">
+            <label class="license-gate-label" for="customNotes">Notes (optional)</label>
+            <textarea id="customNotes" class="est-notes" placeholder="Why this custom kit exists"></textarea>
+            <div class="est-modal-actions">
+                <button type="button" class="est-btn est-btn-ghost" id="btnCustomCancel">Cancel</button>
+                <button type="button" class="est-btn est-btn-primary" id="btnCustomCreate">Create &amp; edit</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="est-modal hidden" id="copyModal" role="dialog" aria-modal="true">
+        <div class="est-modal-card">
+            <h3>Copy from a similar kit</h3>
+            <p class="est-modal-sub">This replaces the current list with a copy you can then edit.</p>
+            <select id="copySource" class="est-select w-full"></select>
+            <div class="est-modal-actions">
+                <button type="button" class="est-btn est-btn-ghost" id="btnCopyCancel">Cancel</button>
+                <button type="button" class="est-btn est-btn-primary" id="btnCopyApply">Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="est-toast hidden" id="estToast"></div>
+    <script src="../license-config.js"></script>
+    <script src="../license.js"></script>
+    <script src="./estimate.js"></script>
+</body>
+</html>

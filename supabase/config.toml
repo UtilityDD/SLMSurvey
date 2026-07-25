@@ -6,3 +6,18 @@ verify_jwt = false
 
 [functions.license-validate]
 verify_jwt = false
+
+[functions.catalog-current]
+verify_jwt = false
+
+[functions.catalog-publish]
+verify_jwt = false
+
+[functions.catalog-suggest]
+verify_jwt = false
+
+[functions.catalog-suggestions-list]
+verify_jwt = false
+
+[functions.catalog-suggestion-review]
+verify_jwt = false

@@ -92,6 +92,8 @@ Deno.serve(async (req) => {
       expires_at: license.expires_at,
       max_devices: license.max_devices,
       grace_days: 7,
+      can_suggest: license.can_suggest === true,
+      can_approve: license.can_approve === true,
     });
   } catch (e) {
     return json({ ok: false, error: "server_error", detail: String(e) }, 500);

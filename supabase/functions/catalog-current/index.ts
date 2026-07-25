@@ -1,5 +1,5 @@
-// Deno Edge Function: validate an already-activated device.
-// Deploy: supabase functions deploy license-validate --no-verify-jwt
+// Deno Edge Function: return current estimate catalog to an activated device.
+// Deploy: supabase functions deploy catalog-current --no-verify-jwt
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -20,7 +20,10 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
 
   try {
-    const { device_id } = await req.json();
+    const body = await req.json();
+    const device_id = body?.device_id;
+    const known_version = body?.version_label ? String(body.version_label) : "";
+
     if (!device_id) return json({ ok: false, error: "missing_fields" }, 400);
 
     const supabase = createClient(
@@ -42,7 +45,7 @@ Deno.serve(async (req) => {
 
     const { data: license } = await supabase
       .from("licenses")
-      .select("*")
+      .select("id, status, expires_at")
       .eq("id", activation.license_id)
       .maybeSingle();
 
@@ -53,24 +56,44 @@ Deno.serve(async (req) => {
 
     const expiresAt = new Date(license.expires_at).getTime();
     if (expiresAt <= Date.now() || license.status === "expired") {
-      await supabase.from("licenses").update({ status: "expired" }).eq("id", license.id);
       return json({ ok: false, error: "expired" }, 403);
     }
 
-    await supabase
-      .from("activations")
-      .update({ last_seen_at: new Date().toISOString() })
-      .eq("id", activation.id);
+    const { data: catalog, error } = await supabase
+      .from("estimate_catalogs")
+      .select(
+        "id, version_label, published_at, notes, ratebook, kit_matrix, kit_edits",
+      )
+      .eq("is_current", true)
+      .maybeSingle();
+
+    if (error) {
+      return json({ ok: false, error: "server_error", detail: error.message }, 500);
+    }
+    if (!catalog) {
+      return json({ ok: false, error: "no_catalog" }, 404);
+    }
+
+    if (known_version && known_version === catalog.version_label) {
+      return json({
+        ok: true,
+        unchanged: true,
+        version_label: catalog.version_label,
+        published_at: catalog.published_at,
+        notes: catalog.notes ?? "",
+      });
+    }
 
     return json({
       ok: true,
-      code: license.code,
-      customer_name: license.customer_name,
-      expires_at: license.expires_at,
-      max_devices: license.max_devices,
-      grace_days: 7,
-      can_suggest: license.can_suggest === true,
-      can_approve: license.can_approve === true,
+      unchanged: false,
+      id: catalog.id,
+      version_label: catalog.version_label,
+      published_at: catalog.published_at,
+      notes: catalog.notes ?? "",
+      ratebook: catalog.ratebook,
+      kit_matrix: catalog.kit_matrix,
+      kit_edits: catalog.kit_edits ?? {},
     });
   } catch (e) {
     return json({ ok: false, error: "server_error", detail: String(e) }, 500);

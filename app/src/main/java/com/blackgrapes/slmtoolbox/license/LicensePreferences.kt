@@ -11,7 +11,9 @@ data class LicenseSnapshot(
     val expiresAtEpochMs: Long,
     val lastValidatedAtMs: Long,
     val graceDays: Int,
-    val lastError: String?
+    val lastError: String?,
+    val canSuggest: Boolean = false,
+    val canApprove: Boolean = false
 ) {
     val isTrial: Boolean
         get() {
@@ -47,6 +49,8 @@ object LicensePreferences {
     private const val KEY_GRACE = "grace_days"
     private const val KEY_ERROR = "last_error"
     private const val KEY_DEVICE = "device_id"
+    private const val KEY_CAN_SUGGEST = "can_suggest"
+    private const val KEY_CAN_APPROVE = "can_approve"
 
     fun deviceId(context: Context): String {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -70,7 +74,9 @@ object LicensePreferences {
             expiresAtEpochMs = p.getLong(KEY_EXPIRES, 0L),
             lastValidatedAtMs = p.getLong(KEY_VALIDATED, 0L),
             graceDays = p.getInt(KEY_GRACE, LicenseConfig.GRACE_DAYS_DEFAULT),
-            lastError = p.getString(KEY_ERROR, null)
+            lastError = p.getString(KEY_ERROR, null),
+            canSuggest = p.getBoolean(KEY_CAN_SUGGEST, false),
+            canApprove = p.getBoolean(KEY_CAN_APPROVE, false)
         )
     }
 
@@ -79,7 +85,9 @@ object LicensePreferences {
         customerName: String,
         expiresAtEpochMs: Long,
         graceDays: Int,
-        licenseCode: String = ""
+        licenseCode: String = "",
+        canSuggest: Boolean = false,
+        canApprove: Boolean = false
     ) {
         val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val editor = prefs.edit()
@@ -88,6 +96,8 @@ object LicensePreferences {
             .putLong(KEY_EXPIRES, expiresAtEpochMs)
             .putLong(KEY_VALIDATED, System.currentTimeMillis())
             .putInt(KEY_GRACE, graceDays.coerceIn(1, 30))
+            .putBoolean(KEY_CAN_SUGGEST, canSuggest)
+            .putBoolean(KEY_CAN_APPROVE, canApprove)
             .remove(KEY_ERROR)
         val code = licenseCode.trim().uppercase()
         if (code.isNotEmpty()) {
@@ -182,7 +192,9 @@ object LicensePreferences {
             customerName = obj.optString("customer_name", ""),
             expiresAtEpochMs = expiresMs,
             graceDays = obj.optInt("grace_days", LicenseConfig.GRACE_DAYS_DEFAULT),
-            licenseCode = codeFromServer
+            licenseCode = codeFromServer,
+            canSuggest = obj.optBoolean("can_suggest", false),
+            canApprove = obj.optBoolean("can_approve", false)
         )
         return true
     }

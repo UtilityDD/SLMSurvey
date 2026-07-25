@@ -1,0 +1,3361 @@
+{
+  "version": "FY-import",
+  "source": "Google Sheet Mat + Lab tabs",
+  "importedAt": "2026-07-25T14:22:59.348588+00:00",
+  "materials": [
+    {
+      "code": "110030141",
+      "description": "P C C POLE : 8M LONG",
+      "unit": "NOS",
+      "rate": 5363.44,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110030241",
+      "description": "P C C POLE : 9M LONG",
+      "unit": "NOS",
+      "rate": 10198.28,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110010341",
+      "description": "STEEL TUBULAR POLE 9 M LONG (WITH CAP)",
+      "unit": "NOS",
+      "rate": 11550.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110011541",
+      "description": "STEEL TUBULAR POLE 9.5M LONG (WITH CAP)",
+      "unit": "NOS",
+      "rate": 16598.41,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110010741",
+      "description": "STEEL TUBULAR POLE 11 M LONG (WITH CAP)",
+      "unit": "NOS",
+      "rate": 17887.87,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110020711",
+      "description": "RAIL POLE (11-13 M LONG) 52 KG",
+      "unit": "MT",
+      "rate": 93806.05,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "110051211",
+      "description": "WIDE FLANGE BEAM: 13 M LONG WBP160X160X30.44 KG/M WITH GRADE E360",
+      "unit": "MT",
+      "rate": 65952.78,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "102010911",
+      "description": "149.5 CHANNEL 100X5ONINI",
+      "unit": "MT",
+      "rate": 109813.95,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "102010611",
+      "description": "\u2022M.S CHANNEL 75X40 MM",
+      "unit": "MT",
+      "rate": 110043.09,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "101011311",
+      "description": "M S.ANGLE 65X65X6 MM",
+      "unit": "MT",
+      "rate": 108667.24,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "101011011",
+      "description": "M.S ANGLE 50X50X6 MM",
+      "unit": "MT",
+      "rate": 109603.22,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "103011211",
+      "description": "M.S FLAT 50X6 MM",
+      "unit": "MT",
+      "rate": 117623.3,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "103011511",
+      "description": "M.S FLAT 65X6 MM",
+      "unit": "MT",
+      "rate": 117493.74,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "103011611",
+      "description": "M,S FLAT 65X8 MM",
+      "unit": "MT",
+      "rate": 114149.39,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "103011911",
+      "description": "M.S FLAT 753{8 MM",
+      "unit": "MT",
+      "rate": 114255.68,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "103012311",
+      "description": "M.S FLAT 75X12 MM",
+      "unit": "MT",
+      "rate": 114336.31,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504130432",
+      "description": "GI STAY SET HT(1830X20MM)WRKG LD\u20227900ICG",
+      "unit": "NOS",
+      "rate": 795.83,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504130332",
+      "description": "Cl STAY SET LT(1680X16MM)WRKG LD\u20225100KG",
+      "unit": "NOS",
+      "rate": 462.17,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504110541",
+      "description": "G 1 EARTH SPIKE 1833X20MM",
+      "unit": "NOS",
+      "rate": 367.98,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503010711",
+      "description": "G.I. WIRE 4 MM",
+      "unit": "MT",
+      "rate": 137360.98,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503010811",
+      "description": "G.I  WIRE 5 MM",
+      "unit": "MT",
+      "rate": 13686598.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503050911",
+      "description": "G.1. STAY WIRE 7 / 4 MM (8 SWG)",
+      "unit": "MT",
+      "rate": 141692.18,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503050711",
+      "description": "6.1. STAY WERE 7/ 3.15KM (10 SWG)",
+      "unit": "MT",
+      "rate": 142310.93,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503050611",
+      "description": "G.I. STAY WIRE 7/ 2.5MM (12 SWG)",
+      "unit": "MT",
+      "rate": 145404.64,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508020432",
+      "description": "33KV PORCELAIN POST INSULATOR (STACK TYPE)",
+      "unit": "NOS",
+      "rate": 1153.01,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508011041",
+      "description": "33 KV POLYMER COMPOSITE WITH FITTINGS PIN INSULATOR (10KN- 900MM CREEPAGE DISTANCE)",
+      "unit": "NOS",
+      "rate": 678.15,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508030641",
+      "description": "33 KV POLYMER comPosit WITH FITTINGs 70KN DISC INSULATOR",
+      "unit": "NOS",
+      "rate": 326.7,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508020341",
+      "description": "11KV PORCELAIN POST INSULATOR",
+      "unit": "NOS",
+      "rate": 289.57,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508011141",
+      "description": "11 KV POLYMER COMPOSITE WITH FITTINGS PIN INSULATOR (5KN- 320MM CREEPAGE DISTANCE)",
+      "unit": "NOS",
+      "rate": 243.79,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508030541",
+      "description": "11 KV POLYMER COMPOSITE 45KN DISC INSULATOR",
+      "unit": "NOS",
+      "rate": 183.15,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010132",
+      "description": "COMPOSITE HARDWARE FITTINGS FOR ACSR WEASEL/ RABBIT (30 /50SQMM)C01NDUCTOR",
+      "unit": "SET",
+      "rate": 327.83,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010232",
+      "description": "COMPOSITE HARDWARE FITTINGS SUITABLE FOR ACSR DOG1100SQMM)CONDUCTOR",
+      "unit": "SET",
+      "rate": 518.96,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010332",
+      "description": "SINGLE TENSION HARDWARE FITTINGS FOR ACSR WOLF 1[150SQMM) CONDUCTOR",
+      "unit": "SET",
+      "rate": 1354.91,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010432",
+      "description": "SINGLE SUSPENSION HARDWARE FITTINGS FOR ACSR WOLF (150SQMNI)CONDUCTOR",
+      "unit": "SET",
+      "rate": 647.62,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010532",
+      "description": "SINGLE TENSION HARDWARE FITTINGS FOR PANTHER (200SQMM)CONDUCTOR",
+      "unit": "SET",
+      "rate": 1683.48,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504010632",
+      "description": "SINGLE SUSPENSION HARDWARE FITTINGS FOR PANTHER (200SQMM) CONDUCTOR",
+      "unit": "SET",
+      "rate": 730.12,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "309010541",
+      "description": "LIGHTNING ARRESTER 42KV 10 KA PORCELAIN HOUSED GAPLESS TYPE FOR 33KV SYSTEM I",
+      "unit": "NOS",
+      "rate": 762827.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "309010841",
+      "description": "LIGHTNING ARRESTER 12 KV 5KA PORCELAIN HOUSED GAPLESS TYPEFOR 11KV SYSTEM",
+      "unit": "NOS",
+      "rate": 524.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "309011041",
+      "description": "LIGHTNING ARRESTER 12 KV 10KA PORCELAIN HOUSED STATION CLASS",
+      "unit": "NOS",
+      "rate": 2905.62,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304010632",
+      "description": "TPGO ISOLATOR : 11 KV :400 AMP.",
+      "unit": "SET",
+      "rate": 19138.97,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304010532",
+      "description": "TPGO ISOLATOR : 11 KV : 200 AMP.",
+      "unit": "SET",
+      "rate": 10384.98,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304010332",
+      "description": "33 KV 400 A TPGO ISOLATOR (ROCKI NG TYPE}",
+      "unit": "SET",
+      "rate": 40318.52,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304022332",
+      "description": "33 KV 400 A CR TYPE ISOLATOR WITHOUT EARTH SWITCH (HIGH LEVEL)",
+      "unit": "SET",
+      "rate": 41924.78,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304020832",
+      "description": "33 KV 400 A CR TYPE ISOLATOR WITHOUT EARTH SWITCH (LOW LEVEL)",
+      "unit": "SET",
+      "rate": 41486.71,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "304021132",
+      "description": "33 KV 400 A CR TYPE ISOLATOR WITH EARTH SWITCH (HIGH LEVEL)",
+      "unit": "SET",
+      "rate": 55615.93,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502010321",
+      "description": "ACSR SQUIRM. (20 SQMM) CONDUCTOR",
+      "unit": "KM",
+      "rate": 25658.05,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502010621",
+      "description": "ACSR WEASEL (30SQMM) CONDUCTOR",
+      "unit": "KM",
+      "rate": 38139.33,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502010921",
+      "description": "ACSR RABBIT (50SQMM) CONDUCTOR",
+      "unit": "KM",
+      "rate": 62290.12,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502011221",
+      "description": "ACSR DOG (100SQMM) CONDUCTOR",
+      "unit": "KM",
+      "rate": 122653.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502011521",
+      "description": "ACSR WOLF (15051)MM) CONDUCTOR",
+      "unit": "KM",
+      "rate": 203337.56,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "502011821",
+      "description": "COND ACSR PNTH 200SMNI",
+      "unit": "KM",
+      "rate": 271669.29,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501012921",
+      "description": "CABLE(PVC 1.1 KV GRADE) 2CX4SQMM",
+      "unit": "KM",
+      "rate": 43310.09,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501013021",
+      "description": "CABLE(PVC 1.1 KV GRADE) 2CX6SQMM",
+      "unit": "KM",
+      "rate": 44410.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501017421",
+      "description": "CABLE{PVC 1,1 KV GRADE) 4CORE X1 OSQMM",
+      "unit": "KM",
+      "rate": 125852.36,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501017821",
+      "description": "CABLE(PVC 1.1 KV GRADE] 4CX25SQMM",
+      "unit": "KM",
+      "rate": 229429.95,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501017921",
+      "description": "CABLE(PVC 1.1 KV GRADE] 4CXSOSQMM",
+      "unit": "KM",
+      "rate": 248238.29,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501018121",
+      "description": "CABLE(PVC 1.1 KV GRADE) 4CX120SQMM",
+      "unit": "KM",
+      "rate": 481307.89,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501018221",
+      "description": "CABLE(PVC 1.1 KV GRADE) 4CX185SQMM",
+      "unit": "KM",
+      "rate": 781231.73,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501018321",
+      "description": "CABLE(PVC 1.1 KV GRADE] 4CX3005QMM",
+      "unit": "KM",
+      "rate": 1277593.58,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501021121",
+      "description": "CABLE(XLPE Li KV) 1CX630 SQMM",
+      "unit": "KM",
+      "rate": 855321.69,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501022321",
+      "description": "CABLE (XLPE 1.1 KV) 4 C X SOSQMM",
+      "unit": "KM",
+      "rate": 354938.27,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501022421",
+      "description": "CABLE (XLPE 1.1 KV ) 4 C X 120501M",
+      "unit": "KM",
+      "rate": 751027.94,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501022521",
+      "description": "CABLE (XLPE 1.1 KV ) 4 C X 1855QMM",
+      "unit": "KM",
+      "rate": 1168081.89,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501022621",
+      "description": "CABLE (XLPE 1.1 KV) 4 C X 300SQMM",
+      "unit": "KM",
+      "rate": 1777071.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501023621",
+      "description": "CABLE(XLPE 11 KV) 1CX1000SQMM",
+      "unit": "KM",
+      "rate": 1685372.9,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501023821",
+      "description": "CABLE(XLPE 11 KT) 3CX955QMM",
+      "unit": "KM",
+      "rate": 1046828.46,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501023921",
+      "description": "CABLE(XLPE 11 KV) 3CX1855QMM",
+      "unit": "KM",
+      "rate": 1229138.19,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501024121",
+      "description": "CABLE(XLPE 11 KV) 3\u2022CX300SQM1Y/",
+      "unit": "KM",
+      "rate": 1768380.17,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501024221",
+      "description": "CABLE( XLPE 11KV) 3 CX 400SQMM",
+      "unit": "KM",
+      "rate": 2179818.59,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501025421",
+      "description": "CABLE(XLPE 33 KV) 1X1000 SQMM",
+      "unit": "KM",
+      "rate": 2083227.79,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501024921",
+      "description": "CABLE(XLPE 33 KV) 3CX185SQMM",
+      "unit": "KM",
+      "rate": 2390241.81,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501025221",
+      "description": "CABLE(XLPE 33 KV) 3X400SQMM",
+      "unit": "KM",
+      "rate": 2950761.2,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501030421",
+      "description": "CABLE(LT AERIAL BUNCHED 1.1 KV) 3CX50-1CX16+1CX35SQMM",
+      "unit": "KM",
+      "rate": 237394.49,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501030521",
+      "description": "CABLE(LT AERIAL BUNCHED 1.1 KV) 3CX70+1CX16+1CX5OSQMM",
+      "unit": "KM",
+      "rate": 315558.99,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501031121",
+      "description": "CABLE(HT AERIAL BUNCHED 11 KV) 3CX95+1CX7OSQMM",
+      "unit": "KM",
+      "rate": 879877.46,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501041121",
+      "description": "CABLE( COPPER CONTROL 1.1 KV) 12 C X 2.55QMM",
+      "unit": "KM",
+      "rate": 420547.33,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501041021",
+      "description": "CABLE( COPPER CONTROL 1.1 ICU) 8 E X 2.55QMM",
+      "unit": "KM",
+      "rate": 281825.12,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501040721",
+      "description": "CABLE( COPPER CONTROL 1.1 KV) 4C X 2.5SOIM",
+      "unit": "KM",
+      "rate": 157705.25,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301011041",
+      "description": "DTR 16KVA 11/0.4331W",
+      "unit": "NOS",
+      "rate": 89547.19,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301018141",
+      "description": "DTR 25 KVA 11/0.433KV",
+      "unit": "NOS",
+      "rate": 103528.11,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301018241",
+      "description": "DTR 63 KVA 11/0.433KV",
+      "unit": "NOS",
+      "rate": 197568.41,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301018341",
+      "description": "DTR 100 KVA 11/0.433KV",
+      "unit": "NOS",
+      "rate": 248239.75,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "3010113741",
+      "description": "DTR 160 KVA 11/0.433KV",
+      "unit": "NOS",
+      "rate": 318579.7,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019641",
+      "description": "DTR 250 KVA 11/0.433KV -OUTDOOR TYPE",
+      "unit": "NOS",
+      "rate": 674147.87,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019041",
+      "description": "DTR 315 KVA 11/0.43311V -INDOORTYPE",
+      "unit": "NOS",
+      "rate": 987447.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019141",
+      "description": "DTR 315 KVA 11/0.433KV -OUTDOORTYPE",
+      "unit": "NOS",
+      "rate": null,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019341",
+      "description": "DTR 630KVA 11/0.415K-ft-OUTDOOR & OIL COLLING TYPE",
+      "unit": "NOS",
+      "rate": 184384208.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019741",
+      "description": "DTR 315KVA 11/0.415KV-OUTDOOR & DRY VPI TYPE",
+      "unit": "NOS",
+      "rate": 2454693.87,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019541",
+      "description": "DTR 630KVA 11/0.415KV-OUTDOOR & DRY VPI TYPE",
+      "unit": "NOS",
+      "rate": 3505551.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301019441",
+      "description": "DTR 630KVA 11/0.415KV-INDOOR & DRY VPI TYPE",
+      "unit": "NOS",
+      "rate": 3505551.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301021241",
+      "description": "6.3 MVA 33/11KV POWER TRANSFORMER",
+      "unit": "NOS",
+      "rate": 11415656.07,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301022041",
+      "description": "RTCC PANEL FOR 6.3 MVA TRANSFORMAR",
+      "unit": "NOS",
+      "rate": 89074.27,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301021741",
+      "description": "10 MVA 33/11KV POWER TRANSFORMER",
+      "unit": "NOS",
+      "rate": 13287983.2,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301022141",
+      "description": "RTCC PANEL FOR 10 MVA TRANSFORMAR",
+      "unit": "NOS",
+      "rate": 8907427.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301018541",
+      "description": "100 KVA 33/0.415 KV STATION SERVICE TRANSFORMER",
+      "unit": "NOS",
+      "rate": 481555.9,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "908010252",
+      "description": "TRANSFORMER OIL (EHV GRADE)",
+      "unit": "NOS",
+      "rate": 127665.28,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "901031241",
+      "description": "30V 3SA AUTO & MANUAL, FLOAT-CUM-BOOST, THYRISTOR CONTROLLED BATTERY RGER.\nCHARGER.",
+      "unit": "SET",
+      "rate": 113898.24,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "501021132",
+      "description": "30V 100 AH PLANTE TYPE LEAD ACID BATTERY",
+      "unit": "SET",
+      "rate": 144142.4,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "901040332",
+      "description": "STAND ERD ACCESSORIES OF 30V 100 AH PLANTE TYPE BATTERY BATTERY",
+      "unit": "SET",
+      "rate": 16330.86,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301032241",
+      "description": "33 KV PT: 1 PHASE OD TYPE :RATIO : 33 / V3 / 0.11 / V 3 KV",
+      "unit": "NOS",
+      "rate": 26649.27,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301051641",
+      "description": "33 KV CT (1 PHASE) : OD TYPE : DUAL CORE CT RATIO-400 - 200 / 1 -1 A",
+      "unit": "NOS",
+      "rate": 37849.26,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301054741",
+      "description": "33 KV CT (1 PHASE) : OD TYPE; DUAL CORE CT RATIO-200 - 100 / 1 -1 -LA",
+      "unit": "NOS",
+      "rate": 51838.3,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301055641",
+      "description": "33 KV CT (1 PHASE) : OD TYPE : DUAL CORE CT RATIO-100 - 50 / 1 -1A",
+      "unit": "NOS",
+      "rate": 54028.65,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301061441",
+      "description": "LT CURRENT TRANSFORMERRING TYPE RATIO-200/5 AMPS",
+      "unit": "NOS",
+      "rate": 547.59,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301065141",
+      "description": "LT CURRENT TRANSFORMER, RING TYPE(TAPE WOUND), RATIO-400/5 AMPS, ACCURACY CLASS 0.55",
+      "unit": "NOS",
+      "rate": 452.68,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301070541",
+      "description": "11 KV COMBINED CT & PT WITH CT RATIO 200-100/1A, PT 11000/110V",
+      "unit": "NOS",
+      "rate": 55747.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301070741",
+      "description": "11 KV COMBINED CT & PT WITH CT RATIO 300-150/1A, PT 11000/110V",
+      "unit": "NOS",
+      "rate": 74402.57,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301070641",
+      "description": "11 KV COMBINED CT & PT WITH CT RATIO 200-100/5A, PT 11000/110V",
+      "unit": "NOS",
+      "rate": 55747.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "301070841",
+      "description": "11 KV COMBINED CT ,& PT WITH CT RATIO 300-150/5A, PT 11000/110V",
+      "unit": "NOS",
+      "rate": 74402.57,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "302030341",
+      "description": "36 KV VCB : 750 MVA 1000/1250 AMPS :O/D- TYPE, 30V DC",
+      "unit": "NOS",
+      "rate": 297887.7,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303071932",
+      "description": "33KVIDVCBPNL INCOMER WITHOUT C&R PANEL",
+      "unit": "SET",
+      "rate": 1013067.85,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303072032",
+      "description": "33KVIDVCBPNL OUTGOING WITHOUT C&R PANEL",
+      "unit": "SET",
+      "rate": 1014236.04,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303072132",
+      "description": "33KVIDVCBPNL FOR POWER TRANSFORMER WITHOUT C&R PANEL",
+      "unit": "SET",
+      "rate": 1029860.54,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303072232",
+      "description": "33KVIDPNL FOR 8115 PT",
+      "unit": "SET",
+      "rate": 616760.4,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303072332",
+      "description": "33KVIDPNL FOR BUS COUPLER WITH BUS SECTION PANEL",
+      "unit": "SET",
+      "rate": 1306533.95,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303072432",
+      "description": "33KVIDPNL FOR STATION TRANSFORMER",
+      "unit": "SET",
+      "rate": 727300.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303071232",
+      "description": "33KVIDVCB9PNL(21+1 0-1-21R+2BPT-1-1BC+115L)",
+      "unit": "SET",
+      "rate": 8367447.65,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303071332",
+      "description": "33KVIDVCB1OPNL(21+20+2TR+2BPT+1BC+11SL)",
+      "unit": "SET",
+      "rate": 9407191.04,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303071432",
+      "description": "33KVIDVCB13PNL(31+10+3TR+3BPT+2BC+1ISL)",
+      "unit": "SET",
+      "rate": 12449405.58,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "305015241",
+      "description": "33KV C&R PANEL, WITH DIFFERENTIAL RELAY SCADA COMPATIBLE FOR INDIVIDUAL TRANSFORMER",
+      "unit": "Nos",
+      "rate": 417159.59,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "305015141",
+      "description": "33KV C&R PANEL, WITH DIRECTIONAL RELAY, SCADA COMPATIBLE FOR FEEDER CONTROL",
+      "unit": "NOS",
+      "rate": 264156.29,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303050441",
+      "description": "12 KV 350MVA,400A SERIES TRIP METERING SWG COMPLETE WITH CTR-100-50/5-5A, PTR 11000/110V",
+      "unit": "NOS",
+      "rate": 353271.4,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303050341",
+      "description": "12 KV 350MVA,400A SERIES TRIP SWG COMPLETE WITH CTR-S0-25/5-5A, PTR 11000/110V",
+      "unit": "NOS",
+      "rate": 331927.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303060432",
+      "description": "12 KV 350MVA RMU METERING SWG CT RATION 100-50/5-5A, PTR 11000/110V",
+      "unit": "SET",
+      "rate": 702372.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303060332",
+      "description": "12 KV 35OMVA RMU METERING SWG CT RATION 50.25/5-5A, PTR 11000/110V",
+      "unit": "SET",
+      "rate": 716974.7,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303030732",
+      "description": "SCADA350MVA800/1250A-1N1BCOOG0 (ONE INCOMING PANEL ONLY)",
+      "unit": "SET",
+      "rate": 538481.65,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303030832",
+      "description": "SCADA35LIMVA800/1250A-INO8C106 0 (ONE BUS COUPLER PANEL ALONG WITH ADOPTER",
+      "unit": "SET",
+      "rate": 400737.8,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303030932",
+      "description": "SCADA350MVA 800/12 50A-INOBCOOG1 (ONE OUTGOING PANEL ONLY)",
+      "unit": "SET",
+      "rate": 480161.38,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303031532",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 2 PNL(0+0+2)",
+      "unit": "SET",
+      "rate": 960322.75,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303037332",
+      "description": "112 KV SCADA COMPATIBLE SHUNT TRIP SWITIHGEAR PANEL WITH VCB 2 PANEL (0+1+1)",
+      "unit": "SET",
+      "rate": 880899.17,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303037232",
+      "description": "12 KV SCADA COMPATIBLE SHUNT TRIP SWITCHGEAR PANEL WITH VCR 2 PANEL (1+ 1+ 0 )",
+      "unit": "SET",
+      "rate": 939219.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303041132",
+      "description": "SWITCHGEAR(SHUNT TRIP] WITH VCB (12 KV 350MVA 1250/800A) 2 PNL(1+0+1)",
+      "unit": "SET",
+      "rate": 1018643.03,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303032432",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250)8004) 3 PNI,(0+0+3)",
+      "unit": "SET",
+      "rate": 1440484.14,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303041432",
+      "description": "SWITCHGEAR(SHIINT TRIP) WITH VCB (12 KV 35OMVA 1250/800A) 3 PNL(1+0+2)",
+      "unit": "SET",
+      "rate": 14.99,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303036832",
+      "description": "SWITCHGEAR{SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 3 PNL(1+1+1)",
+      "unit": "SET",
+      "rate": 1419380.83,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303032732",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 3SOMVA 1250/800A) 4 PNL(1+0+3)",
+      "unit": "SET",
+      "rate": 1978965.79,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303037132",
+      "description": "SWITCHGEAR(SHUNT TRIP] WITH VCB (12 KV 350MVA 1250/800A) 4 PNL 1+1+2",
+      "unit": "SET",
+      "rate": 1899542.21,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303036732",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 5 PNL(2+1+2)",
+      "unit": "SET",
+      "rate": 2438023.86,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303036632",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 7 PNL(2+1+4)",
+      "unit": "SET",
+      "rate": 339834663.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303042332",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB {12 KV 350MVA 1250/8004) 8 PNL(2+1+5)",
+      "unit": "SET",
+      "rate": 3878508.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303033632",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 8 PNL(2+2+4)",
+      "unit": "SET",
+      "rate": null,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303033932",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCR (12 KV 350MVA 1250/13004) 9 PNL (2+1+6)",
+      "unit": "SET",
+      "rate": 4358669.32,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303036532",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/8004) 9 PSIL(3+2+4)",
+      "unit": "SET",
+      "rate": 4337566.07,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303034232",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 10 PNL(2+1+7)",
+      "unit": "SET",
+      "rate": 483883076.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303034532",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCR (12 KV 350MVA 1250/800A) 10 PNL(2+2+6)",
+      "unit": "SET",
+      "rate": 4759407.18,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303034832",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 3SOMVA 1250/800A) 10 PNL{3+2+5)",
+      "unit": "SET",
+      "rate": 4817727.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303035132",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/000A) 11 PNL(2+1+8)",
+      "unit": "SET",
+      "rate": 5318992.14,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303043532",
+      "description": "SWITC.HGEAR(SHUNT TRIP) WITH VCR (12 KV 350MVA 1250/8004) 11 PNL(3+2+6)",
+      "unit": "sET",
+      "rate": 5297888.83,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303035432",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCI3 (12 KV 350MVA 1250/800A) 13 PNL(4+3+6)",
+      "unit": "SET",
+      "rate": null,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303043832",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH UGH (12 KY 35014VA 1250/8004) 14 PNL(3+2+9)",
+      "unit": "SET",
+      "rate": 6738372.97,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303035732",
+      "description": "SWITCHGEAR(SLIUNT TRIP) WITH VCB (12 KV 350MVA 1250/800A) 14 PNL(3+3+8)",
+      "unit": "SET",
+      "rate": 665894939.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303036032",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCB (12 KV 350MVA 1250/8004) 14 PNL(4+3+ 7)",
+      "unit": "SET",
+      "rate": 6717269.66,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303044132",
+      "description": "SWITCHGEAR(SHUNT TRIP) WITH VCS (12 KV 3SOMVA 1250/800A) 15 PNL (4+3+13)",
+      "unit": "SET",
+      "rate": 7197431.04,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303062132",
+      "description": "SCADA RMU, 11KV OUTDOOR NON-EXTENSIBLE 3-WAY (2 LBS+ 2 OG)",
+      "unit": "SET",
+      "rate": 820192.38,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303062232",
+      "description": "SCADA RMU, 11KV OUTDOOR NON-EXTENSIBLE 4-WAY (2 LBS+ 2 OG) FOR OIL COOLED 315KVA DTR",
+      "unit": "SET",
+      "rate": 870248.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "303062332",
+      "description": "SCADA RMU, 11KV OUTDOOR NON-EXTENSIBLE 4-WAY (2 LBS+ 2 OG) FOR OIL COOLED 630KVA DTR",
+      "unit": "SET",
+      "rate": 893213.32,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401010741",
+      "description": "SINGLE PHASE 2W STATIC METER (5-30)A WITH P.P. BOX",
+      "unit": "NOS",
+      "rate": 1173.14,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021541",
+      "description": "SINGLE PHASE 2W STATIC METER (5-30)A WITHOUT P.P. BOX",
+      "unit": "NOS",
+      "rate": 6781.43,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021441",
+      "description": "THREE PHASE 4W (5-30)A, DLMS, WHOLE CURRENT STATIC METER",
+      "unit": "NOS",
+      "rate": 7058.15,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021741",
+      "description": "THREE PHASE 4W STATIC METER (10-60)A WITH PP BOX & LPR",
+      "unit": "NOS",
+      "rate": 6546.31,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401011541",
+      "description": "1 PHASE SMART METER WITH BOX AND DATA CARD",
+      "unit": "NOS",
+      "rate": 5528.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401022141",
+      "description": "3 PHASE SMART METER WITH BOX AND DATA CARD",
+      "unit": "NOS",
+      "rate": 7463.26,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401010541",
+      "description": "PREPAID1PHACSTAT.MTR.(5-30A)WHPPBOX",
+      "unit": "NOS",
+      "rate": 7410.32,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401010841",
+      "description": "1PHACSTAT.MTR.(10-60A)PRE-PAID WHSLNO",
+      "unit": "NOS",
+      "rate": 8056.64,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021641",
+      "description": "3PH4WACSTAT.MTR.(20-80A)PRE-PAIDWHSLNO",
+      "unit": "NOS",
+      "rate": 16303.88,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401010941",
+      "description": "1P 2W 5-30A EXPORT/IMPORT MTR WHSLNO",
+      "unit": "NOS",
+      "rate": 2095.44,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021241",
+      "description": "THREE PHASE STATIC METER (5-30)A IMPORT-EXPORT TYPE",
+      "unit": "NOS",
+      "rate": 6106.99,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401021341",
+      "description": "THREE PHASE STATIC METER (20-100)A IMPORT-EXPORT TYPE",
+      "unit": "NOS",
+      "rate": 6730.69,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034441",
+      "description": "3P4W LTCT  EXPORT IMPORT  BLK MTR WHSLNO",
+      "unit": "NOS",
+      "rate": 6720.42,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034541",
+      "description": "3P4W 11KV  EXPORT IMPORT  BLK MTR WHSLNO",
+      "unit": "NOS",
+      "rate": 9598.76,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034641",
+      "description": "3P4W 33KV  EXPORT IMPORT  BLK MTR WHSLNO",
+      "unit": "NOS",
+      "rate": 9598.76,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034841",
+      "description": "3P4W 132KV  EXPORT IMPORT  BLK MTR WHSLNO",
+      "unit": "NOS",
+      "rate": 43310.77,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034041",
+      "description": "3PH 4 W LT TOD METER CT RATIO 200/5 A FOR LT BULK",
+      "unit": "NOS",
+      "rate": 6059.98,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034141",
+      "description": "3PH 4 W DLMS WITH CT RATIO 50/5 A FOR 11KV  BULK",
+      "unit": "NOS",
+      "rate": 8819.82,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401033941",
+      "description": "3PH 4 W CT/PT OPERATED  CT RATIO 100/1 A FOR 33 KV BULK",
+      "unit": "NOS",
+      "rate": 9243.28,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401030541",
+      "description": "3 PHASE 4WIRE STATIC 132 KV CT-PT OPERATED HT TRIVECTOR TOD FOR 132 KV BULK,0.2S",
+      "unit": "NOS",
+      "rate": 40740.53,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401033441",
+      "description": "1 PH 2 W STATIC 25 KV CT-PT OPERATED TRIVECTOR TOD ENERGY METER FORTRACTION APPLICATION, 0.2S",
+      "unit": "NOS",
+      "rate": 37447.22,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401030641",
+      "description": "1 PH 2W STATIC 132 KV CT-PT OPERATED TRIVECTOR TOD ENERGY METER FOR 132 KV TRACTION POWER,0.2S",
+      "unit": "NOS",
+      "rate": 42755.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401032141",
+      "description": "HT 11KV FEEDER METER",
+      "unit": "NO",
+      "rate": 8650.04,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034241",
+      "description": "3-PH 4-WIRE (1A) AMR,TRI-VECTOR FEEDER METER FOR 33 KV SUB-STN",
+      "unit": "NOS",
+      "rate": 9308.63,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034741",
+      "description": "MULTI-FEEDER METERING RACK WITH SUMMATION UNIT FOR TWO FEEDER SUMMATION",
+      "unit": "NOS",
+      "rate": 775530.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401031341",
+      "description": "3PH 4 W CT OPERATED FULLY STATIC AMR,TRI-VECTOR DLMS METER FOR DTR",
+      "unit": "NOS",
+      "rate": 6104.51,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "401034340",
+      "description": "3PH4W 11KV(1A)BOUNDARY MTR WH SL NO",
+      "unit": "NOS",
+      "rate": 12842.64,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "902021440",
+      "description": "POLYCARBONATE SECURITY SEAL (PATENTED) 20 CM(LIGHT GREEN COLOUR)",
+      "unit": "NOS",
+      "rate": 7.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122141",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 16AMP",
+      "unit": "NOS",
+      "rate": 109.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122241",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 32 AMP",
+      "unit": "NOS",
+      "rate": 174.94,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122341",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 63 AMP",
+      "unit": "NOS",
+      "rate": 385.21,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122441",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 100 AMP",
+      "unit": "NOS",
+      "rate": 649.37,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122541",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 200 AMP",
+      "unit": "NOS",
+      "rate": 1385.33,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122641",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 300 AMP",
+      "unit": "NOS",
+      "rate": 2335.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122741",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 400 AMP",
+      "unit": "NOS",
+      "rate": 3425.13,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504122841",
+      "description": "RE-WIRABLE PORCELAIN CUT OUT FUSE UNIT 500 AMP",
+      "unit": "NOS",
+      "rate": 4080.77,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113020641",
+      "description": "11KV \"V\" BRACKET FOR PCC POLE 8M LONG",
+      "unit": "NOS",
+      "rate": 1294.37,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113020741",
+      "description": "11KV \"V\" BRACKET FOR PCC POLE 9M LONG",
+      "unit": "NOS",
+      "rate": 1314.19,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113020841",
+      "description": "11 KV \"V\" BRACKET FOR RAIL POLE",
+      "unit": "NOS",
+      "rate": 1315.56,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113020941",
+      "description": "33KV \"V\" BRACKET FOR PCC POLE 9M LONG",
+      "unit": "NOS",
+      "rate": 1998.99,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021141",
+      "description": "33 KV \"V\" BRACKET FOR RAIL POLE",
+      "unit": "NOS",
+      "rate": 2259.3,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021241",
+      "description": "11 KV TOP ADAPTOR for PCC pole 8M long",
+      "unit": "NOS",
+      "rate": 433.67,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021341",
+      "description": "11 KV TOP ADAPTOR for PCC pole 9M long",
+      "unit": "NOS",
+      "rate": 478.12,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021441",
+      "description": "11 KV TOP ADAPTOR for rail pole",
+      "unit": "NOS",
+      "rate": 523.41,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021541",
+      "description": "33 KV TOP ADAPTOR for PCC pole 9M long",
+      "unit": "NOS",
+      "rate": 1288.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "113021641",
+      "description": "33 KV TOP ADAPTOR for rail pole",
+      "unit": "NOS",
+      "rate": 807.35,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "407010241",
+      "description": "LT MTR KIOSK 415V STLSHT COVR",
+      "unit": "NOS",
+      "rate": 15366.01,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "407010541",
+      "description": "LT distribution KIOSK for 100KVA TRNF.",
+      "unit": "NOS",
+      "rate": 8878.41,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "407010641",
+      "description": "LT DISTRIBUTION KIOSK FOR 25KVA TRNF.",
+      "unit": "NOS",
+      "rate": 9441.26,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "407010741",
+      "description": "LT DISTRIBUTION KIOSK FOR 63KVA TRNF.",
+      "unit": "NOS",
+      "rate": 10456.61,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "407010841",
+      "description": "LT DISTRIBUTION KIOSK FOR 315KVA TRNF.",
+      "unit": "NOS",
+      "rate": 17903.46,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "912011441",
+      "description": "TURN BUCKLE 18 X 5/8\"",
+      "unit": "NOS",
+      "rate": 238.7,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "912013341",
+      "description": "TURN BUCKLE  18 x 3/4\"",
+      "unit": "NOS",
+      "rate": 281.47,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505011141",
+      "description": "CLAMP P.G. - A.C.S.R. DOG",
+      "unit": "NOS",
+      "rate": 334.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505010641",
+      "description": "PG CLMP-WSL/RBT.( 30/50SMM)",
+      "unit": "NOS",
+      "rate": 187.88,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505031541",
+      "description": "D IRON CLAMP 3\" x 3.5\"",
+      "unit": "NOS",
+      "rate": 47.83,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505031641",
+      "description": "UPPER CLAMP - L.T.BKT.50X6 FLAT(PCC POLE)",
+      "unit": "NOS",
+      "rate": 108.78,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505031741",
+      "description": "LOWER CLAMP - L.T.BKT.50X6 FLAT(PCC POLE)",
+      "unit": "NOS",
+      "rate": 110.58,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505034941",
+      "description": "CLAMP FOR 8M PCC POLE",
+      "unit": "NOS",
+      "rate": 190.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505035041",
+      "description": "CLAMP FOR 9M PCC POLE",
+      "unit": "NOS",
+      "rate": 214.38,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505035141",
+      "description": "CLAMP FOR 8M PCC POLE(BOT)",
+      "unit": "NOS",
+      "rate": 210.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505035241",
+      "description": "CLAMP FOR 9M PCC POLE(BOT)",
+      "unit": "NOS",
+      "rate": 249.76,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "506010331",
+      "description": "SHACKLE STRAP BIG 185 X 30 X 3",
+      "unit": "PAA",
+      "rate": 45.38,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "506010531",
+      "description": "GI SHACKLE STRAP 9\" WITH NUT & BOLT",
+      "unit": "PAA",
+      "rate": 59.21,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "503020312",
+      "description": "AL. BINDING WIRE 5MM/6SWG",
+      "unit": "KG",
+      "rate": 477.4,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "903013212",
+      "description": "AL BINDING TAPE - 1/4\"",
+      "unit": "KG",
+      "rate": 529.58,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "903013545",
+      "description": "PLASTIC TAPE - NON ADHESIVE - 1\"",
+      "unit": "ROL",
+      "rate": 30.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508040641",
+      "description": "CI REEL INSULATOR",
+      "unit": "NOS",
+      "rate": 44.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508040341",
+      "description": "PORCELAIN SHACKLE INSULATOR 2\" X 21/2\"",
+      "unit": "NOS",
+      "rate": 20.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508040441",
+      "description": "PORCELAIN SHACKLE INSULATOR  3\" x 31/2\"",
+      "unit": "NOS",
+      "rate": 23.34,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508040841",
+      "description": "PORCELAIN GUY INSULATOR HT",
+      "unit": "NOS",
+      "rate": 52.24,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "508040741",
+      "description": "PORCELAIN GUY INSULATOR LT",
+      "unit": "NOS",
+      "rate": 21.11,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504070341",
+      "description": "LT SPACER - 1 PHASE 2 WIRE",
+      "unit": "NOS",
+      "rate": 35.51,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504070641",
+      "description": "LT SPACER - 2 PHASE 3 WIRE",
+      "unit": "NOS",
+      "rate": 59.08,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504070441",
+      "description": "LT SPACER - 3 PHASE 4 WIRE",
+      "unit": "NOS",
+      "rate": 77.62,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504070541",
+      "description": "LT SPACER - 3 PHASE 5 WIRE",
+      "unit": "NOS",
+      "rate": 94.79,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504042641",
+      "description": "11KV I/D HS Ter.Jnt.FOR3x95SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 5188.33,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504043241",
+      "description": "11KV I/D HS Ter.Jnt.FOR3x185SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 5833.67,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504043841",
+      "description": "11KV I/D HS Ter.Jnt.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 7242.94,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504042541",
+      "description": "11KVO/D HS Ter.Jnt.FOR3x95SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 6863.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504043141",
+      "description": "11KVO/D HS Ter.Jnt.FOR3x185SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 8166.53,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504043741",
+      "description": "11KVO/D HS Ter.Jnt.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 8963.63,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504042741",
+      "description": "11KV ST THR. HS JNT.FOR3x95SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 13095.63,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504057941",
+      "description": "11KVST.THR.TRANSITIONJnt.FOR3x185SMM CAB",
+      "unit": "NOS",
+      "rate": 16285.44,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504043941",
+      "description": "11KV ST THR. HS JNT.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 17000.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504047341",
+      "description": "11KV ST THR. HS JNT.FOR3x400SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 17779.39,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045041",
+      "description": "33KV I/D HS Ter.Jnt.FOR3x185SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 17099.22,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045641",
+      "description": "33KV I/D HS Ter.Jnt.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 18155.46,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045941",
+      "description": "33KV I/D HS Ter.Jnt.FOR3x400SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 19392.95,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504049741",
+      "description": "33KVI/D HS Ter.Jnt.FOR1x1000SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 7096.74,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504044941",
+      "description": "33KVO/D HS Ter.Jnt.FOR3x185SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 19139.45,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045541",
+      "description": "33KVO/D HS Ter.Jnt.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 24604.72,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045841",
+      "description": "33KVO/D HS Ter.Jnt.FOR3x400SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 26532.72,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504049541",
+      "description": "33KVO/D HS Ter.Jnt.FOR1x1000SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 8761.41,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045141",
+      "description": "33KV ST THR. HS JNT.FOR3x185SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 40255.18,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504045741",
+      "description": "33KV ST THR. HS JNT.FOR3x300SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 41448.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504046041",
+      "description": "33KV ST THR. HS JNT.FOR3x400SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 42778.21,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504049641",
+      "description": "33KV ST THR.HS JNT.FOR1x1000SMM XLPE CAB",
+      "unit": "NOS",
+      "rate": 19713.16,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054141",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x50SMM)",
+      "unit": "NOS",
+      "rate": 1586.81,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054341",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x95SMM)",
+      "unit": "NOS",
+      "rate": 2605.14,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054441",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x120SMM)",
+      "unit": "NOS",
+      "rate": 3370.25,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054541",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x185SMM)",
+      "unit": "NOS",
+      "rate": 4202.6,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054641",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x240SMM)",
+      "unit": "NOS",
+      "rate": 4307.69,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054741",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x300SMM)",
+      "unit": "NOS",
+      "rate": 4322.33,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504054841",
+      "description": "1.1KV ST THR. JNT.FOR(4/3.5x400SMM)",
+      "unit": "NOS",
+      "rate": 4500.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504055141",
+      "description": "1.1KV TEE JNT.FOR(4/3.5x50-25/16 SMM)",
+      "unit": "NOS",
+      "rate": 4472.8,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504055241",
+      "description": "1.1KV TEE JNT.FOR(4/3.5x70-25/16 SMM)",
+      "unit": "NOS",
+      "rate": 6709.2,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504055341",
+      "description": "1.1KV TEE JNT.FOR(4/3.5x95-25/16 SMM)",
+      "unit": "NOS",
+      "rate": 7348.17,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504023041",
+      "description": "PAD-CON.FOR 11KV(1X95 SMM) ABC",
+      "unit": "NOS",
+      "rate": 486.77,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504022941",
+      "description": "WEDGE-CON.FOR 11KV(1X95 SMM) ABC",
+      "unit": "NOS",
+      "rate": 524.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504053341",
+      "description": "11KV I/D HS Ter.Jt.FOR(1x95SQ MM)ABC",
+      "unit": "NOS",
+      "rate": 1865.94,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504053241",
+      "description": "11KV O/D HS Ter.Jt.FOR(1x95SQ MM)ABC",
+      "unit": "NOS",
+      "rate": 2439.09,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504053441",
+      "description": "11KV ST THR. HS Jt.FOR(1x95SQ MM)ABC",
+      "unit": "NOS",
+      "rate": 5501.88,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504038541",
+      "description": "TEE JNT TAP OFF 11KV ABC TO DTR-1X95SMM",
+      "unit": "NOS",
+      "rate": 5214.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504026841",
+      "description": "INSULATION-PIERCING CONNECTOR (ABC) - 16SQ MM",
+      "unit": "NOS",
+      "rate": 86.1,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504030341",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC) -16SQMM",
+      "unit": "NOS",
+      "rate": 126.3,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504026941",
+      "description": "INSULATION-PIERCING CONNECTOR (ABC) - 35-50SQ MM",
+      "unit": "NOS",
+      "rate": 95.09,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504030741",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC) -35 SQMM N.WIRE",
+      "unit": "NOS",
+      "rate": 100.76,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504026741",
+      "description": "INSULATION-PIERCING CONNECTOR (ABC) - 50-70 SQ MM",
+      "unit": "NOS",
+      "rate": 117.42,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504030841",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC) -50SQ MM N.WIRE",
+      "unit": "NOS",
+      "rate": 164.57,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504030941",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC) -50SQ MM POWER CABLE",
+      "unit": "NOS",
+      "rate": 164.57,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504031141",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC)-70 SQ MM POWER CABLE",
+      "unit": "NOS",
+      "rate": 182.53,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027041",
+      "description": "INSULATION-PIERCING CONNECTOR (ABC) - 95SQ MM",
+      "unit": "NOS",
+      "rate": 108.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027141",
+      "description": "INSULATION-PIERCING CONNECTOR  -ABC TO ABC TEE JOINT",
+      "unit": "NOS",
+      "rate": 149.17,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504031241",
+      "description": "PIERCING INSULATION STRAIGHT THROUGH JOINT (ABC) -CABLE END CAP",
+      "unit": "NOS",
+      "rate": 20.31,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027441",
+      "description": "BI-METALLIC CRIMPING TYPE WATER PROOF LUG-16SMM ST LT(ABC)",
+      "unit": "NOS",
+      "rate": 167.19,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027541",
+      "description": "BI-METALLIC CRIMPING TYPE WATER PROOF LUG-35SMM MSNGR(ABC)",
+      "unit": "NOS",
+      "rate": 179.32,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027741",
+      "description": "BI-METALLIC CRIMPING TYPE WATER PROOF LUG-50SMM PWR(ABC)",
+      "unit": "NOS",
+      "rate": 180.0,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027641",
+      "description": "BI-METALLIC CRIMPING TYPE WATER PROOF LUG-50SMM MSNGR(ABC)",
+      "unit": "NOS",
+      "rate": 195.09,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504027841",
+      "description": "BI-METALLIC CRIMPING TYPE WATER PROOF LUG-70SMM PWR(ABC)",
+      "unit": "NOS",
+      "rate": 247.5,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504060941",
+      "description": "LTDISTBOX 3PH CON.WH ST.STRAP&BUCKLE-ABC",
+      "unit": "NOS",
+      "rate": 1489.9,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504140641",
+      "description": "CAB END CAP FOR DIFF.SIZE AB CABLE",
+      "unit": "NOS",
+      "rate": 17.21,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "504151441",
+      "description": "CAB TIE WH ADJ.LOCKING ARRANGEMENT.",
+      "unit": "NOS",
+      "rate": 7.96,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505036541",
+      "description": "SUSP. CLMP HT ABC70-150SQMM MESENGER",
+      "unit": "NOS",
+      "rate": 156.62,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505030641",
+      "description": "SUSPENTION CLAMP WITH BRKT 35SQMM MESENGER",
+      "unit": "NOS",
+      "rate": 367.62,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505030241",
+      "description": "SUSPENTION CLAMP WITH BRKT 180SQMM MESENGER",
+      "unit": "NOS",
+      "rate": 416.03,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505030341",
+      "description": "ANCHORING CLAMP 180SQ.MM. : MESSENGER",
+      "unit": "NOS",
+      "rate": 449.46,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505034141",
+      "description": "DEAD END CLAMP-LT ABC(3X70+1X16+1X50SMM)",
+      "unit": "NOS",
+      "rate": 389.66,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "505030841",
+      "description": "EYE HOOK FOR ANCHOR & SUSPN. CLAMP",
+      "unit": "NOS",
+      "rate": 110.64,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "201050111",
+      "description": "G.I. BARBED WIRE",
+      "unit": "MT",
+      "rate": 182529.23,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "910010241",
+      "description": "CAUTION BOARD - 11KV",
+      "unit": "NOS",
+      "rate": 160.18,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "910011641",
+      "description": "CAUTION BOARD - 400V",
+      "unit": "NOS",
+      "rate": 160.18,
+      "origin": "",
+      "type": "material"
+    },
+    {
+      "code": "910012141",
+      "description": "CAUTION BOARD - 33KV",
+      "unit": "NOS",
+      "rate": 160.18,
+      "origin": "",
+      "type": "material"
+    }
+  ],
+  "labour": [
+    {
+      "code": "L0001",
+      "description": "CHECK & FINAL SURVEY OF HTOH LINE",
+      "unit": "KM",
+      "rate": 2761.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0002",
+      "description": "CHECK & FINAL SURVEY OF LTOH LINE",
+      "unit": "KM",
+      "rate": 1714.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0003",
+      "description": "ERECTION OF SUB-STN DP 9 MT LONG",
+      "unit": "NOS",
+      "rate": 12309.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0004",
+      "description": "ERECTION OF SUB-STN DP 8 MT LONG",
+      "unit": "NOS",
+      "rate": 9875.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0005",
+      "description": "ERECTION OF SP 9 MT LONG HT",
+      "unit": "NOS",
+      "rate": 2534.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0006",
+      "description": "ERECTION OF SP 8 MT LONG HT",
+      "unit": "NOS",
+      "rate": 1680.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0007",
+      "description": "ERECTION OF SP 8 MT LONG LT W/O FTTG",
+      "unit": "NOS",
+      "rate": 1501.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0008",
+      "description": "ERECTION OF DP STRUCTURE 9 MT LONG",
+      "unit": "NOS",
+      "rate": 8922.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0009",
+      "description": "ERECTION OF DP STRUCTURE 8 MT LONG",
+      "unit": "NOS",
+      "rate": 5654.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0010",
+      "description": "ERECTION OF TP STRUCTURE 9 MT LONG",
+      "unit": "NOS",
+      "rate": 15242.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0011",
+      "description": "ERECTION OF 4P STRUCTURE 9 MT LONG",
+      "unit": "NOS",
+      "rate": 24572.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0012",
+      "description": "ERECTION OF 16 KVA DTR",
+      "unit": "NOS",
+      "rate": 1885.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0013",
+      "description": "ERECTION OF 25 KVA DTR",
+      "unit": "NOS",
+      "rate": 1925.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0014",
+      "description": "ERECTION OF 63 KVA DTR",
+      "unit": "NOS",
+      "rate": 2711.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0015",
+      "description": "ERECTION OF 100 KVA DTR",
+      "unit": "NOS",
+      "rate": 3214.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0016",
+      "description": "EXTENSION OF 8/9 M PCC POLE UPTO 3M",
+      "unit": "NOS",
+      "rate": 1506.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0017",
+      "description": "ERECTION OF STAY SET HT",
+      "unit": "NOS",
+      "rate": 641.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0018",
+      "description": "ERECTION OF STAY SET LT",
+      "unit": "NOS",
+      "rate": 555.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0019",
+      "description": "EARTHING COMPLETE",
+      "unit": "NOS",
+      "rate": 313.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0020",
+      "description": "FIXING OF PIN INSULATOR 11 KV",
+      "unit": "NOS",
+      "rate": 63.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0021",
+      "description": "FIXING OF DISC INSULATOR 11 KV",
+      "unit": "NOS",
+      "rate": 65.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0022",
+      "description": "RE-FIXING OF PIN INSULATOR 11 KV",
+      "unit": "NOS",
+      "rate": 53.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0023",
+      "description": "RE-FIXING OF DISC INSULATOR 11 KV",
+      "unit": "NOS",
+      "rate": 53.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0024",
+      "description": "FIXING OF TPGO ISL 11 KV SST",
+      "unit": "NOS",
+      "rate": 1193.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0025",
+      "description": "FIXING OF TPGO ISL 11 KV LINE DP",
+      "unit": "NOS",
+      "rate": 3165.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0026",
+      "description": "RE-FIXING OF TPGO ISL 11 KV SST",
+      "unit": "NOS",
+      "rate": 1717.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0027",
+      "description": "FIXING OF T-OFF BRACKET ON SP",
+      "unit": "NOS",
+      "rate": 1495.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0028",
+      "description": "FIXING OF T-OFF BRACKET ON DP",
+      "unit": "NOS",
+      "rate": 1483.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0029",
+      "description": "STRINGING & SAGGING BY ACSR 50 3 WIRE",
+      "unit": "KM",
+      "rate": 8289.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0030",
+      "description": "STRINGING & SAGGING BY ACSR 30 3 WIRE",
+      "unit": "KM",
+      "rate": 7899.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0031",
+      "description": "STRINGING & SAGGING BY ACSR 30 4 WIRE",
+      "unit": "KM",
+      "rate": 8821.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0032",
+      "description": "STRINGING & SAGGING BY ACSR 30 2 WIRE",
+      "unit": "KM",
+      "rate": 5322.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0033",
+      "description": "DRAWAL OF PVC CABLE 10 SQ MM 4 CORE (EQV. TO ACSR 20 X 2 WIRE)",
+      "unit": "KM",
+      "rate": 4873.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0034",
+      "description": "RE-SAGGING BY ACSR 50 3 WIRE",
+      "unit": "KM",
+      "rate": 1708.8,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0035",
+      "description": "RE-SAGGING BY ACSR 30 2 WIRE",
+      "unit": "KM",
+      "rate": 1238.4,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0036",
+      "description": "RE-SAGGING BY ACSR 30 3 WIRE",
+      "unit": "KM",
+      "rate": 1651.2,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0037",
+      "description": "RE-SAGGING BY ACSR 30 4 WIRE",
+      "unit": "KM",
+      "rate": 2064.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0038",
+      "description": "STRAIGHTENING OF PCC POLE 8 MT",
+      "unit": "NOS",
+      "rate": 292.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0039",
+      "description": "RE-FIXING OF FITTINGS HT 150/POLE",
+      "unit": "NOS",
+      "rate": 150.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0040",
+      "description": "FIXING OF ANGLE IRON BRACKET",
+      "unit": "NOS",
+      "rate": 596.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0041",
+      "description": "FIXING OF MS BOX BRACKET LT",
+      "unit": "NOS",
+      "rate": 1414.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0042",
+      "description": "FIXING OF LT SHACKLE INSULATOR",
+      "unit": "NOS",
+      "rate": 52.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0043",
+      "description": "RE-FIXING OF LT SHACKLE INSULATOR",
+      "unit": "NOS",
+      "rate": 38.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0044",
+      "description": "FIXING OF CG BRACKET SP",
+      "unit": "NOS",
+      "rate": 237.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0045",
+      "description": "FIXING OF CG BRACKET DP",
+      "unit": "NOS",
+      "rate": 369.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0046",
+      "description": "FIXING OF LEAD WIRE UPTO 30 MTRS 2 WIRE",
+      "unit": "NOS",
+      "rate": 256.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0047",
+      "description": "FIXING OF LEAD WIRE 30-60 MTRS 2 WIRE",
+      "unit": "NOS",
+      "rate": 312.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0048",
+      "description": "FIXING OF LEAD WIRE 60-100 MTRS 2 WIRE",
+      "unit": "NOS",
+      "rate": 506.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0049",
+      "description": "FIXING OF CROSS LESSING WIRE",
+      "unit": "NOS",
+      "rate": 15.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0050",
+      "description": "FIXING OF LA",
+      "unit": "SET",
+      "rate": 339.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0051",
+      "description": "FIXING OF LT SPACER 3P4W",
+      "unit": "NOS",
+      "rate": 56.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0052",
+      "description": "FIXING OF LT SPACER 1P2W",
+      "unit": "NOS",
+      "rate": 37.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0053",
+      "description": "STR & SAGG OF LT ABC 3X70+1X16+1X50 SQMM",
+      "unit": "MTR",
+      "rate": 50.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0054",
+      "description": "STR & SAGG OF LT ABC 3X50+1X16+1X35 SQMM",
+      "unit": "MTR",
+      "rate": 46.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0055",
+      "description": "FIXING OF ANCHORING CLAMP",
+      "unit": "NOS",
+      "rate": 154.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0056",
+      "description": "FIXING OF SUSPENSION CLAMP",
+      "unit": "NOS",
+      "rate": 154.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0057",
+      "description": "FIXING OF IPC CONNECTOR",
+      "unit": "NOS",
+      "rate": 32.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0058",
+      "description": "FIXING OF LT DISTRIBUTION BOX",
+      "unit": "NOS",
+      "rate": 507.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0059",
+      "description": "DISMANT & RETURN TO STORE ACSR 100 3 W",
+      "unit": "KM",
+      "rate": 7202.4,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0060",
+      "description": "DISMANT & RETURN TO STORE ACSR 50 3 W",
+      "unit": "KM",
+      "rate": 2733.6,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0061",
+      "description": "DISMANT & RETURN TO STORE ACSR 30 4 W",
+      "unit": "KM",
+      "rate": 3303.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0062",
+      "description": "DISMANT & RETURN TO STORE ACSR 30 3 W",
+      "unit": "KM",
+      "rate": 2642.4,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0063",
+      "description": "DISMANT & RETURN TO STORE ACSR 30 2 W",
+      "unit": "KM",
+      "rate": 1981.8,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0064",
+      "description": "UPROOTING & RETURN TO STORE WOODEN POLE",
+      "unit": "NOS",
+      "rate": 402.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0065",
+      "description": "UPROOTING & RETURN TO STORE 8 M PCC",
+      "unit": "NOS",
+      "rate": 383.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0066",
+      "description": "UPROOTING & RETURN TO STORE 9 M PCC",
+      "unit": "NOS",
+      "rate": 594.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0067",
+      "description": "RE-FIXING OF 1 PH S/C",
+      "unit": "NOS",
+      "rate": 150.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0068",
+      "description": "FIXING OF 3 PH S/C",
+      "unit": "NOS",
+      "rate": 570.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0069",
+      "description": "FIXING OF COMPOSITE DTR NEUTRAL EARTHING",
+      "unit": "NOS",
+      "rate": 3816.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0070",
+      "description": "FIXING OF LT KIOSK S/CKT",
+      "unit": "NOS",
+      "rate": 2155.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0071",
+      "description": "FIXING OF LT KIOSK D/CKT",
+      "unit": "NOS",
+      "rate": 3012.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0072",
+      "description": "RE-FIXING OF SERVICE CONNECTION 3 PH",
+      "unit": "NOS",
+      "rate": 193.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0073",
+      "description": "RE-FIXING OF ANGLE IRON BRACKET",
+      "unit": "NOS",
+      "rate": 487.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0074",
+      "description": "EXCAVATION OF SOIL FOR MAKING TRIAL HOLE (1.1X0.5X1.2M)",
+      "unit": "CUM",
+      "rate": 34.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0075",
+      "description": "MICRO-TUNNELLING WORK WITH LAYING OF HDPE PIPE FOR LAYING OF U.G. CABLE INCLUDING SUPPLY OF HDPE PIPE AS PER IS: 4984-1995 INCLUDING PREPARATION AND SUBMISSION OF DRAWING FOR SUCH CABLE LAYING WITH 200MM DIA. HDPE PIPE OF PE-80 PN-6",
+      "unit": "M",
+      "rate": 2419.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0076",
+      "description": "LAYING & DRESSING OF CABLE 33 KV XLPE 3 X 400 SQ. MM WITH LOOPING AND RISER",
+      "unit": "M",
+      "rate": 75.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0077",
+      "description": "SUPPLY & FIXING/ LAYING OF G.I PIPE (MEDIUM) AS PER I.S.I OF THE FOLLOWING SIZES SUITABLE FOR CABLE PROTECTION AS PER INSTRUCTION OF SITE ENGINEER G.I PIPE 200 MM DIA. (MEDIUM) TATA/JINDAL/ EQUIVALENT",
+      "unit": "M",
+      "rate": 2077.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0078",
+      "description": "MAKING & FIXING OF END TERMINATION JOINT OUTDOOR TYPE FOR 33 KV XLPE CABLE FOR CABLE 33 KV XLPE 3 X 400 SQ. MM",
+      "unit": "NOS",
+      "rate": 2200.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0079",
+      "description": "SUPPLY & ERECTION OF CAST IRON CABLE MARKER ON CONCRETE FOUNDATION BLOCKS AS PER DRAWING NO. PLN(D)/SS/128",
+      "unit": "NOS",
+      "rate": 300.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0080",
+      "description": "FIXING OF 33 KV LA WITH SUPPLY OF BASE PLATE",
+      "unit": "NOS",
+      "rate": 1100.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0081",
+      "description": "STRINGING & SAGGING BY ACSR 50 4 WIRE",
+      "unit": "KM",
+      "rate": 9715.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0082",
+      "description": "STRINGING & SAGGING BY ACSR 50 2 WIRE",
+      "unit": "KM",
+      "rate": 6184.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0083",
+      "description": "FIXING OF 1 PH S/C",
+      "unit": "NOS",
+      "rate": 2254.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0084",
+      "description": "ERECTION OF RAIL/H-BEAM POLE UPTO 13M LONG HT",
+      "unit": "NOS",
+      "rate": 4141.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0085",
+      "description": "ERECTION OF DP STRUCTURE RAIL/H-BEAM POLE",
+      "unit": "NOS",
+      "rate": 12421.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0086",
+      "description": "ERECTION OF 4P STRUCTURE RAIL/H-BEAM POLE",
+      "unit": "NOS",
+      "rate": 31625.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0087",
+      "description": "FIXING OF PIN INSULATOR 33 KV",
+      "unit": "NOS",
+      "rate": 72.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0088",
+      "description": "FIXING OF DISC INSULATOR 33 KV",
+      "unit": "NOS",
+      "rate": 107.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0089",
+      "description": "STRINGING & SAGGING BY ACSR 100 3 WIRE",
+      "unit": "KM",
+      "rate": 16544.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0090",
+      "description": "RE-FIXING OF SERVICE CONNECTION 1 PH",
+      "unit": "NOS",
+      "rate": 150.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0091",
+      "description": "ERECTION OF FOUR POLE STRUCTURE BY 8 MTR PCC POLE HL",
+      "unit": "KM",
+      "rate": 30100.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0092",
+      "description": "ERECTION OF FOUR POLE STRUCTURE BY 8 MTR PCC POLE LL",
+      "unit": "NOS",
+      "rate": 36000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0093",
+      "description": "ERECTION OF DOUBLE POLE STRUCTURE BY 8 MTR PCC POLE",
+      "unit": "NOS",
+      "rate": 18000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0094",
+      "description": "STRINGING & SAGG. 200 SQ. MM (PANTHER) CONDUCTOR (3 WIRE)",
+      "unit": "NOS",
+      "rate": 30000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0095",
+      "description": "LAYING OF 11KV 3X400SQMM XLPE CABLE",
+      "unit": "NOS",
+      "rate": 62000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0096",
+      "description": "ERECTION WITH ALL FITTING FP 8MTR PCC POLE FIXING OF ISOLATOR AND CONCRETE STRUCTURE",
+      "unit": "NOS",
+      "rate": 40000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0097",
+      "description": "INSTALLATION OF 6.3MVA PTR WITH ALL FITTINGS",
+      "unit": "NOS",
+      "rate": 120000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0098",
+      "description": "FIXING OF 33KV CT WITH ALL FITTINGS",
+      "unit": "NOS",
+      "rate": 21000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0099",
+      "description": "INSTALLATION OF RTCC PANEL FOR 6.3MVA PTR",
+      "unit": "NOS",
+      "rate": 8000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0100",
+      "description": "INSTALLATION OF 33KV CR PANEL FOR PTR",
+      "unit": "NOS",
+      "rate": 15000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0101",
+      "description": "INSTALLATION OF 11KV INCOMER",
+      "unit": "NOS",
+      "rate": 15000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0102",
+      "description": "INSTALLATION OF BUS COUPLER WITH ADAPTOR",
+      "unit": "NOS",
+      "rate": 15000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0103",
+      "description": "LAYING OF 1.1KV CU CONTROL CABLER 4CX2.5 SQMM",
+      "unit": "NOS",
+      "rate": 16000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0104",
+      "description": "LAYING OF 1.1KV CU CONTROL CABLER 8CX2.5 SQMM",
+      "unit": "NOS",
+      "rate": 20000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0105",
+      "description": "LAYING OF 1.1KV CU CONTROL CABLER 12CX2.5 SQMM",
+      "unit": "NOS",
+      "rate": 20000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0106",
+      "description": "FIXING OF 33KV VCB OUTDOOR",
+      "unit": "NOS",
+      "rate": 20000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0107",
+      "description": "FIXING OF END TERMINATION JOINT INDOOR 3X400SQMM",
+      "unit": "NOS",
+      "rate": 2023.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0108",
+      "description": "FIXING OF END TERMINATION JOINT OUTDOOR 3X400SQMM",
+      "unit": "NOS",
+      "rate": 2023.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0109",
+      "description": "FIXING OF 33KV LIGHTING ARRESTOR",
+      "unit": "NOS",
+      "rate": 6000.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0110",
+      "description": "PIPE EARTHING COMPLETE",
+      "unit": "NOS",
+      "rate": 3816.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0111",
+      "description": "LAYING OF 11 KV 3 CORE 95/120 SQMM XLPE UG CABLE",
+      "unit": "M",
+      "rate": 42.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0112",
+      "description": "LAYING OF 11 KV 3 CORE 185/240 SQMM XLPE UG CABLE",
+      "unit": "M",
+      "rate": 52.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0113",
+      "description": "CABLE JOINTING ID/OD 11 KV XLPE 3X95/120 SQMM",
+      "unit": "NOS",
+      "rate": 1369.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0114",
+      "description": "CABLE JOINTING ID/OD 11 KV XLPE 3X185/240 SQMM",
+      "unit": "NOS",
+      "rate": 1685.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0115",
+      "description": "ERECTION OF 12KV 350MVA,400A I/D SERIES TRIP METERING SWG",
+      "unit": "NOS",
+      "rate": 6628.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0116",
+      "description": "EARTHING ARRANGEMENT OF THE METERING VCB",
+      "unit": "NOS",
+      "rate": 5038.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0117",
+      "description": "ERECTION OF 315/250 KVA DTR",
+      "unit": "NOS",
+      "rate": 7248.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0118",
+      "description": "FIXING OF KIOSK AND MAIN SWITCH  AND COMPLETE CONNECTION WITH PVC CABLE",
+      "unit": "NOS",
+      "rate": 2155.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0119",
+      "description": "LAYING OF 11 KV 4 CORE 95/120 SQMM XLPE UG CABLE",
+      "unit": "MTR",
+      "rate": 31.0,
+      "origin": "",
+      "type": "labour"
+    },
+    {
+      "code": "L0120",
+      "description": "LAYING OF 11 KV 4 CORE 185 SQMM XLPE UG CABLE",
+      "unit": "MTR",
+      "rate": 39.0,
+      "origin": "",
+      "type": "labour"
+    }
+  ]
+}

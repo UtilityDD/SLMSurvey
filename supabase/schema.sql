@@ -76,3 +76,7 @@ $$;
 
 -- Sample seed (optional — change code before production)
 -- select public.admin_create_license('SLM-TRIAL-001', 'Trial User', '', 14, 1);
+
+-- Estimate catalog (rate book + kits for mobile): also run schema_estimate.sql
+-- Kit suggestions (can_suggest / can_approve): also run schema_estimate_suggestions.sql
+

@@ -2,6 +2,8 @@ package com.blackgrapes.slmtoolbox.license
 
 import android.content.Context
 import android.os.Build
+import com.blackgrapes.slmtoolbox.estimate.CatalogApi
+import com.blackgrapes.slmtoolbox.estimate.CatalogCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -64,11 +66,14 @@ object LicenseApi {
 
         if (needsNetwork) {
             when (val result = validate(context)) {
-                is LicenseResult.Success -> { /* cache updated inside post */ }
+                is LicenseResult.Success -> CatalogApi.syncBestEffort(context)
                 is LicenseResult.Failure -> {
                     LicensePreferences.saveError(context, result.code)
                 }
             }
+        } else if (snap.activated && !CatalogCache.hasCatalog(context)) {
+            // Retry catalog pull if activate succeeded but download failed earlier.
+            CatalogApi.syncBestEffort(context)
         }
         return LicensePreferences.evaluateAccess(context)
     }
