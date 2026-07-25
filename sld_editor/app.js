@@ -537,12 +537,16 @@ function handleFile(file) {
         try {
             const data = JSON.parse(e.target.result);
             if (!data.surveyId || !data.assets) {
-                alert('Invalid SLM Workspace file structure.');
+                if (window.SlmDialog) {
+                    window.SlmDialog.alert({ title: 'Invalid file', message: 'Invalid SLM Workspace file structure.' });
+                }
                 return;
             }
             loadWorkspace(data);
         } catch (err) {
-            alert('Failed to parse file: ' + err.message);
+            if (window.SlmDialog) {
+                window.SlmDialog.alert({ title: 'Import failed', message: 'Failed to parse file: ' + err.message });
+            }
         }
     };
     reader.readAsText(file);
@@ -892,12 +896,21 @@ function renderMap() {
         marker.on('dblclick', (e) => {
             L.DomEvent.stopPropagation(e);
             const display = road.label || 'Road';
-            if (confirm(`Do you want to delete the road "${display}"?`)) {
+            (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete road?',
+                        message: `Do you want to delete the road "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                 annotations.roads = annotations.roads.filter(r => r !== road);
                 clearSelection();
                 renderMap();
                 drawCanvas();
-            }
+            })()
         });
 
         mapMarkers.push(marker);
@@ -931,12 +944,21 @@ function renderMap() {
         marker.on('dblclick', (e) => {
             L.DomEvent.stopPropagation(e);
             const display = river.label || 'River';
-            if (confirm(`Do you want to delete the river "${display}"?`)) {
+            (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete river?',
+                        message: `Do you want to delete the river "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                 annotations.rivers = annotations.rivers.filter(r => r !== river);
                 clearSelection();
                 renderMap();
                 drawCanvas();
-            }
+            })()
         });
 
         mapMarkers.push(marker);
@@ -988,12 +1010,21 @@ function renderMap() {
         marker.on('dblclick', (e) => {
             L.DomEvent.stopPropagation(e);
             const display = lan.label || lan.type;
-            if (confirm(`Do you want to delete the landmark "${display}"?`)) {
+            (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete landmark?',
+                        message: `Do you want to delete the landmark "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                 annotations.landmarks = annotations.landmarks.filter(l => l !== lan);
                 clearSelection();
                 renderMap();
                 drawCanvas();
-            }
+            })()
         });
 
         mapMarkers.push(marker);
@@ -1178,12 +1209,21 @@ function renderMap() {
 
         marker.on('dblclick', (e) => {
             L.DomEvent.stopPropagation(e);
-            if (confirm(`Do you want to delete the text label "${ann.text}"?`)) {
+            (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete text label?',
+                        message: `Do you want to delete the text label "${ann.text}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                 annotations.texts = annotations.texts.filter(t => t !== ann);
                 clearSelection();
                 renderMap();
                 drawCanvas();
-            }
+            })()
         });
 
         mapMarkers.push(marker);
@@ -1472,13 +1512,20 @@ function initToolbarEvents() {
         drawCanvas();
     });
 
-    document.getElementById('btnClearAnnotations').addEventListener('click', () => {
-        if (confirm('Are you sure you want to clear all road drawings, rivers, landmarks, and text labels?')) {
-            annotations = { texts: [], roads: [], rivers: [], landmarks: [] };
-            clearSelection();
-            renderMap();
-            drawCanvas();
-        }
+    document.getElementById('btnClearAnnotations').addEventListener('click', async () => {
+        const ok = window.SlmDialog
+            ? await window.SlmDialog.confirm({
+                title: 'Clear annotations?',
+                message: 'Clear all road drawings, rivers, landmarks, and text labels?',
+                okLabel: 'Clear all',
+                danger: true,
+            })
+            : true;
+        if (!ok) return;
+        annotations = { texts: [], roads: [], rivers: [], landmarks: [] };
+        clearSelection();
+        renderMap();
+        drawCanvas();
     });
 }
 
@@ -1790,12 +1837,21 @@ function initCanvasEvents() {
 
             if (clickedLandmark) {
                 const display = clickedLandmark.label || clickedLandmark.type;
-                if (confirm(`Do you want to delete the landmark "${display}"?`)) {
+                (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete landmark?',
+                        message: `Do you want to delete the landmark "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                     annotations.landmarks = annotations.landmarks.filter(l => l !== clickedLandmark);
                     clearSelection();
                     renderMap();
                     drawCanvas();
-                }
+            })()
                 return;
             }
 
@@ -1812,12 +1868,21 @@ function initCanvasEvents() {
             });
 
             if (clickedText) {
-                if (confirm(`Do you want to delete the text label "${clickedText.text}"?`)) {
+                (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete text label?',
+                        message: `Do you want to delete the text label "${clickedText.text}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                     annotations.texts = annotations.texts.filter(t => t !== clickedText);
                     clearSelection();
                     renderMap();
                     drawCanvas();
-                }
+            })()
                 return;
             }
 
@@ -1835,12 +1900,21 @@ function initCanvasEvents() {
 
             if (clickedRoad) {
                 const display = clickedRoad.label || 'Road';
-                if (confirm(`Do you want to delete the road "${display}"?`)) {
+                (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete road?',
+                        message: `Do you want to delete the road "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                     annotations.roads = annotations.roads.filter(r => r !== clickedRoad);
                     clearSelection();
                     renderMap();
                     drawCanvas();
-                }
+            })()
                 return;
             }
 
@@ -1858,12 +1932,21 @@ function initCanvasEvents() {
 
             if (clickedRiver) {
                 const display = clickedRiver.label || 'River';
-                if (confirm(`Do you want to delete the river "${display}"?`)) {
+                (async () => {
+                const ok = window.SlmDialog
+                    ? await window.SlmDialog.confirm({
+                        title: 'Delete river?',
+                        message: `Do you want to delete the river "${display}"?`,
+                        okLabel: 'Delete',
+                        danger: true,
+                    })
+                    : true;
+                if (!ok) return;
                     annotations.rivers = annotations.rivers.filter(r => r !== clickedRiver);
                     clearSelection();
                     renderMap();
                     drawCanvas();
-                }
+            })()
                 return;
             }
 

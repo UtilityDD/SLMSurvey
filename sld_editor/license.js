@@ -285,21 +285,27 @@
   /**
    * Sign out of the stored license on this browser (keeps device id).
    * Shows the activate gate again so a different code can be entered.
+   * @returns {Promise<boolean>}
    */
-  function signOut(opts) {
+  async function signOut(opts) {
     opts = opts || {};
     if (!opts.silent) {
       var prefs = readPrefs();
       var code = prefs.licenseCode || "this license";
-      if (
-        !confirm(
-          "Sign out of " +
+      var D = global.SlmDialog;
+      var ok = true;
+      if (D && D.confirm) {
+        ok = await D.confirm({
+          title: "Sign out?",
+          message:
+            "Sign out of " +
             code +
-            " on this computer?\n\nYou can activate again with another code (e.g. admin)."
-        )
-      ) {
-        return false;
+            " on this computer?\n\nYou can activate again with another code (e.g. admin).",
+          okLabel: "Sign out",
+          danger: true,
+        });
       }
+      if (!ok) return false;
     }
     clearLicenseLocal();
     showGate(true);
@@ -387,7 +393,7 @@
     }
     var badge = $("licenseBadge");
     if (badge) {
-      badge.addEventListener("click", function () {
+      badge.addEventListener("click", async function () {
         var prefs = readPrefs();
         var date = formatDate(prefs.expiresAtEpochMs);
         var days = daysRemaining(prefs);
@@ -400,10 +406,20 @@
           date +
           " (" +
           days +
-          " days left)" +
-          "\n\nSign out and enter a different code?";
-        if (confirm(info)) {
-          signOut({ silent: true });
+          " days left)";
+        var D = global.SlmDialog;
+        var leave = false;
+        if (D && D.confirm) {
+          leave = await D.confirm({
+            title: "License",
+            message: info + "\n\nSign out and enter a different code?",
+            okLabel: "Sign out",
+            cancelLabel: "Stay signed in",
+            danger: true,
+          });
+        }
+        if (leave) {
+          await signOut({ silent: true });
           try {
             global.dispatchEvent(new CustomEvent("slm-license-changed"));
           } catch (_) {}

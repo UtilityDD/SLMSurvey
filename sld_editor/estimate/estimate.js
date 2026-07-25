@@ -262,16 +262,22 @@
     return kit;
   }
 
-  function deleteCustomKit(kitId) {
+  async function deleteCustomKit(kitId) {
     const kit = state.kitsById[kitId];
     if (!kit?.custom) return;
-    if (!confirm(`Delete custom kit “${kitTitle(kit)}”?`)) return;
+    const ok = await window.SlmDialog.confirm({
+      title: "Delete custom kit?",
+      message: `Delete “${kitTitle(kit)}”?\n\nThis cannot be undone on this computer.`,
+      okLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     delete state.kitsById[kitId];
     const edits = loadEdits();
     delete edits[kitId];
     localStorage.setItem(STORAGE_KEY, JSON.stringify(edits));
     persistCustomKitDefsFromState();
-    closeEditor();
+    await closeEditor({ force: true });
     renderStats();
     showTab("structure");
     toast("Custom kit deleted");
@@ -597,6 +603,7 @@
       complete: kit.complete,
       notes: kit.notes || "",
       lines: (kit.lines || []).map((l) => ({ ...l })),
+      _dirty: false,
     };
 
     $("boardPanel").classList.add("hidden");
@@ -731,7 +738,26 @@
     updateSuggestionsTabVisibility();
   }
 
-  function closeEditor() {
+  function markDraftDirty() {
+    if (state.draft) state.draft._dirty = true;
+  }
+
+  function isDraftDirty() {
+    return !!(state.draft && state.draft._dirty);
+  }
+
+  async function closeEditor(opts) {
+    opts = opts || {};
+    if (!opts.force && isDraftDirty()) {
+      const leave = await window.SlmDialog.confirm({
+        title: "Discard unsaved edits?",
+        message: "You have unsaved changes in this kit. Leave without saving?",
+        okLabel: "Discard",
+        cancelLabel: "Keep editing",
+        danger: true,
+      });
+      if (!leave) return;
+    }
     state.activeKitId = null;
     state.draft = null;
     $("editorPanel").classList.add("hidden");
@@ -750,6 +776,7 @@
     const cur = Number(state.draft.lines[i].qty) || 0;
     const next = Math.max(0, Math.round((cur + delta) * 10000) / 10000);
     state.draft.lines[i].qty = next;
+    markDraftDirty();
     renderKitLines();
     renderEditorSummary();
   }
@@ -821,6 +848,7 @@
         const v = Number(input.value);
         if (!Number.isFinite(v) || v < 0) return;
         state.draft.lines[i].qty = v;
+        markDraftDirty();
         renderEditorSummary();
       });
     });
@@ -831,9 +859,20 @@
       btn.addEventListener("click", () => adjustQty(Number(btn.getAttribute("data-dec")), -1));
     });
     box.querySelectorAll("[data-rm]").forEach((btn) => {
-      btn.addEventListener("click", () => {
+      btn.addEventListener("click", async () => {
         const i = Number(btn.getAttribute("data-rm"));
+        const line = state.draft?.lines[i];
+        if (!line) return;
+        const item = itemIndex().get(line.code);
+        const ok = await window.SlmDialog.confirm({
+          title: "Remove item?",
+          message: `Remove ${item?.description || line.code} from this kit?`,
+          okLabel: "Remove",
+          danger: true,
+        });
+        if (!ok) return;
         state.draft.lines.splice(i, 1);
+        markDraftDirty();
         renderKitLines();
         renderEditorSummary();
       });
@@ -933,13 +972,20 @@
     }
     renderKitLines();
     renderEditorSummary();
+    markDraftDirty();
     if (!silent) toast(`Added · ${item.description?.slice(0, 42) || item.code}`);
     return true;
   }
 
-  function saveKit() {
+  async function saveKit() {
     if (!state.activeKitId || !state.draft) return;
     const kit = state.kitsById[state.activeKitId];
+    const ok = await window.SlmDialog.confirm({
+      title: "Save kit?",
+      message: `Save changes to “${kitTitle(kit)}”?`,
+      okLabel: "Save",
+    });
+    if (!ok) return;
     kit.enabled = $("kitEnabled").checked;
     kit.complete = $("kitComplete").checked;
     kit.notes = $("kitNotes").value || "";
@@ -958,6 +1004,7 @@
       return;
     }
     saveEdits();
+    state.draft._dirty = false;
     renderStats();
     renderEditorSummary();
     toast("Saved");
@@ -1029,6 +1076,7 @@
     const src = state.kitsById[srcId];
     if (!src || !state.draft) return;
     state.draft.lines = (src.lines || []).map((l) => ({ ...l }));
+    markDraftDirty();
     renderKitLines();
     $("copyModal").classList.add("hidden");
     toast("Lines copied — save when ready");
@@ -1151,7 +1199,18 @@
       toast("Add at least one line before suggesting");
       return;
     }
-    const message = (prompt("Optional message for the reviewer:", "") || "").trim();
+    const messageRaw = await window.SlmDialog.prompt({
+      title: "Suggest this kit change",
+      message: "Optional message for the reviewer.",
+      inputLabel: "Message",
+      placeholder: "Why this change…",
+      okLabel: "Send suggestion",
+    });
+    if (messageRaw === null) {
+      toast("Suggest cancelled");
+      return;
+    }
+    const message = String(messageRaw || "").trim();
     const btn = $("btnSuggestKit");
     if (btn) btn.disabled = true;
     try {
@@ -1357,7 +1416,23 @@
     }
     let review_note = "";
     if (action === "reject") {
-      review_note = (prompt("Optional reject note:", "") || "").trim();
+      const note = await window.SlmDialog.prompt({
+        title: "Reject suggestion",
+        message: "Optional note for the suggestor.",
+        inputLabel: "Review note",
+        placeholder: "Reason for rejection…",
+        okLabel: "Reject",
+      });
+      if (note === null) return;
+      review_note = String(note || "").trim();
+    } else {
+      const ok = await window.SlmDialog.confirm({
+        title: "Accept into maker?",
+        message:
+          "Merge this suggestion into your local kit edits. Phones update only after Publish to app.",
+        okLabel: "Accept & merge",
+      });
+      if (!ok) return;
     }
     try {
       const json = await catalogPost("/functions/v1/catalog-suggestion-review", {
@@ -1418,8 +1493,15 @@
     reader.readAsText(file);
   }
 
-  function resetKits() {
-    if (!confirm("Clear all kit edits on this computer? Rate book stays.")) return;
+  async function resetKits() {
+    const ok = await window.SlmDialog.confirm({
+      title: "Reset kit edits?",
+      message:
+        "Clear all kit edits on this computer? The rate book stays. Online catalog is not changed.",
+      okLabel: "Reset edits",
+      danger: true,
+    });
+    if (!ok) return;
     localStorage.removeItem(STORAGE_KEY);
     mergeKits();
     renderStats();
@@ -1427,14 +1509,23 @@
     toast("Kit edits cleared");
   }
 
-  function publishKey() {
+  async function publishKey() {
     const cfg = window.SLM_LICENSE_CONFIG || {};
     let key = (cfg.CATALOG_PUBLISH_KEY || "").trim();
     if (!key) {
       key = (sessionStorage.getItem("slm_catalog_publish_key") || "").trim();
     }
     if (!key) {
-      key = (prompt("Catalog publish key (Supabase secret CATALOG_PUBLISH_KEY):") || "").trim();
+      const entered = await window.SlmDialog.prompt({
+        title: "Publish key",
+        message: "Enter the Supabase secret CATALOG_PUBLISH_KEY.",
+        inputLabel: "Publish key",
+        inputType: "password",
+        placeholder: "Secret key…",
+        okLabel: "Continue",
+      });
+      if (entered === null) return "";
+      key = String(entered || "").trim();
       if (key) sessionStorage.setItem("slm_catalog_publish_key", key);
     }
     return key;
@@ -1449,14 +1540,17 @@
     const base = (cfg.SUPABASE_URL || "").replace(/\/$/, "");
     const anon = cfg.SUPABASE_ANON_KEY || "";
     if (!base || !anon) {
-      toast("Supabase URL / anon key missing in license-config.js");
+      await window.SlmDialog.alert({
+        title: "Missing config",
+        message: "Supabase URL / anon key missing in license-config.js",
+      });
       return;
     }
     if (!state.ratebook || !state.matrix) {
       toast("Catalog not loaded yet");
       return;
     }
-    const key = publishKey();
+    const key = await publishKey();
     if (!key) {
       toast("Publish cancelled");
       return;
@@ -1467,13 +1561,41 @@
         : "catalog") +
       "-" +
       new Date().toISOString().slice(0, 10);
-    const version_label =
-      (prompt("Version label for this publish:", defaultLabel) || "").trim();
+    const versionEntered = await window.SlmDialog.prompt({
+      title: "Version label",
+      message: "Label for this publish (phones use this to detect updates).",
+      inputLabel: "Version",
+      defaultValue: defaultLabel,
+      okLabel: "Next",
+    });
+    if (versionEntered === null) {
+      toast("Publish cancelled");
+      return;
+    }
+    const version_label = String(versionEntered || "").trim();
     if (!version_label) {
       toast("Publish cancelled");
       return;
     }
-    const notes = (prompt("Notes (optional):", "") || "").trim();
+    const notesEntered = await window.SlmDialog.prompt({
+      title: "Publish notes",
+      message: "Optional notes for this catalog version.",
+      inputLabel: "Notes",
+      placeholder: "What changed…",
+      okLabel: "Publish",
+    });
+    if (notesEntered === null) {
+      toast("Publish cancelled");
+      return;
+    }
+    const notes = String(notesEntered || "").trim();
+    const go = await window.SlmDialog.confirm({
+      title: "Publish to app?",
+      message: `Upload rate book + kits as “${version_label}”?\nActivated phones will download this version.`,
+      okLabel: "Publish",
+    });
+    if (!go) return;
+
     const btn = $("btnPublishCatalog");
     if (btn) {
       btn.disabled = true;
@@ -1515,17 +1637,24 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
-        toast(`Publish failed: ${data.error || res.status}`);
+        await window.SlmDialog.alert({
+          title: "Publish failed",
+          message: String(data.error || res.status),
+        });
         return;
       }
       toast(`Published ${data.version_label}`);
     } catch (err) {
       console.error(err);
-      toast("Publish failed (network)");
+      await window.SlmDialog.alert({
+        title: "Publish failed",
+        message: "Network error while uploading the catalog.",
+      });
     } finally {
       if (btn) {
         btn.disabled = false;
         btn.textContent = "Publish to app";
+        updatePermissionUi();
       }
     }
   }
@@ -1570,9 +1699,9 @@
       el.addEventListener("input", renderBoard);
       el.addEventListener("change", renderBoard);
     });
-    $("btnCloseEditor").addEventListener("click", closeEditor);
-    $("btnSaveKit").addEventListener("click", saveKit);
-    $("btnSuggestKit")?.addEventListener("click", submitSuggestion);
+    $("btnCloseEditor").addEventListener("click", () => closeEditor());
+    $("btnSaveKit").addEventListener("click", () => saveKit());
+    $("btnSuggestKit")?.addEventListener("click", () => submitSuggestion());
     $("btnGuide")?.addEventListener("click", () =>
       $("guideModal")?.classList.remove("hidden")
     );
@@ -1582,14 +1711,14 @@
     $("guideModal")?.addEventListener("click", (e) => {
       if (e.target === $("guideModal")) $("guideModal").classList.add("hidden");
     });
-    $("btnSignOutLicense")?.addEventListener("click", () => {
-      if (window.SlmLicense?.signOut()) {
+    $("btnSignOutLicense")?.addEventListener("click", async () => {
+      if (await window.SlmLicense?.signOut()) {
         updatePermissionUi();
       }
     });
     window.addEventListener("slm-license-changed", () => updatePermissionUi());
-    $("btnDeleteCustomKit")?.addEventListener("click", () => {
-      if (state.activeKitId) deleteCustomKit(state.activeKitId);
+    $("btnDeleteCustomKit")?.addEventListener("click", async () => {
+      if (state.activeKitId) await deleteCustomKit(state.activeKitId);
     });
     $("btnAddCustomStructure")?.addEventListener("click", () => {
       $("customModal")?.classList.remove("hidden");
@@ -1625,12 +1754,17 @@
     $("kitComplete")?.addEventListener("change", () => {
       if (state.draft) {
         state.draft.complete = $("kitComplete").checked;
+        markDraftDirty();
         renderEditorSummary();
       }
     });
     $("kitEnabled")?.addEventListener("change", () => {
-      if (state.draft) state.draft.enabled = $("kitEnabled").checked;
+      if (state.draft) {
+        state.draft.enabled = $("kitEnabled").checked;
+        markDraftDirty();
+      }
     });
+    $("kitNotes")?.addEventListener("input", () => markDraftDirty());
     $("btnSeedConductor").addEventListener("click", seedConductor);
     $("btnSeedFittings").addEventListener("click", () => {
       seedFittings();
