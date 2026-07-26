@@ -296,6 +296,18 @@
                 app:iconTint="@color/primary" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnEstimate"
+                style="@style/Widget.Material3.Button.IconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_marginEnd="6dp"
+                android:contentDescription="@string/estimate_title"
+                app:icon="@android:drawable/ic_menu_agenda"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconTint="@color/primary" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSaveWorkspace"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="0dp"

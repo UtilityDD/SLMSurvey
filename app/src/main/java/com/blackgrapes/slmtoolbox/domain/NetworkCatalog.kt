@@ -1,6 +1,10 @@
 package com.blackgrapes.slmtoolbox.domain
 
 import com.blackgrapes.slmtoolbox.domain.model.AssetType
+import com.blackgrapes.slmtoolbox.domain.model.DtrMount
+import com.blackgrapes.slmtoolbox.domain.model.KitArrangement
+import com.blackgrapes.slmtoolbox.domain.model.KitExtension
+import com.blackgrapes.slmtoolbox.domain.model.KitLocation
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
@@ -40,7 +44,12 @@ data class PlacementDraft(
     val feederName: String = "",
     val sourceSubstation: String = "",
     val dtCapacityKva: String? = null,
-    val remarks: String? = null
+    val remarks: String? = null,
+    val kitLocation: String? = null,
+    val kitArrangement: String? = null,
+    val kitExtension: String? = null,
+    val dtrMount: String? = null,
+    val kitWire: String? = null
 )
 
 object NetworkCatalog {
@@ -107,6 +116,66 @@ object NetworkCatalog {
 
     fun assetTypeFor(structure: PoleStructure): AssetType =
         if (structure == PoleStructure.DTR) AssetType.DT else AssetType.POLE
+
+    fun kitLocationsFor(voltage: VoltageLevel, structure: PoleStructure?): List<KitLocation> {
+        val all = KitLocation.entries.toList()
+        // 33kV T-Off is only from DP (2P) or 4P
+        if (voltage == VoltageLevel.KV_33 && structure != null &&
+            structure != PoleStructure.P2 && structure != PoleStructure.P4
+        ) {
+            return all.filter { it != KitLocation.T_OFF }
+        }
+        return all
+    }
+
+    fun kitArrangements(): List<KitArrangement> = KitArrangement.entries.toList()
+
+    fun kitExtensions(): List<KitExtension> = KitExtension.entries.toList()
+
+    fun dtrMounts(): List<DtrMount> = DtrMount.entries.toList()
+
+    /** Common field capacities first; full sheet list available via "More". */
+    fun dtrCapacitiesCommon(): List<String> =
+        listOf("16", "25", "63", "100", "160", "250")
+
+    fun dtrCapacitiesMore(): List<String> =
+        listOf("315", "630")
+
+    /**
+     * Wire count for kit matching.
+     * HT ACSR → 3W; ABC/PVC → null (cable); LT bare from phase chips.
+     */
+    fun kitWireFor(
+        voltage: VoltageLevel,
+        conductor: String?,
+        structure: PoleStructure?
+    ): String? {
+        if (isAbcConductor(conductor) || isPvcConductor(conductor)) return null
+        return when (voltage) {
+            VoltageLevel.KV_33, VoltageLevel.KV_11 -> "3W"
+            VoltageLevel.LT -> when (structure) {
+                PoleStructure.P2 -> "3W"
+                PoleStructure.P3 -> "4W"
+                else -> "2W"
+            }
+        }
+    }
+
+    fun kitSummary(
+        location: KitLocation?,
+        arrangement: KitArrangement?,
+        extension: KitExtension?,
+        dtrMount: DtrMount? = null,
+        dtCapacityKva: String? = null
+    ): String = buildString {
+        append(location?.label ?: "—")
+        if (location != KitLocation.DEAD_END && arrangement != null) {
+            append(" · ").append(arrangement.label)
+        }
+        if (extension != null) append(" · ").append(extension.label)
+        if (dtrMount != null) append(" · DTR ").append(dtrMount.label)
+        if (!dtCapacityKva.isNullOrBlank()) append(" · ").append(dtCapacityKva).append("kVA")
+    }
 
     /**
      * How many parallel strokes to draw for a span.

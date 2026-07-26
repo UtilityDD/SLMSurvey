@@ -6,28 +6,31 @@ Survey / map / GPS stay **local**. Supabase is used for:
 2. Estimate catalog publish + download (rate book + kits) for activated devices  
 3. Kit edit suggestions (`can_suggest`) and accept/reject (`can_approve`)
 
+On the SmartLineman project, these tables live in schema **`survey`** (not mixed with quiz/forum `public` tables).
+
 ## Step 1 — Create project & tables
 
-1. Create a project at [supabase.com](https://supabase.com).
-2. SQL Editor → paste and run **`schema_all.sql`** once (licenses + estimate catalog + suggestions).
+1. Create a project at [supabase.com](https://supabase.com) **or** use your existing SmartLineman project.
+2. SQL Editor → paste and run **`schema_all.sql`** once (creates `survey` schema + tables).
 
-   Or run separately in order: `schema.sql` → `schema_estimate.sql` → `schema_estimate_suggestions.sql`.
+   **Existing DB already has tables in `public`:** run **`migrate_to_survey_schema.sql`** instead.
 
-3. Create a trial license:
+3. **Expose the schema** (required): Dashboard → **Project Settings → Data API** → **Exposed schemas** → add `survey` (keep `public`).
+
+4. Create a trial license:
 
 ```sql
-select public.admin_create_license('SLM-TRIAL-001', 'Trial User', '', 14, 1);
+select public.admin_create_license('SLM-TRIAL-001', 'Trial User', '', 14, 2);
 ```
 
 Grant suggestion / approval rights:
 
 ```sql
-update licenses set can_suggest = true where code = 'SUGGESTOR-CODE';
-update licenses set can_approve = true where code = 'APPROVER-CODE';
--- One license can have both flags if needed:
--- update licenses set can_suggest = true, can_approve = true where code = 'ADMIN-CODE';
+update survey.licenses set can_suggest = true where code = 'SUGGESTOR-CODE';
+update survey.licenses set can_approve = true where code = 'APPROVER-CODE';
 ```
 
+In Table Editor, switch schema dropdown to **`survey`** to see licenses / catalogs.
 ## Step 2 — Deploy Edge Functions
 
 ```bash
@@ -41,6 +44,7 @@ supabase functions deploy catalog-publish --no-verify-jwt
 supabase functions deploy catalog-suggest --no-verify-jwt
 supabase functions deploy catalog-suggestions-list --no-verify-jwt
 supabase functions deploy catalog-suggestion-review --no-verify-jwt
+supabase functions deploy license-admin --no-verify-jwt
 ```
 
 Set a publish secret (desktop/CLI only — never the service role key in the browser):
@@ -153,6 +157,46 @@ Requires `can_approve`.
 
 `action`: `accept` | `reject`. Accept returns `kit_id` + `proposed` for Assembly Builder merge (does **not** auto-publish).
 
+### POST `/functions/v1/license-admin`
+Requires activated device + `can_approve`. Used by Assembly Builder → **Licenses** tab.
+
+```json
+{ "device_id": "...", "action": "list" }
+```
+
+```json
+{
+  "device_id": "...",
+  "action": "create",
+  "code": "SLM-CUSTOMER-001",
+  "customer_name": "Name",
+  "customer_phone": "",
+  "days": 30,
+  "max_devices": 2,
+  "can_suggest": false,
+  "can_approve": false,
+  "notes": ""
+}
+```
+
+```json
+{
+  "device_id": "...",
+  "action": "update",
+  "id": "...",
+  "status": "blocked",
+  "extend_days": 30,
+  "set_days": 30,
+  "max_devices": 2,
+  "can_suggest": true,
+  "can_approve": false
+}
+```
+
+Cannot demote or block your own admin license (`cannot_demote_self` / `cannot_block_self`).
+
+Deploy: `supabase functions deploy license-admin --no-verify-jwt`
+
 ## Android behaviour
 
 - After successful activate / periodic license refresh, `CatalogApi` pulls the current catalog.
@@ -162,20 +206,17 @@ Requires `can_approve`.
 
 ## Ops (your rental workflow)
 
-| Action | SQL |
-|--------|-----|
-| New 30-day rental (phone + desktop) | `select admin_create_license('CODE', 'Name', 'Phone', 30, 2);` |
-| New 30-day rental (phone only) | `select admin_create_license('CODE', 'Name', 'Phone', 30, 1);` |
-| Allow existing code on desktop too | `update licenses set max_devices = 2 where code='CODE';` |
-| Allow kit suggestions | `update licenses set can_suggest = true where code='CODE';` |
-| Allow accept/reject | `update licenses set can_approve = true where code='CODE';` |
-| Extend 30 days | `update licenses set expires_at = expires_at + interval '30 days', status='active' where code='CODE';` |
-| Block unpaid | `update licenses set status='blocked' where code='CODE';` |
-| See devices | `select * from activations a join licenses l on l.id=a.license_id where l.code='CODE';` |
-| See current catalog | `select version_label, published_at, notes from estimate_catalogs where is_current;` |
-| Pending suggestions | `select id, kit_label, submitter_code, created_at from estimate_suggestions where status='pending';` |
+Prefer the Assembly Builder **Licenses** tab (admin license with `can_approve`). SQL still works as a fallback:
 
-**Same key for phone + desktop editor:** create or update the license with `max_devices = 2`.
+| Action | UI / SQL |
+|--------|----------|
+| New rental | Licenses → + New license · or `select admin_create_license('CODE', 'Name', 'Phone', 30, 2);` |
+| Extend / block / flags | Licenses row actions · or SQL `update licenses …` |
+| See devices | Listed on Licenses (activation_count) · or `select * from activations …` |
+| See current catalog | `select version_label, published_at, notes from estimate_catalogs where is_current;` |
+| Pending suggestions | Suggestions tab · or `select … from estimate_suggestions where status='pending';` |
+
+**Same key for phone + desktop editor:** set `max_devices = 2` when creating/editing the license.
 
 ## Speed
 

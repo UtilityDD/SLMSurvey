@@ -18,6 +18,10 @@ import com.blackgrapes.slmtoolbox.domain.PlacementDraft
 import com.blackgrapes.slmtoolbox.domain.SeriesConfig
 import com.blackgrapes.slmtoolbox.domain.PresetPreferences
 import com.blackgrapes.slmtoolbox.domain.PostExecPreferences
+import com.blackgrapes.slmtoolbox.domain.model.DtrMount
+import com.blackgrapes.slmtoolbox.domain.model.KitArrangement
+import com.blackgrapes.slmtoolbox.domain.model.KitExtension
+import com.blackgrapes.slmtoolbox.domain.model.KitLocation
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
 import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
@@ -51,6 +55,19 @@ class SurveyBubbleWizard : DialogFragment() {
     private var sourceSubstation: String? = null
     private var dtCapacityKva: String? = null
     private var remarks: String? = null
+    private var kitLocation: KitLocation? = null
+    private var kitArrangement: KitArrangement? = null
+    private var kitExtension: KitExtension? = null
+    private var dtrMount: DtrMount? = null
+    private var tipKitLocation: KitLocation? = null
+    private var tipKitArrangement: KitArrangement? = null
+    private var tipKitExtension: KitExtension? = null
+    private var tipDtrMount: DtrMount? = null
+    /** When true, kit steps save edit and dismiss (no place role). */
+    private var editingKitOnly: Boolean = false
+    private var showAllDtrCapacities: Boolean = false
+    /** Set when Place was already chosen (e.g. preset) — finish after kit confirm. */
+    private var pendingPlaceRole: PoleRole? = null
     /** Tip pole structure when continuing (detect first span after DTR). */
     private var tipStructure: PoleStructure? = null
     /** When branching from an existing network, voltage is a line property and cannot change. */
@@ -84,6 +101,10 @@ class SurveyBubbleWizard : DialogFragment() {
         requireArguments().getString(ARG_LINE_STATUS)?.let { lineStatus = WorkStatus.fromLabel(it) }
         requireArguments().getString(ARG_SOURCE_STATUS)?.let { sourcePoleStatus = WorkStatus.fromLabel(it) }
         directInsert = requireArguments().getBoolean(ARG_DIRECT_INSERT, false)
+        tipKitLocation = KitLocation.fromLabel(requireArguments().getString(ARG_TIP_KIT_LOCATION))
+        tipKitArrangement = KitArrangement.fromLabel(requireArguments().getString(ARG_TIP_KIT_ARRANGEMENT))
+        tipKitExtension = KitExtension.fromLabel(requireArguments().getString(ARG_TIP_KIT_EXTENSION))
+        tipDtrMount = DtrMount.fromLabel(requireArguments().getString(ARG_TIP_DTR_MOUNT))
         val lockedVoltage = requireArguments().getString(ARG_LOCKED_VOLTAGE)
         val lockedStatus = requireArguments().getString(ARG_LOCKED_STATUS)
         val lockedMaterial = requireArguments().getString(ARG_LOCKED_MATERIAL)
@@ -154,6 +175,11 @@ class SurveyBubbleWizard : DialogFragment() {
                 material = editing!!.material
                 structure = editing!!.poleStructure
                 conductor = editing!!.conductor
+                kitLocation = editing!!.kitLocationEnum
+                kitArrangement = editing!!.kitArrangementEnum
+                kitExtension = editing!!.kitExtensionEnum
+                dtrMount = editing!!.dtrMountEnum
+                dtCapacityKva = editing!!.dtCapacityKva
                 push(Step.EDIT_MENU)
             }
             mode == Mode.NEAR_LINE && directInsert -> {
@@ -195,7 +221,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     conductor = preset.continueAfterDtrConductor()
                     if (NetworkCatalog.isAbcConductor(conductor)) {
                         structure = PoleStructure.P1
-                        push(Step.PLACE_ROLE)
+                        advanceToKitOrPlace()
                     } else {
                         structure = null
                         push(Step.STRUCTURE)
@@ -208,7 +234,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     if (series.voltage == VoltageLevel.LT) {
                         if (NetworkCatalog.isAbcConductor(series.conductor)) {
                             structure = PoleStructure.P1
-                            push(Step.PLACE_ROLE)
+                            advanceToKitOrPlace()
                         } else {
                             structure = null
                             push(Step.STRUCTURE)
@@ -389,9 +415,9 @@ class SurveyBubbleWizard : DialogFragment() {
                     addChoice(label) {
                         structure = option
                         if (lockedSeries != null) {
-                            push(Step.PLACE_ROLE)
+                            advanceToKitOrPlace()
                         } else if (v == VoltageLevel.LT) {
-                            if (conductor == null) push(Step.CONDUCTOR) else push(Step.PLACE_ROLE)
+                            if (conductor == null) push(Step.CONDUCTOR) else advanceToKitOrPlace()
                         } else {
                             push(Step.CONDUCTOR)
                         }
@@ -424,9 +450,9 @@ class SurveyBubbleWizard : DialogFragment() {
                             }
                             voltage == VoltageLevel.LT -> {
                                 structure = PoleStructure.P1
-                                push(Step.PLACE_ROLE)
+                                advanceToKitOrPlace()
                             }
-                            else -> push(Step.PLACE_ROLE)
+                            else -> advanceToKitOrPlace()
                         }
                         render()
                     }
@@ -450,8 +476,114 @@ class SurveyBubbleWizard : DialogFragment() {
                     binding.tilSourceSs.error = null
                     feederName = fn
                     sourceSubstation = ss
-                    push(Step.PLACE_ROLE)
+                    advanceToKitOrPlace()
                     render()
+                }
+            }
+            Step.KIT_SUGGEST -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_kit_suggest)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_suggest_hint)
+                val summary = NetworkCatalog.kitSummary(
+                    kitLocation, kitArrangement, kitExtension, dtrMount, dtCapacityKva
+                )
+                addChoice(getString(R.string.bubble_kit_use, summary)) {
+                    advanceAfterKitAccept()
+                    render()
+                }
+                addChoice(getString(R.string.bubble_kit_change)) {
+                    push(Step.KIT_LOCATION)
+                    render()
+                }
+            }
+            Step.KIT_LOCATION -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_kit_location)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_location_hint)
+                val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+                NetworkCatalog.kitLocationsFor(v, structure).forEach { option ->
+                    addChoice(option.label) {
+                        kitLocation = option
+                        if (option == KitLocation.DEAD_END) {
+                            kitArrangement = null
+                            push(Step.KIT_EXTENSION)
+                        } else {
+                            push(Step.KIT_ARRANGEMENT)
+                        }
+                        render()
+                    }
+                }
+            }
+            Step.KIT_ARRANGEMENT -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_kit_arrangement)
+                binding.bubbleSubtitle.text = kitLocation?.label ?: ""
+                NetworkCatalog.kitArrangements().forEach { option ->
+                    addChoice(option.label) {
+                        kitArrangement = option
+                        push(Step.KIT_EXTENSION)
+                        render()
+                    }
+                }
+            }
+            Step.KIT_EXTENSION -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_kit_extension)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_extension_hint)
+                NetworkCatalog.kitExtensions().forEach { option ->
+                    addChoice(option.label) {
+                        kitExtension = option
+                        advanceAfterKitAccept()
+                        render()
+                    }
+                }
+            }
+            Step.DTR_MOUNT -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_dtr_mount)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_dtr_mount_hint)
+                NetworkCatalog.dtrMounts().forEach { option ->
+                    addChoice(option.label) {
+                        dtrMount = option
+                        when {
+                            dtCapacityKva.isNullOrBlank() -> push(Step.DTR_CAPACITY)
+                            editingKitOnly -> saveEditKitFields()
+                            pendingPlaceRole != null -> {
+                                val pending = pendingPlaceRole!!
+                                pendingPlaceRole = null
+                                finishPlace(pending)
+                            }
+                            else -> push(Step.PLACE_ROLE)
+                        }
+                        render()
+                    }
+                }
+            }
+            Step.DTR_CAPACITY -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_dtr_capacity)
+                binding.bubbleSubtitle.text = dtrMount?.label ?: "DTR"
+                val caps = if (showAllDtrCapacities) {
+                    NetworkCatalog.dtrCapacitiesCommon() + NetworkCatalog.dtrCapacitiesMore()
+                } else {
+                    NetworkCatalog.dtrCapacitiesCommon()
+                }
+                caps.forEach { kva ->
+                    addChoice("${kva} kVA") {
+                        dtCapacityKva = kva
+                        if (editingKitOnly) {
+                            saveEditKitFields()
+                        } else {
+                            val pending = pendingPlaceRole
+                            if (pending != null) {
+                                pendingPlaceRole = null
+                                finishPlace(pending)
+                            } else {
+                                push(Step.PLACE_ROLE)
+                            }
+                        }
+                        render()
+                    }
+                }
+                if (!showAllDtrCapacities) {
+                    addChoice(getString(R.string.bubble_dtr_more_sizes)) {
+                        showAllDtrCapacities = true
+                        render()
+                    }
                 }
             }
             Step.PLACE_ROLE -> {
@@ -500,17 +632,42 @@ class SurveyBubbleWizard : DialogFragment() {
             }
             Step.EDIT_MENU -> {
                 binding.bubbleTitle.text = getString(R.string.edit_asset)
-                binding.bubbleSubtitle.text = "Pole #${editing!!.sequence}  ·  ${editing!!.voltage.label}  ·  ${editing!!.status.label}"
+                val kitBit = if (editing!!.status == WorkStatus.PROPOSED) {
+                    val ready = if (editing!!.isEstimateReady()) {
+                        getString(R.string.bubble_kit_ready)
+                    } else {
+                        getString(R.string.bubble_kit_incomplete)
+                    }
+                    "\n$ready · ${NetworkCatalog.kitSummary(
+                        editing!!.kitLocationEnum,
+                        editing!!.kitArrangementEnum,
+                        editing!!.kitExtensionEnum,
+                        editing!!.dtrMountEnum,
+                        editing!!.dtCapacityKva
+                    )}"
+                } else {
+                    ""
+                }
+                binding.bubbleSubtitle.text =
+                    "Pole #${editing!!.sequence}  ·  ${editing!!.voltage.label}  ·  ${editing!!.status.label}$kitBit"
                 addChoice(getString(R.string.bubble_change_structure)) {
+                    editingKitOnly = false
                     push(Step.STRUCTURE)
                     render()
+                }
+                if (editing!!.status == WorkStatus.PROPOSED) {
+                    addChoice(getString(R.string.bubble_change_kit)) {
+                        editingKitOnly = true
+                        applySmartKitDefaults()
+                        push(Step.KIT_LOCATION)
+                        render()
+                    }
                 }
                 addChoice(getString(R.string.bubble_change_role_end)) {
                     onEdit?.invoke(editing!!.copy(poleRole = PoleRole.END))
                     dismiss()
                 }
                 addChoice(getString(R.string.delete_pole)) {
-                    // Push a confirmation step to prevent accidental deletion
                     push(Step.CONFIRM_DELETE)
                     render()
                 }
@@ -545,10 +702,18 @@ class SurveyBubbleWizard : DialogFragment() {
                     }
                 }
                 addChoice(getString(R.string.place_continue)) {
-                    finishPlace(PoleRole.CONTINUE)
+                    pendingPlaceRole = PoleRole.CONTINUE
+                    advanceToKitOrPlace()
+                    render()
                 }
                 addChoice(getString(R.string.place_end)) {
-                    finishPlace(PoleRole.END)
+                    pendingPlaceRole = PoleRole.END
+                    if (kitLocation == null || kitLocation == KitLocation.TANGENT) {
+                        kitLocation = KitLocation.DEAD_END
+                        kitArrangement = null
+                    }
+                    advanceToKitOrPlace()
+                    render()
                 }
                 addChoice(getString(R.string.change_details)) {
                     stepStack.removeLast()
@@ -559,6 +724,10 @@ class SurveyBubbleWizard : DialogFragment() {
                     conductor = null
                     feederName = null
                     sourceSubstation = null
+                    kitLocation = null
+                    kitArrangement = null
+                    kitExtension = null
+                    dtrMount = null
                     push(Step.VOLTAGE)
                     render()
                 }
@@ -659,14 +828,14 @@ class SurveyBubbleWizard : DialogFragment() {
                     structure = PoleStructure.P1
                     material = material ?: PoleMaterial.PCC_8M
                     if (conductor.isNullOrBlank()) conductor = "ABC"
-                    push(Step.PLACE_ROLE)
+                    advanceToKitOrPlace()
                     render()
                 }
                 addChoice(getString(R.string.lt_conv_pole_extra)) {
                     structure = PoleStructure.P1N
                     material = material ?: PoleMaterial.PCC_8M
                     if (conductor.isNullOrBlank()) conductor = "ABC"
-                    push(Step.PLACE_ROLE)
+                    advanceToKitOrPlace()
                     render()
                 }
             }
@@ -685,11 +854,104 @@ class SurveyBubbleWizard : DialogFragment() {
         append(structure?.label ?: "")
         append(" · ")
         append(conductor ?: "")
+        if (status == WorkStatus.PROPOSED || lockedSeries?.status == WorkStatus.PROPOSED) {
+            append("\n")
+            append(
+                NetworkCatalog.kitSummary(
+                    kitLocation, kitArrangement, kitExtension, dtrMount, dtCapacityKva
+                )
+            )
+        }
         if (mode == Mode.TAPPING_BRANCH && voltage != VoltageLevel.LT) {
             append("\n")
             append("Feeder: ").append(feederName ?: "—").append(" · ")
             append("SS: ").append(sourceSubstation ?: "—")
         }
+    }
+
+    /** Smart defaults then suggest / skip for Existing. */
+    private fun advanceToKitOrPlace() {
+        val s = status ?: lockedSeries?.status ?: WorkStatus.PROPOSED
+        if (s == WorkStatus.EXISTING) {
+            // Existing poles are context only — no kit chips required for BOQ.
+            kitLocation = null
+            kitArrangement = null
+            kitExtension = null
+            push(Step.PLACE_ROLE)
+            return
+        }
+        applySmartKitDefaults()
+        push(Step.KIT_SUGGEST)
+    }
+
+    private fun applySmartKitDefaults() {
+        if (kitLocation == null) {
+            kitLocation = when {
+                mode == Mode.TAPPING_BRANCH ||
+                    (sourceAssetId != null && lockedSeries == null) -> KitLocation.T_OFF
+                tipKitLocation != null -> tipKitLocation
+                else -> KitLocation.TANGENT
+            }
+        }
+        if (kitLocation == KitLocation.DEAD_END) {
+            kitArrangement = null
+        } else if (kitArrangement == null) {
+            kitArrangement = tipKitArrangement ?: KitArrangement.INLINE
+        }
+        if (kitExtension == null) {
+            kitExtension = tipKitExtension ?: KitExtension.NO_EXT
+        }
+        if (structure == PoleStructure.DTR && dtrMount == null) {
+            dtrMount = tipDtrMount
+        }
+    }
+
+    private fun advanceAfterKitAccept() {
+        if (structure == PoleStructure.DTR && dtrMount == null) {
+            push(Step.DTR_MOUNT)
+            return
+        }
+        if (structure == PoleStructure.DTR && dtCapacityKva.isNullOrBlank()) {
+            push(Step.DTR_CAPACITY)
+            return
+        }
+        if (editingKitOnly) {
+            saveEditKitFields()
+            return
+        }
+        val pending = pendingPlaceRole
+        if (pending != null) {
+            pendingPlaceRole = null
+            finishPlace(pending)
+            return
+        }
+        push(Step.PLACE_ROLE)
+    }
+
+    private fun saveEditKitFields() {
+        val asset = editing ?: return
+        val v = voltage ?: asset.voltage
+        val st = structure ?: asset.poleStructure ?: PoleStructure.P1
+        val c = conductor ?: asset.conductor
+        onEdit?.invoke(
+            asset.copy(
+                kitLocation = kitLocation?.label,
+                kitArrangement = if (kitLocation == KitLocation.DEAD_END) {
+                    null
+                } else {
+                    kitArrangement?.label
+                },
+                kitExtension = kitExtension?.label,
+                dtrMount = dtrMount?.id,
+                kitWire = NetworkCatalog.kitWireFor(v, c, st),
+                dtCapacityKva = dtCapacityKva ?: asset.dtCapacityKva,
+                structure = st.label,
+                conductor = c,
+                poleMaterial = (material ?: asset.material)?.label ?: asset.poleMaterial,
+                type = NetworkCatalog.assetTypeFor(st)
+            )
+        )
+        dismiss()
     }
 
     /** Start a new series from an existing pole; voltage inherits from that line. */
@@ -725,7 +987,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 splitConnectionId != null
         if (branchOrInsert && PresetPreferences.isEnabled(requireContext())) {
             applyPresetFieldsForBranch(v)
-            push(Step.PLACE_ROLE)
+            advanceToKitOrPlace()
             return
         }
         when (v) {
@@ -768,6 +1030,27 @@ class SurveyBubbleWizard : DialogFragment() {
                 structure ?: PoleStructure.P1
             else -> structure ?: NetworkCatalog.defaultStructure(v)
         }
+        // Ending a run: Dead-end unless user already chose T-Off / Dead-end.
+        var loc = kitLocation
+        var arr = kitArrangement
+        if (role == PoleRole.END && s == WorkStatus.PROPOSED) {
+            if (loc == null || loc == KitLocation.TANGENT || loc == KitLocation.ANGULAR) {
+                loc = KitLocation.DEAD_END
+                arr = null
+            }
+        }
+        if (loc == KitLocation.DEAD_END) arr = null
+        val ext = if (s == WorkStatus.PROPOSED) {
+            kitExtension ?: KitExtension.NO_EXT
+        } else {
+            null
+        }
+        val mount = if (st == PoleStructure.DTR) dtrMount else null
+        val wire = if (s == WorkStatus.PROPOSED) {
+            NetworkCatalog.kitWireFor(v, c, st)
+        } else {
+            null
+        }
         if (editing != null) {
             onEdit?.invoke(
                 editing!!.copy(
@@ -779,7 +1062,12 @@ class SurveyBubbleWizard : DialogFragment() {
                     type = NetworkCatalog.assetTypeFor(st),
                     poleRole = role,
                     dtCapacityKva = dtCapacityKva ?: editing!!.dtCapacityKva,
-                    remarks = remarks ?: editing!!.remarks
+                    remarks = remarks ?: editing!!.remarks,
+                    kitLocation = loc?.label,
+                    kitArrangement = arr?.label,
+                    kitExtension = ext?.label,
+                    dtrMount = mount?.id,
+                    kitWire = wire
                 )
             )
             dismiss()
@@ -809,7 +1097,12 @@ class SurveyBubbleWizard : DialogFragment() {
                 feederName = feederName ?: "",
                 sourceSubstation = sourceSubstation ?: "",
                 dtCapacityKva = dtCapacityKva,
-                remarks = remarks
+                remarks = remarks,
+                kitLocation = loc?.label,
+                kitArrangement = arr?.label,
+                kitExtension = ext?.label,
+                dtrMount = mount?.id,
+                kitWire = wire
             )
         )
         dismiss()
@@ -835,6 +1128,7 @@ class SurveyBubbleWizard : DialogFragment() {
     enum class Mode { NEW_NETWORK, CONTINUE_SERIES, NEAR_LINE, TAPPING_BRANCH }
     private enum class Step {
         VOLTAGE, STATUS, MATERIAL, STRUCTURE, CONDUCTOR, FEEDER_INFO, PRESET_SUMMARY, PLACE_ROLE,
+        KIT_SUGGEST, KIT_LOCATION, KIT_ARRANGEMENT, KIT_EXTENSION, DTR_MOUNT, DTR_CAPACITY,
         TAPPING_YES_NO, SOURCE_POLE, EDIT_MENU, CONFIRM_DELETE, LINE_ACTION_CHOICE,
         LT_CONV_START_DTR, LT_CONV_DTR_CAPACITY, LT_CONV_DTR_CODE, LT_CONV_DTR_POLE,
         LT_CONV_FIRST_SPAN, LT_CONV_POLE_KIND
@@ -902,6 +1196,10 @@ class SurveyBubbleWizard : DialogFragment() {
         private const val ARG_SOURCE_STATUS = "source_status"
         private const val ARG_DIRECT_INSERT = "direct_insert"
         private const val ARG_TIP_STRUCTURE = "tip_structure"
+        private const val ARG_TIP_KIT_LOCATION = "tip_kit_location"
+        private const val ARG_TIP_KIT_ARRANGEMENT = "tip_kit_arrangement"
+        private const val ARG_TIP_KIT_EXTENSION = "tip_kit_extension"
+        private const val ARG_TIP_DTR_MOUNT = "tip_dtr_mount"
 
         fun forNew(lat: Double, lng: Double): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
@@ -917,7 +1215,11 @@ class SurveyBubbleWizard : DialogFragment() {
             lng: Double,
             series: SeriesConfig,
             sourceId: Long?,
-            tipStructure: PoleStructure? = null
+            tipStructure: PoleStructure? = null,
+            tipKitLocation: String? = null,
+            tipKitArrangement: String? = null,
+            tipKitExtension: String? = null,
+            tipDtrMount: String? = null
         ): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
                 arguments = bundleOf(
@@ -931,7 +1233,11 @@ class SurveyBubbleWizard : DialogFragment() {
                     ARG_LOCKED_SERIES to series.seriesId,
                     ARG_LOCKED_START_STRUCTURE to (series.startStructure?.label ?: ""),
                     ARG_SOURCE_ID to (sourceId ?: -1L),
-                    ARG_TIP_STRUCTURE to tipStructure?.label
+                    ARG_TIP_STRUCTURE to tipStructure?.label,
+                    ARG_TIP_KIT_LOCATION to tipKitLocation,
+                    ARG_TIP_KIT_ARRANGEMENT to tipKitArrangement,
+                    ARG_TIP_KIT_EXTENSION to tipKitExtension,
+                    ARG_TIP_DTR_MOUNT to tipDtrMount
                 )
             }
 

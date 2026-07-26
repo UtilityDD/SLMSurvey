@@ -92,6 +92,73 @@ enum class PoleStructure(val label: String) {
     }
 }
 
+/** Structure-kit location (field selection → estimate match). */
+enum class KitLocation(val label: String) {
+    TANGENT("Tangent"),
+    ANGULAR("Angular"),
+    DEAD_END("Dead-end"),
+    T_OFF("T-Off");
+
+    companion object {
+        fun fromLabel(value: String?): KitLocation? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull {
+                it.label.equals(value, ignoreCase = true) || it.name == value
+            }
+        }
+    }
+}
+
+/** In-line vs Sectional — not used for Dead-end. */
+enum class KitArrangement(val label: String, val id: String) {
+    INLINE("In-line", "InlineArr"),
+    SECTIONAL("Sectional", "Sectional");
+
+    companion object {
+        fun fromLabel(value: String?): KitArrangement? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull {
+                it.label.equals(value, ignoreCase = true) ||
+                    it.id.equals(value, ignoreCase = true) ||
+                    it.name == value
+            }
+        }
+    }
+}
+
+enum class KitExtension(val label: String, val id: String) {
+    NO_EXT("No ext", "NoExt"),
+    WITH_EXT("With ext", "WithExt");
+
+    companion object {
+        fun fromLabel(value: String?): KitExtension? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull {
+                it.label.equals(value, ignoreCase = true) ||
+                    it.id.equals(value, ignoreCase = true) ||
+                    it.name == value
+            }
+        }
+    }
+}
+
+/** DTR mount matching kit DTR2P / DTR4P. */
+enum class DtrMount(val label: String, val id: String) {
+    ON_2P("On 2P", "2P"),
+    ON_4P("On 4P", "4P");
+
+    companion object {
+        fun fromLabel(value: String?): DtrMount? {
+            if (value.isNullOrBlank()) return null
+            return entries.firstOrNull {
+                it.label.equals(value, ignoreCase = true) ||
+                    it.id.equals(value, ignoreCase = true) ||
+                    it.name == value
+            }
+        }
+    }
+}
+
 data class SurveyAsset(
     val id: Long = 0L,
     val surveyId: Long,
@@ -113,6 +180,16 @@ data class SurveyAsset(
     val remarks: String? = null,
     val structure: String? = null,
     val seriesId: Long? = null,
+    /** Kit location: Tangent / Angular / Dead-end / T-Off (Proposed poles). */
+    val kitLocation: String? = null,
+    /** Kit arrangement id/label: In-line / Sectional (null for Dead-end). */
+    val kitArrangement: String? = null,
+    /** Kit extension: NoExt / WithExt. */
+    val kitExtension: String? = null,
+    /** DTR mount: 2P / 4P. */
+    val dtrMount: String? = null,
+    /** Derived wire count for kits: 2W / 3W / 4W (null = cable). */
+    val kitWire: String? = null,
     val deviceLatitude: Double? = null,
     val deviceLongitude: Double? = null,
     val deviceAccuracyM: Float? = null,
@@ -132,6 +209,33 @@ data class SurveyAsset(
 
     val material: PoleMaterial?
         get() = PoleMaterial.fromLabel(poleMaterial)
+
+    val kitLocationEnum: KitLocation?
+        get() = KitLocation.fromLabel(kitLocation)
+
+    val kitArrangementEnum: KitArrangement?
+        get() = KitArrangement.fromLabel(kitArrangement)
+
+    val kitExtensionEnum: KitExtension?
+        get() = KitExtension.fromLabel(kitExtension)
+
+    val dtrMountEnum: DtrMount?
+        get() = DtrMount.fromLabel(dtrMount)
+
+    /**
+     * Proposed poles need kit choices for auto-estimate.
+     * Existing poles are context only (not counted in BOQ).
+     */
+    fun isEstimateReady(): Boolean {
+        if (status != WorkStatus.PROPOSED) return true
+        if (structure.isNullOrBlank() || conductor.isNullOrBlank()) return false
+        if (kitLocationEnum == null || kitExtensionEnum == null) return false
+        if (kitLocationEnum != KitLocation.DEAD_END && kitArrangementEnum == null) return false
+        if (poleStructure == PoleStructure.DTR) {
+            if (dtrMountEnum == null || dtCapacityKva.isNullOrBlank()) return false
+        }
+        return true
+    }
 }
 
 data class SurveyConnection(

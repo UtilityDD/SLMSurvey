@@ -12,7 +12,8 @@ MAT_PATH = Path(os.environ["TEMP"]) / "slm_mat.csv"
 LAB_PATH = Path(os.environ["TEMP"]) / "slm_lab.csv"
 
 # Conductor options used for both structure fittings kits and per-km conductor kits.
-# Structure kits vary fittings by conductor size (e.g. Rabbit 50 vs Dog 100 on a DP).
+# HT structure kits vary fittings by conductor size (e.g. Rabbit 50 vs Dog 100 on a DP).
+# LT structure kits do NOT — same fittings for any size; only 2/3/4 wire (or cable) matters.
 CONDUCTOR_DEFS = [
     {
         "id": "ACSR|Squirrel|20",
@@ -224,6 +225,95 @@ def wire_options_for(voltage: str, conductor_family: str):
     ]
 
 
+def lt_structure_variants():
+    """
+    LT structure kits: one row per wire system (or cable), not per conductor size.
+    Conductor size still appears on conductor (per-km) kits.
+    """
+    return size_agnostic_structure_variants("LT")
+
+
+def size_agnostic_structure_variants(voltage: str):
+    """One ACSR (any size) + one ABC/cable row for the voltage's wire options."""
+    variants = []
+    for w in wire_options_for(voltage, "ACSR"):
+        variants.append(
+            {
+                "id": f"{voltage}|ANY|ACSR",
+                "family": "ACSR",
+                "short": "",
+                "name": f"Any {voltage} ACSR size",
+                "seedFittingCodes": ["504010132"],
+                "wire": w,
+                "sizeAgnostic": True,
+            }
+        )
+    for w in wire_options_for(voltage, "ABC"):
+        # Only if this voltage has ABC in conductor defs
+        if not any(
+            c["family"] == "ABC" and voltage in c["voltageHints"] for c in CONDUCTOR_DEFS
+        ):
+            continue
+        variants.append(
+            {
+                "id": f"{voltage}|ANY|ABC",
+                "family": "ABC",
+                "short": "",
+                "name": f"Any {voltage} ABC size",
+                "seedFittingCodes": [],
+                "wire": w,
+                "sizeAgnostic": True,
+            }
+        )
+    return variants
+
+
+def is_size_agnostic_structure(
+    voltage: str, structure_id: str, location_id: str, arrangement_id
+) -> bool:
+    """
+    Structure fittings identical for any conductor size.
+    - All LT structures
+    - 11kV · 1P · Tangent · In-line arr. only
+    """
+    if voltage == "LT":
+        return True
+    if (
+        voltage == "11kV"
+        and structure_id == "1P"
+        and location_id == "Tangent"
+        and arrangement_id == "InlineArr"
+    ):
+        return True
+    return False
+
+
+def structure_conductor_variants(
+    voltage: str,
+    structure_id: str = "",
+    location_id: str = "",
+    arrangement_id=None,
+):
+    """Yield conductor×wire rows used to expand structure kits."""
+    if is_size_agnostic_structure(voltage, structure_id, location_id, arrangement_id):
+        return size_agnostic_structure_variants(voltage)
+    out = []
+    for c in conductors_for_voltage(voltage):
+        for w in wire_options_for(voltage, c["family"]):
+            out.append(
+                {
+                    "id": c["id"],
+                    "family": c["family"],
+                    "short": c["short"],
+                    "name": c["name"],
+                    "seedFittingCodes": list(c.get("seedFittingCodes") or []),
+                    "wire": w,
+                    "sizeAgnostic": False,
+                }
+            )
+    return out
+
+
 def allowed_pole_codes(voltage: str):
     """Poles selectable for this voltage from Mat list."""
     codes = [p["code"] for p in POLE_OPTIONS]
@@ -246,20 +336,28 @@ def build_matrix():
         {"id": "DTR", "label": "DTR"},
     ]
     # Practical rules (user domain tips):
-    # LT: 8m SP only — no DP/TP/4P/DTR.
-    # 33kV: no DTR; no Rabbit 50; poles from Mat except 8m PCC.
+    # LT: 8m SP only for line poles — no DP/TP/4P on normal locations.
+    # 33kV: no DTR on normal locations; no Rabbit 50; poles from Mat except 8m PCC.
+    # T-Off = take-off from existing network (start of new feeder).
     structures_by_voltage = {
         "33kV": ["1P", "2P", "3P", "4P"],
         # DTR is not a standalone structure — it mounts on 2P or 4P (see DTR kits below)
         "11kV": ["1P", "2P", "3P", "4P"],
         "LT": ["1P"],
     }
+    # T-Off structure limits (user rules)
+    structures_for_toff = {
+        "LT": ["1P"],  # pole T-Off; DTR T-Off is separate
+        "11kV": ["1P", "2P", "3P", "4P"],
+        "33kV": ["2P", "4P"],  # always from existing DP or 4P
+    }
     locations = [
         {"id": "Tangent", "label": "Tangent"},  # straight run (was misnamed In-line)
         {"id": "Angular", "label": "Angular"},
         {"id": "Dead-end", "label": "Dead-end"},
+        {"id": "T-Off", "label": "T-Off"},  # take-off from existing network
     ]
-    # Arrangement applies to Tangent & Angular only (Option A: Dead-end has no split)
+    # Arrangement: Tangent / Angular / T-Off have In-line vs Sectional; Dead-end has none
     arrangements_tangent_angular = [
         {"id": "InlineArr", "label": "In-line arr."},
         {"id": "Sectional", "label": "Sectional"},
@@ -276,73 +374,108 @@ def build_matrix():
             return [{"id": None, "label": None}]
         return arrangements_tangent_angular
 
+    def structures_allowed(voltage: str, location_id: str):
+        if location_id == "T-Off":
+            return structures_for_toff[voltage]
+        return structures_by_voltage[voltage]
+
     structure_kits = []
     for v in voltages:
-        allowed = structures_by_voltage[v]
         poles = allowed_pole_codes(v)
-        for sid in allowed:
-            s = structure_by_id[sid]
-            for loc in locations:
+        for loc in locations:
+            for sid in structures_allowed(v, loc["id"]):
+                s = structure_by_id[sid]
                 # HT dead-end is never a single pole
                 if v in ("33kV", "11kV") and loc["id"] == "Dead-end" and sid == "1P":
                     continue
                 for arr in arrangements_for(loc["id"]):
-                    for c in conductors_for_voltage(v):
-                        for w in wire_options_for(v, c["family"]):
-                            for ext in extensions:
-                                if v == "LT":
-                                    notes = "LT practice: 8m PCC SP only."
+                    for c in structure_conductor_variants(
+                        v, s["id"], loc["id"], arr["id"]
+                    ):
+                        for ext in extensions:
+                            w = c["wire"]
+                            if v == "LT":
+                                    notes = (
+                                        "LT practice: 8m PCC SP only. "
+                                        "Structure fittings are the same for any conductor size — "
+                                        "pick size on the Conductor kit (per km)."
+                                    )
                                     pole_hint = "8m PCC"
-                                elif v == "33kV":
+                            elif v == "33kV":
                                     notes = (
                                         "33kV: no DTR, no Rabbit 50. "
                                         "Pick pole from Mat list (not 8m PCC). "
                                         "ACSR is 3-wire only (or cable)."
                                     )
                                     pole_hint = "from Mat (excl. 8m PCC)"
-                                elif v == "11kV":
+                            elif v == "11kV":
                                     notes = "11kV: ACSR is 3-wire only (or cable)."
                                     pole_hint = None
-                                else:
+                            else:
                                     notes = ""
                                     pole_hint = None
-                                if v in ("33kV", "11kV") and loc["id"] == "Dead-end":
+                            if loc["id"] == "T-Off":
+                                    if v == "LT":
+                                        notes = (
+                                            "LT T-Off: start of new network from existing network "
+                                            "(existing or new SP; In-line/Sectional; With/No ext). "
+                                            "For take-off at DTR use the LT DTR T-Off kits. "
+                                            "Any conductor size — size is on Conductor kit."
+                                        )
+                                    elif v == "11kV":
+                                        notes = (
+                                            "11kV T-Off: start of new network from existing network "
+                                            "(SP/DP/TP/4P existing or new; In-line/Sectional; With/No ext). "
+                                            "For take-off at DTR use the 11kV DTR T-Off kits."
+                                        )
+                                    elif v == "33kV":
+                                        notes = (
+                                            "33kV T-Off: always from existing DP (2P) or 4P. "
+                                            "In-line/Sectional; With/No ext."
+                                        )
+                            if c.get("sizeAgnostic") and v == "11kV" and loc["id"] == "Tangent":
+                                    notes = (
+                                        "11kV 1P Tangent In-line: structure fittings are the same "
+                                        "for any conductor size — pick size on the Conductor kit (per km). "
+                                        "ACSR is 3-wire only (or cable)."
+                                    )
+                            if v in ("33kV", "11kV") and loc["id"] == "Dead-end":
                                     notes = (
                                         (notes + " " if notes else "")
                                         + "Dead-end is never 1P on HT."
                                     ).strip()
-                                if loc["id"] != "Dead-end" and arr["label"]:
+                            if loc["id"] != "Dead-end" and arr["label"]:
                                     notes = (
                                         (notes + " " if notes else "")
                                         + f"Location {loc['label']}; arrangement {arr['label']}."
                                     ).strip()
-                                if ext["hasExtension"]:
+                            if ext["hasExtension"]:
                                     notes = (
                                         (notes + " " if notes else "")
                                         + "Include pole extension + guarding hardware for this structure. "
                                         "GI wire etc. by guarded length is under Guarding add-ons."
                                     ).strip()
-                                else:
+                            else:
                                     notes = (
                                         (notes + " " if notes else "")
                                         + "Standard structure without extension."
                                     ).strip()
 
-                                wire_id = w["id"]
-                                wire_label = w["label"]
-                                wire_part = wire_id if wire_id else "cable"
-                                if arr["id"]:
+                            wire_id = w["id"]
+                            wire_label = w["label"]
+                            wire_part = wire_id if wire_id else "cable"
+                            if arr["id"]:
                                     kit_id = (
                                         f"STR|{v}|{s['id']}|{loc['id']}|{arr['id']}|"
                                         f"{c['id']}|{wire_part}|{ext['id']}"
                                     )
-                                else:
+                            else:
                                     kit_id = (
                                         f"STR|{v}|{s['id']}|{loc['id']}|"
                                         f"{c['id']}|{wire_part}|{ext['id']}"
                                     )
 
-                                structure_kits.append(
+                            structure_kits.append(
                                     {
                                         "id": kit_id,
                                         "family": "structure",
@@ -358,6 +491,7 @@ def build_matrix():
                                         "conductorId": c["id"],
                                         "conductorShort": c["short"],
                                         "conductorName": c["name"],
+                                        "conductorSizeAgnostic": bool(c.get("sizeAgnostic")),
                                         "wireCount": wire_id,
                                         "wireLabel": wire_label,
                                         "extension": ext["id"],
@@ -374,7 +508,7 @@ def build_matrix():
                                     }
                                 )
 
-    # 11kV DTR kits: transformer on 2P (DP) or 4P mount, capacity from Mat sheet
+    # 11kV DTR kits (incl. T-Off): transformer on 2P (DP) or 4P mount
     v = "11kV"
     poles = allowed_pole_codes(v)
     for mount in DTR_MOUNTS:
@@ -406,6 +540,11 @@ def build_matrix():
                                     "Seed includes DTR material"
                                     + (" + erection labour." if dtr.get("labourCodes") else ".")
                                 )
+                                if loc["id"] == "T-Off":
+                                    notes += (
+                                        " T-Off: new feeder starts from this DTR "
+                                        "(take-off from existing network)."
+                                    )
                                 if loc["id"] != "Dead-end" and arr["label"]:
                                     notes += f" Location {loc['label']}; arrangement {arr['label']}."
                                 if ext["hasExtension"]:
@@ -446,6 +585,64 @@ def build_matrix():
                                         "notes": notes,
                                     }
                                 )
+
+    # LT DTR T-Off only: take-off of new LT network from a DTR (size-agnostic)
+    v = "LT"
+    poles = allowed_pole_codes(v)
+    for mount in DTR_MOUNTS:
+        for arr in arrangements_for("T-Off"):
+            for c in size_agnostic_structure_variants(v):
+                for ext in extensions:
+                    w = c["wire"]
+                    wire_id = w["id"]
+                    wire_label = w["label"]
+                    wire_part = wire_id if wire_id else "cable"
+                    kit_id = (
+                        f"STR|{v}|DTR|{mount['id']}|T-Off|{arr['id']}|"
+                        f"{c['id']}|{wire_part}|{ext['id']}"
+                    )
+                    notes = (
+                        f"LT T-Off from DTR on {mount['id']} mount. "
+                        "Start of new LT network from existing DTR. "
+                        "Any conductor size — size is on Conductor kit. "
+                        f"Arrangement {arr['label']}."
+                    )
+                    if ext["hasExtension"]:
+                        notes += " With pole extension / guarding hardware."
+                    structure_kits.append(
+                        {
+                            "id": kit_id,
+                            "family": "structure",
+                            "voltage": v,
+                            "structure": f"DTR{mount['id']}",
+                            "structureLabel": f"DTR on {mount['id']} (T-Off)",
+                            "dtrMount": mount["id"],
+                            "isDtr": True,
+                            "location": "T-Off",
+                            "locationLabel": "T-Off",
+                            "position": "T-Off",
+                            "arrangement": arr["id"],
+                            "arrangementLabel": arr["label"],
+                            "conductorFamily": c["family"],
+                            "conductorId": c["id"],
+                            "conductorShort": c["short"],
+                            "conductorName": c["name"],
+                            "conductorSizeAgnostic": True,
+                            "wireCount": wire_id,
+                            "wireLabel": wire_label,
+                            "extension": ext["id"],
+                            "extensionLabel": ext["label"],
+                            "hasExtension": ext["hasExtension"],
+                            "poleHeightHint": "8m PCC / DTR mount",
+                            "allowedPoleCodes": poles,
+                            "qtyBasis": "per_structure",
+                            "seedFittingCodes": list(c.get("seedFittingCodes") or []),
+                            "enabled": True,
+                            "complete": False,
+                            "lines": [],
+                            "notes": notes,
+                        }
+                    )
 
     conductor_kits = []
     for c in CONDUCTOR_DEFS:
@@ -523,7 +720,7 @@ def build_matrix():
         )
 
     return {
-        "version": 8,
+        "version": 11,
         "qtyBasisLabels": {
             "per_structure": "Per 1 proposed structure (with or without extension)",
             "per_km": "Per 1 km (conductor, stringing, or guarding run)",
@@ -540,11 +737,12 @@ def build_matrix():
                 "excludeConductors": ["ACSR|Rabbit|50"],
                 "excludeStructures": ["DTR"],
                 "deadEndNever": ["1P"],
+                "tOffOnly": ["2P", "4P"],
                 "wireOptions": ["3W"],
                 "cableOk": True,
                 "allowedPoleCodes": allowed_pole_codes("33kV"),
                 "excludedPoleCodes": [POLE_8M_PCC],
-                "note": "33kV: no DTR, no Rabbit 50, dead-end never 1P, ACSR 3-wire or cable only.",
+                "note": "33kV: no DTR, no Rabbit 50, dead-end never 1P, T-Off only 2P/4P, ACSR 3-wire or cable only.",
             },
             "11kV": {
                 "structures": ["1P", "2P", "3P", "4P", "DTR2P", "DTR4P"],
@@ -554,29 +752,33 @@ def build_matrix():
                 "dtrMounts": ["2P", "4P"],
                 "dtrCapacities": [d["id"] for d in DTR_CAPACITIES],
                 "allowedPoleCodes": allowed_pole_codes("11kV"),
-                "note": "11kV: dead-end never 1P; ACSR 3-wire or cable; DTR on 2P or 4P with sheet capacities.",
+                "note": "11kV: dead-end never 1P; T-Off SP/DP/TP/4P or DTR; ACSR 3-wire or cable; DTR on 2P or 4P with sheet capacities.",
             },
             "LT": {
-                "structures": ["1P"],
+                "structures": ["1P", "DTR2P", "DTR4P"],
                 "poleHeight": "8m",
                 "wireOptions": ["2W", "3W", "4W"],
                 "cableOk": True,
                 "allowedPoleCodes": [POLE_8M_PCC],
-                "note": "LT uses 8m SP only; ACSR may be 2/3/4 wire or ABC cable.",
+                "note": "LT: 8m SP for line poles; T-Off SP or from DTR; structure kits by 2/3/4 wire or cable (any conductor size); size is on Conductor kits.",
             },
         },
         "poleOptions": POLE_OPTIONS,
         "notes": (
-            "Structure kits include conductor size because hardware fittings differ. "
-            "Conductor kits cover wire/cable + stringing only. "
-            "LT: 8m SP only. "
-            "33kV: no DTR, no Rabbit 50; pole from Mat except 8m PCC. "
+            "HT structure kits usually include conductor size because hardware fittings differ. "
+            "Exceptions (size-agnostic structure kits): all LT; and 11kV · 1P · Tangent · In-line arr. "
+            "Conductor kits cover wire/cable + stringing per km (still by size). "
+            "LT: 8m SP only for line poles. "
+            "Location: Tangent / Angular / Dead-end / T-Off. "
+            "T-Off = take-off where new network starts from existing network. "
+            "LT T-Off: SP (existing or new) In-line/Sectional × ext, or from DTR. "
+            "11kV T-Off: SP/DP/TP/4P (existing or new) or DTR. "
+            "33kV T-Off: always from existing DP (2P) or 4P only. "
+            "Tangent / Angular / T-Off have In-line vs Sectional; Dead-end has no arrangement split. "
+            "33kV: no DTR on normal locations; no Rabbit 50; pole from Mat except 8m PCC. "
             "11kV/33kV: dead-end is never single pole (1P). "
-            "Location is Tangent / Angular / Dead-end. "
-            "Tangent & Angular also have In-line vs Sectional arrangement; Dead-end has no arrangement split. "
             "11kV/33kV: ACSR always 3-wire or cable; LT ACSR may be 2/3/4 wire. "
-            "Squirrel 20 is LT only (not 11kV). "
-            "DTR is 11kV only, mounted on 2P or 4P, capacity from Mat sheet. "
+            "DTR is 11kV on all locations (incl. T-Off); LT DTR kits are T-Off only. "
             "Guarding/extension is part of the structure kit (With ext / No ext). "
             "Guarding add-ons are for GI wire etc. by guarded run length (per km)."
         ),

@@ -265,6 +265,9 @@ class SurveyMapFragment : Fragment() {
         binding.btnMySld.setOnClickListener {
             findNavController().navigate(R.id.action_survey_to_my_sld)
         }
+        binding.btnEstimate.setOnClickListener {
+            findNavController().navigate(R.id.action_survey_to_estimate)
+        }
         binding.btnSaveWorkspace.setOnClickListener { saveToMySld() }
         binding.btnPreviewSld.setOnClickListener {
             val id = viewModel.survey.value?.id ?: return@setOnClickListener
@@ -402,7 +405,11 @@ class SurveyMapFragment : Fragment() {
             lng,
             series,
             tip?.id,
-            tipStructure = tip?.poleStructure
+            tipStructure = tip?.poleStructure,
+            tipKitLocation = tip?.kitLocation,
+            tipKitArrangement = tip?.kitArrangement,
+            tipKitExtension = tip?.kitExtension,
+            tipDtrMount = tip?.dtrMount
         )
         wizard.onPlace = { draft -> placeWithEvidence(draft) }
         wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)

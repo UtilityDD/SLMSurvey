@@ -15,6 +15,9 @@
     suggestions: [],
     selectedSuggestionId: null,
     pendingSuggestionCount: 0,
+    licenses: [],
+    boqSurvey: null,
+    boqReport: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -46,11 +49,17 @@
   }
 
   function kitStatus(kit) {
-    if (!kit.enabled) return "disabled";
-    const n = (kit.lines || []).length;
-    if (n === 0) return "empty";
-    if (kit.complete) return "complete";
-    return "partial";
+    if (!kit.enabled) return "off";
+    if (!(kit.lines || []).length) return "empty";
+    if (kit.complete) return "final";
+    return "draft";
+  }
+
+  function statusLabel(st) {
+    if (st === "final") return "Final";
+    if (st === "draft") return "Draft";
+    if (st === "off") return "Off";
+    return "Empty";
   }
 
   function kitTitle(kit) {
@@ -61,11 +70,23 @@
     if (kit.family === "structure") {
       const loc = kit.locationLabel || kit.position || "";
       const arr = kit.arrangementLabel ? ` · ${kit.arrangementLabel}` : "";
-      const cond = kit.conductorShort || kit.conductorName || "";
+      // Size-agnostic kits (LT; 11kV 1P Tangent In-line): show family + wire, not Rabbit/Dog/etc.
+      const agnostic = !!kit.conductorSizeAgnostic;
+      const cond = agnostic
+          ? ""
+          : kit.conductorShort
+            ? ` · ${kit.conductorShort}`
+            : "";
       const wire = kit.wireLabel ? ` · ${kit.wireLabel}` : "";
+      const fam =
+        agnostic && kit.conductorFamily === "ABC"
+          ? " · ABC"
+          : agnostic && kit.conductorFamily === "ACSR"
+            ? " · ACSR"
+            : "";
       const ext = kit.extensionLabel ? ` · ${kit.extensionLabel}` : "";
       const dtr = kit.dtrCapacityLabel ? ` · ${kit.dtrCapacityLabel}` : "";
-      return `${kit.voltage} · ${kit.structureLabel} · ${loc}${arr} · ${cond}${wire}${ext}${dtr}`;
+      return `${kit.voltage} · ${kit.structureLabel} · ${loc}${arr}${cond}${fam}${wire}${ext}${dtr}`;
     }
     if (kit.family === "conductor") {
       const wire = kit.wireLabel ? ` · ${kit.wireLabel}` : "";
@@ -294,7 +315,7 @@
   }
 
   function countByStatus(kits) {
-    const out = { empty: 0, partial: 0, complete: 0, disabled: 0, total: kits.length };
+    const out = { empty: 0, draft: 0, final: 0, off: 0, total: kits.length };
     for (const k of kits) out[kitStatus(k)] += 1;
     return out;
   }
@@ -306,36 +327,13 @@
       conductor: all.filter((k) => k.family === "conductor"),
       addon: all.filter((k) => k.family === "addon"),
     };
-    const allStatus = countByStatus(all);
     const mat = state.ratebook.materials.length;
     const lab = state.ratebook.labour.length;
 
-    $("estStats").innerHTML = `
-      <div class="est-stat"><strong>${mat}</strong><span>Materials</span></div>
-      <div class="est-stat"><strong>${lab}</strong><span>Labour</span></div>
-      <div class="est-stat"><strong>${byFamily.structure.length}</strong><span>Structure kits</span></div>
-      <div class="est-stat"><strong>${byFamily.conductor.length}</strong><span>Conductor kits</span></div>
-      <div class="est-stat"><strong>${byFamily.addon.length}</strong><span>Guarding add-ons</span></div>
-      <div class="est-stat tone-ok"><strong>${allStatus.complete}</strong><span>Complete</span></div>
-      <div class="est-stat tone-warn"><strong>${allStatus.partial}</strong><span>In progress</span></div>
-      <div class="est-stat"><strong>${allStatus.empty}</strong><span>Empty</span></div>
-      <div class="est-stat tone-muted"><strong>${allStatus.disabled}</strong><span>Disabled</span></div>
-    `;
-    const seedNote = state.matrix?.seedNote;
-    if (seedNote && !$("estSeedBanner")) {
-      const ban = document.createElement("div");
-      ban.id = "estSeedBanner";
-      ban.className = "est-board-summary";
-      ban.style.marginBottom = "12px";
-      ban.style.borderRadius = "10px";
-      ban.style.border = "1px solid var(--line)";
-      ban.innerHTML = `<span>${escapeHtml(seedNote)}</span>`;
-      $("estStats").after(ban);
-    }
-
+    // Counts live on tabs — no card strip.
     const tabLabel = (kits) => {
       const s = countByStatus(kits);
-      return `${s.complete}/${kits.length}`;
+      return `${s.final}/${kits.length}`;
     };
     $("tabCountStructure").textContent = tabLabel(byFamily.structure);
     $("tabCountConductor").textContent = tabLabel(byFamily.conductor);
@@ -396,26 +394,11 @@
     const el = $("boardSummary");
     if (!el) return;
     const s = countByStatus(rows);
-    const voltageCounts = {};
-    for (const k of rows) {
-      voltageCounts[k.voltage] = (voltageCounts[k.voltage] || 0) + 1;
-    }
-    const voltageChips = Object.entries(voltageCounts)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(
-        ([v, n]) =>
-          `<span class="est-chip voltage">${escapeHtml(v)} <strong>${n}</strong></span>`
-      )
-      .join("");
-
-    el.innerHTML = `
-      <span>Showing <strong>${rows.length}</strong> of <strong>${tabTotal}</strong> kits</span>
-      <span class="est-chip complete">Complete ${s.complete}</span>
-      <span class="est-chip partial">In progress ${s.partial}</span>
-      <span class="est-chip empty">Empty ${s.empty}</span>
-      <span class="est-chip disabled">Disabled ${s.disabled}</span>
-      ${voltageChips}
-    `;
+    const parts = [`${rows.length} of ${tabTotal}`];
+    if (s.final) parts.push(`${s.final} final`);
+    if (s.draft) parts.push(`${s.draft} draft`);
+    if (s.empty) parts.push(`${s.empty} empty`);
+    el.textContent = parts.join(" · ");
   }
 
   function populateConductorFilter() {
@@ -478,6 +461,16 @@
       dtrSel.style.display = showDtr ? "" : "none";
     }
 
+    const condSel = $("filterConductor");
+    if (condSel) {
+      // LT structure kits ignore conductor size — hide that filter on LT structure board.
+      const showCond =
+        state.tab === "conductor" ||
+        (state.tab === "structure" && voltage !== "LT");
+      condSel.style.display = showCond ? "" : "none";
+      if (!showCond) condSel.value = "";
+    }
+
     // Dead-end has no arrangement — hide arrangement filter when location is Dead-end
     if (arrSel && locSel) {
       const loc = locSel.value;
@@ -510,9 +503,15 @@
     if (!showStructFilter) return;
 
     const rules = state.matrix?.domainRules || {};
-    const allowed = voltage && rules[voltage]?.structures
+    const loc = locSel?.value || "";
+    let allowed = voltage && rules[voltage]?.structures
       ? new Set(rules[voltage].structures)
       : null;
+    // 33kV T-Off is only from existing DP (2P) or 4P
+    if (allowed && voltage === "33kV" && loc === "T-Off") {
+      const tOffOnly = rules["33kV"]?.tOffOnly || ["2P", "4P"];
+      allowed = new Set(tOffOnly);
+    }
     [...sel.options].forEach((opt) => {
       if (!opt.value) {
         opt.hidden = false;
@@ -530,8 +529,27 @@
     renderBoardSummary(rows, tabTotal);
 
     const list = $("boardList");
+    const customBtn = $("btnAddCustomStructure");
+    if (customBtn) customBtn.classList.toggle("hidden", state.tab !== "structure");
+
+    // Keep More filters open if any secondary filter is set
+    const more = $("filtersMore");
+    if (more) {
+      const secondaryIds = [
+        "filterStructure",
+        "filterOrigin",
+        "filterConductor",
+        "filterDtrCapacity",
+        "filterWire",
+        "filterLocation",
+        "filterArrangement",
+        "filterExtension",
+      ];
+      if (secondaryIds.some((id) => $(id)?.value)) more.open = true;
+    }
+
     if (!rows.length) {
-      list.innerHTML = `<div class="est-empty">No kits match these filters.</div>`;
+      list.innerHTML = `<div class="est-empty">No kits match. Clear search or open More filters.</div>`;
       return;
     }
 
@@ -539,21 +557,20 @@
       .map((kit) => {
         const st = kitStatus(kit);
         const counts = kitLineCounts(kit);
-        const seeded = kit.seeded && counts.total > 0;
+        const items =
+          counts.total > 0
+            ? `${counts.mat + counts.lab} items`
+            : "No items yet";
+        const bits = [kitSubtitle(kit), items];
+        if (kit.custom) bits.push("custom");
         return `
-          <div class="est-row ${st === "disabled" ? "disabled-row" : ""}" data-kit="${escapeAttr(kit.id)}">
-            <div>
-              <div class="est-row-title">${escapeHtml(kitTitle(kit))}</div>
-              <div class="est-row-meta">${escapeHtml(kitSubtitle(kit))}${seeded ? " · pre-seeded" : ""}${kit.custom ? " · custom" : ""}</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;">
-              ${kit.custom ? `<span class="est-chip custom">Custom</span>` : ""}
-              <span class="est-chip" style="background:#e8f1ff;color:#1e40af;" title="Materials"><strong>${counts.mat}</strong> mat</span>
-              <span class="est-chip" style="background:#ecfdf3;color:#166534;" title="Labour"><strong>${counts.lab}</strong> lab</span>
-              <span class="est-badge ${st}">${st}</span>
-            </div>
-            <button type="button" class="est-btn est-btn-ghost est-btn-sm" data-open="${escapeAttr(kit.id)}">Edit</button>
-          </div>
+          <button type="button" class="est-row ${st === "off" ? "disabled-row" : ""}" data-open="${escapeAttr(kit.id)}">
+            <span class="est-row-main">
+              <span class="est-row-title">${escapeHtml(kitTitle(kit))}</span>
+              <span class="est-row-meta">${escapeHtml(bits.filter(Boolean).join(" · "))}</span>
+            </span>
+            <span class="est-badge ${st}">${statusLabel(st)}</span>
+          </button>
         `;
       })
       .join("");
@@ -588,9 +605,11 @@
     const fakeKit = { lines: state.draft.lines };
     const { mat, lab } = kitLineCounts(fakeKit);
     chips.innerHTML = `
-      <span class="est-chip" style="background:#e8f1ff;color:#1e40af;"><strong>${mat}</strong> materials</span>
-      <span class="est-chip" style="background:#ecfdf3;color:#166534;"><strong>${lab}</strong> labour</span>
-      <span class="est-chip ${state.draft.complete ? "complete" : "partial"}">${state.draft.complete ? "Reviewed" : "Needs review"}</span>
+      <span class="est-chip" style="background:#e8f1ff;color:#1e40af;"><strong>${mat}</strong> mat</span>
+      <span class="est-chip" style="background:#ecfdf3;color:#166534;"><strong>${lab}</strong> lab</span>
+      <span class="est-chip ${state.draft.complete ? "complete" : "partial"}">${
+        state.draft.complete ? "Final" : "Draft"
+      }</span>
     `;
   }
 
@@ -612,11 +631,13 @@
     $("edMorePanel")?.classList.add("hidden");
 
     $("editorTitle").textContent = kitTitle(kit);
-    $("editorSub").textContent = kit.custom
-      ? "Custom structure — build the BOQ from the rate book. Survives matrix regenerate."
-      : "Change quantity, remove items, or add from the rate book.";
+    if ($("editorSub")) {
+      $("editorSub").textContent = "";
+      $("editorSub").classList.add("hidden");
+    }
     $("kitEnabled").checked = !!state.draft.enabled;
-    $("kitComplete").checked = !!state.draft.complete;
+    if ($("kitFinal")) $("kitFinal").checked = !!state.draft.complete;
+    if ($("kitComplete")) $("kitComplete").checked = !!state.draft.complete;
     $("kitNotes").value = state.draft.notes || "";
 
     const delBtn = $("btnDeleteCustomKit");
@@ -650,8 +671,9 @@
     const can = !!(window.SlmLicense && window.SlmLicense.canSuggest());
     btn.classList.toggle("hidden", !can);
     btn.disabled = !can;
+    // Final kits can still receive suggestions — Final = ready for estimates, not locked.
     btn.title = can
-      ? "Send this kit edit for approval"
+      ? "Suggest a change (works on Draft or Final kits)"
       : "Needs can_suggest on your license";
   }
 
@@ -736,6 +758,7 @@
 
     updateSuggestButton();
     updateSuggestionsTabVisibility();
+    updateLicensesTabVisibility();
   }
 
   function markDraftDirty() {
@@ -987,7 +1010,7 @@
     });
     if (!ok) return;
     kit.enabled = $("kitEnabled").checked;
-    kit.complete = $("kitComplete").checked;
+    kit.complete = !!$("kitFinal")?.checked;
     kit.notes = $("kitNotes").value || "";
     kit.lines = state.draft.lines.map((l) => ({
       code: l.code,
@@ -999,15 +1022,15 @@
     if (kit.complete && !kit.lines.length) {
       kit.complete = false;
       state.draft.complete = false;
-      $("kitComplete").checked = false;
-      toast("Add at least one item before marking reviewed");
+      if ($("kitFinal")) $("kitFinal").checked = false;
+      toast("Add items before marking Final");
       return;
     }
     saveEdits();
     state.draft._dirty = false;
     renderStats();
     renderEditorSummary();
-    toast("Saved");
+    toast(kit.complete ? "Saved · Final" : "Saved · Draft");
   }
 
   function seedConductor() {
@@ -1133,20 +1156,223 @@
     $("editorPanel").classList.add("hidden");
     $("boardPanel").classList.add("hidden");
     $("ratebookPanel").classList.add("hidden");
+    $("boqPanel")?.classList.add("hidden");
     $("suggestionsPanel")?.classList.add("hidden");
+    $("licensesPanel")?.classList.add("hidden");
 
     if (tab === "ratebook") {
       $("ratebookPanel").classList.remove("hidden");
       renderRatebook();
+    } else if (tab === "boq") {
+      $("boqPanel")?.classList.remove("hidden");
+      renderBoqPanel();
     } else if (tab === "suggestions") {
       $("suggestionsPanel")?.classList.remove("hidden");
       loadSuggestions();
+    } else if (tab === "licenses") {
+      $("licensesPanel")?.classList.remove("hidden");
+      loadLicenses();
     } else {
       $("boardPanel").classList.remove("hidden");
-      const toolbar = $("boardToolbar");
-      if (toolbar) toolbar.classList.toggle("hidden", tab !== "structure");
       renderBoard();
     }
+  }
+
+  function setBoqSurvey(survey, sourceLabel) {
+    if (!survey || !Array.isArray(survey.assets)) {
+      toast("Invalid survey workspace (missing assets)");
+      return;
+    }
+    state.boqSurvey = survey;
+    state.boqReport = null;
+    const meta = $("boqMeta");
+    if (meta) {
+      const title = survey.title || survey.surveyTitle || "Survey";
+      const n = survey.assets.length;
+      const prop = survey.assets.filter((a) => a.status === "Proposed").length;
+      meta.textContent = `${title} · ${n} poles · ${prop} Proposed · ${sourceLabel || "loaded"}`;
+    }
+    $("btnBoqGenerate").disabled = false;
+    $("btnBoqExport").disabled = true;
+    $("btnBoqCopy").disabled = true;
+    renderBoqPanel();
+  }
+
+  function generateBoq() {
+    if (!state.boqSurvey) {
+      toast("Import a survey workspace first");
+      return;
+    }
+    if (!window.SlmEstimateMatch) {
+      toast("Estimate matcher failed to load");
+      return;
+    }
+    mergeKits();
+    const kits = Object.values(state.kitsById);
+    const report = window.SlmEstimateMatch.buildReport(
+      state.boqSurvey,
+      kits,
+      state.ratebook
+    );
+    state.boqReport = report;
+    $("btnBoqExport").disabled = false;
+    $("btnBoqCopy").disabled = false;
+    const countEl = $("tabCountBoq");
+    if (countEl) countEl.textContent = String(report.lines.length);
+    renderBoqPanel();
+    toast(
+      report.lines.length
+        ? `BOQ: ${report.lines.length} line(s), ${report.gaps.length} gap(s)`
+        : `No Final matches — ${report.gaps.length} gap(s)`
+    );
+  }
+
+  function renderBoqPanel() {
+    const summary = $("boqSummary");
+    const list = $("boqList");
+    if (!summary || !list) return;
+    const report = state.boqReport;
+    if (!state.boqSurvey) {
+      summary.innerHTML = "";
+      list.innerHTML = `<div class="est-empty">Import a phone workspace JSON, or open <strong>Generate estimate</strong> from CAD with a loaded survey.</div>`;
+      return;
+    }
+    if (!report) {
+      summary.innerHTML = `<span class="est-chip">Survey ready</span> <span class="muted">Click <strong>Generate BOQ</strong> to match Final kits.</span>`;
+      list.innerHTML = "";
+      return;
+    }
+    summary.innerHTML = `
+      <span class="est-chip"><strong>${report.proposedPoles}</strong> Proposed</span>
+      <span class="est-chip"><strong>${report.readyPoles}</strong> ready</span>
+      <span class="est-chip"><strong>${report.matchedStructures}</strong> structures matched</span>
+      <span class="est-chip"><strong>${report.matchedConductorKm.toFixed(3)}</strong> km conductor</span>
+      ${
+        report.totalAmount != null
+          ? `<span class="est-chip complete"><strong>${window.SlmEstimateMatch.money(
+              report.totalAmount
+            )}</strong> kit total</span>`
+          : `<span class="est-chip">Amounts appear when Final kits have Mat/Lab lines</span>`
+      }
+    `;
+    let html = "";
+    if (report.lines.length) {
+      html += `<h3 class="boq-section">BOQ (Final kits)</h3>`;
+      html += report.lines
+        .map((row) => {
+          const qty =
+            row.qty === Math.floor(row.qty) ? String(row.qty) : row.qty.toFixed(3);
+          const amt =
+            row.amount != null
+              ? `<div class="boq-amt">${window.SlmEstimateMatch.money(row.amount)}</div>`
+              : "";
+          return `<div class="boq-row">
+            <div class="boq-kind">${escapeHtml(row.kind)}</div>
+            <div class="boq-row-main">
+              <div class="boq-row-title">${escapeHtml(row.title)}</div>
+              ${row.detail ? `<div class="boq-row-detail">${escapeHtml(row.detail)}</div>` : ""}
+            </div>
+            <div class="boq-qty">${escapeHtml(qty)} ${escapeHtml(row.unit)}</div>
+            ${amt}
+          </div>`;
+        })
+        .join("");
+    }
+    if (report.gaps.length) {
+      html += `<h3 class="boq-section boq-section-gap">Gaps</h3>`;
+      html += report.gaps
+        .map(
+          (row) => `<div class="boq-row boq-row-gap">
+            <div class="boq-kind">gap</div>
+            <div class="boq-row-main">
+              <div class="boq-row-title">${escapeHtml(row.title)}</div>
+              ${row.detail ? `<div class="boq-row-detail">${escapeHtml(row.detail)}</div>` : ""}
+            </div>
+            <div class="boq-qty">${
+              row.qty > 0
+                ? `${escapeHtml(
+                    row.qty === Math.floor(row.qty)
+                      ? String(row.qty)
+                      : row.qty.toFixed(3)
+                  )} ${escapeHtml(row.unit || "")}`
+                : ""
+            }</div>
+          </div>`
+        )
+        .join("");
+    }
+    if (!html) {
+      html = `<div class="est-empty">No Proposed work in this survey.</div>`;
+    }
+    list.innerHTML = html;
+  }
+
+  function exportBoq() {
+    const report = state.boqReport;
+    if (!report || !window.SlmEstimateMatch) return;
+    const text = window.SlmEstimateMatch.reportAsText(report);
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    const slug = String(report.title || "survey").replace(/[^\w\-]+/g, "_");
+    a.download = `slm-boq_${slug}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast("BOQ exported");
+  }
+
+  async function copyBoq() {
+    const report = state.boqReport;
+    if (!report || !window.SlmEstimateMatch) return;
+    const text = window.SlmEstimateMatch.reportAsText(report);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("BOQ copied");
+    } catch {
+      toast("Could not copy — use Export instead");
+    }
+  }
+
+  function tryLoadBoqFromSession() {
+    try {
+      const raw = sessionStorage.getItem("slm_estimate_workspace_v1");
+      if (!raw) return false;
+      const survey = JSON.parse(raw);
+      setBoqSurvey(survey, "CAD session");
+      sessionStorage.removeItem("slm_estimate_workspace_v1");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function wireBoqUi() {
+    $("btnBoqImport")?.addEventListener("click", () => $("boqImportFile")?.click());
+    $("boqImportFile")?.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(String(reader.result || ""));
+          setBoqSurvey(data, file.name);
+        } catch (err) {
+          toast("Invalid JSON: " + (err.message || err));
+        }
+      };
+      reader.readAsText(file);
+    });
+    $("btnBoqFromCad")?.addEventListener("click", () => {
+      if (tryLoadBoqFromSession()) {
+        toast("Loaded survey from CAD session");
+        return;
+      }
+      toast("No CAD session found — use Generate estimate from CAD, or Import JSON");
+    });
+    $("btnBoqGenerate")?.addEventListener("click", () => generateBoq());
+    $("btnBoqExport")?.addEventListener("click", () => exportBoq());
+    $("btnBoqCopy")?.addEventListener("click", () => copyBoq());
   }
 
   function canUseSuggestionsUi() {
@@ -1162,6 +1388,302 @@
     tab.classList.toggle("hidden", !show);
     if (!show && state.tab === "suggestions") showTab("structure");
     $("tabCountSuggestions").textContent = String(state.pendingSuggestionCount || 0);
+  }
+
+  function canUseLicensesUi() {
+    const L = window.SlmLicense;
+    if (!L || !L.enabled) return false;
+    return !!L.canApprove();
+  }
+
+  function updateLicensesTabVisibility() {
+    const tab = $("tabLicenses");
+    if (!tab) return;
+    const show = canUseLicensesUi();
+    tab.classList.toggle("hidden", !show);
+    if (!show && state.tab === "licenses") showTab("structure");
+    $("tabCountLicenses").textContent = String((state.licenses || []).length);
+  }
+
+  function formatExpiry(iso) {
+    if (!iso) return "—";
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (_) {
+      return String(iso);
+    }
+  }
+
+  function filteredLicenses() {
+    const q = (($("licSearch")?.value || "") + "").trim().toLowerCase();
+    const status = ($("licStatusFilter")?.value || "").trim();
+    return (state.licenses || []).filter((row) => {
+      if (status && String(row.status || "") !== status) return false;
+      if (!q) return true;
+      const hay = `${row.code || ""} ${row.customer_name || ""} ${row.customer_phone || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  function renderLicenses() {
+    const wrap = $("licTableWrap");
+    if (!wrap) return;
+    const rows = filteredLicenses();
+    $("tabCountLicenses").textContent = String((state.licenses || []).length);
+    if (!rows.length) {
+      wrap.innerHTML = `<div class="est-empty">${
+        (state.licenses || []).length ? "No licenses match this filter." : "No licenses yet."
+      }</div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <table class="lic-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Customer</th>
+            <th>Status</th>
+            <th>Expires</th>
+            <th>Devices</th>
+            <th>Flags</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((r) => {
+              const flags = [
+                r.can_suggest ? "suggest" : null,
+                r.can_approve ? "approve" : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "—";
+              const st = escapeHtml(r.status || "");
+              return `
+            <tr data-lic-id="${escapeHtml(r.id)}">
+              <td><code>${escapeHtml(r.code || "")}</code></td>
+              <td>
+                <div>${escapeHtml(r.customer_name || "—")}</div>
+                <div class="lic-muted">${escapeHtml(r.customer_phone || "")}</div>
+              </td>
+              <td><span class="est-chip ${st}">${st}</span></td>
+              <td>${escapeHtml(formatExpiry(r.expires_at))}</td>
+              <td>${Number(r.activation_count) || 0} / ${Number(r.max_devices) || 1}</td>
+              <td class="lic-muted">${escapeHtml(flags)}</td>
+              <td class="lic-actions">
+                <button type="button" class="est-btn est-btn-ghost est-btn-sm" data-lic-edit="${escapeHtml(r.id)}">Edit</button>
+                <button type="button" class="est-btn est-btn-ghost est-btn-sm" data-lic-extend="${escapeHtml(r.id)}">+30d</button>
+                ${
+                  r.status === "blocked"
+                    ? `<button type="button" class="est-btn est-btn-ghost est-btn-sm" data-lic-unblock="${escapeHtml(r.id)}">Unblock</button>`
+                    : `<button type="button" class="est-btn est-btn-ghost est-btn-sm" data-lic-block="${escapeHtml(r.id)}">Block</button>`
+                }
+              </td>
+            </tr>`;
+            })
+            .join("")}
+        </tbody>
+      </table>
+    `;
+    wrap.querySelectorAll("[data-lic-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => openLicenseModal(btn.getAttribute("data-lic-edit")));
+    });
+    wrap.querySelectorAll("[data-lic-extend]").forEach((btn) => {
+      btn.addEventListener("click", () => extendLicense(btn.getAttribute("data-lic-extend"), 30));
+    });
+    wrap.querySelectorAll("[data-lic-block]").forEach((btn) => {
+      btn.addEventListener("click", () => setLicenseStatus(btn.getAttribute("data-lic-block"), "blocked"));
+    });
+    wrap.querySelectorAll("[data-lic-unblock]").forEach((btn) => {
+      btn.addEventListener("click", () => setLicenseStatus(btn.getAttribute("data-lic-unblock"), "active"));
+    });
+  }
+
+  async function loadLicenses() {
+    const wrap = $("licTableWrap");
+    if (!canUseLicensesUi()) {
+      if (wrap) wrap.innerHTML = `<div class="est-empty">Admin license required (can_approve). Activate SLM-ADMIN-001.</div>`;
+      return;
+    }
+    if (wrap) wrap.innerHTML = `<div class="est-empty">Loading…</div>`;
+    try {
+      let json = await catalogPost("/functions/v1/license-admin", { action: "list" });
+
+      // Stale local unlock after activation wipe / new browser id — re-activate once.
+      if (!json.ok && (json.error === "not_activated" || json.error === "not_allowed")) {
+        const code = (window.SlmLicense.readPrefs?.().licenseCode || "").trim();
+        if (code && window.SlmLicense.activate) {
+          const again = await window.SlmLicense.activate(code);
+          if (again.ok) {
+            updatePermissionUi();
+            json = await catalogPost("/functions/v1/license-admin", { action: "list" });
+          }
+        }
+      }
+
+      if (!json.ok) {
+        const err = json.error || "unknown";
+        const detail = json.detail ? ` — ${json.detail}` : "";
+        let hint = "";
+        if (err === "not_activated") {
+          hint = " Sign out and activate SLM-ADMIN-001 again.";
+        } else if (err === "not_allowed") {
+          hint = " This code has no can_approve — use SLM-ADMIN-001.";
+        } else if (err === "functions_missing") {
+          hint = " license-admin Edge Function missing on this project.";
+        }
+        toast(`Licenses failed: ${err}`);
+        if (wrap) {
+          wrap.innerHTML = `<div class="est-empty">Could not load licenses (${escapeHtml(
+            err
+          )}${escapeHtml(detail)}).${escapeHtml(hint)}</div>`;
+        }
+        return;
+      }
+      state.licenses = json.licenses || [];
+      renderLicenses();
+    } catch (err) {
+      console.error(err);
+      toast("Licenses failed (network)");
+      if (wrap) wrap.innerHTML = `<div class="est-empty">Network error loading licenses. Is localhost running?</div>`;
+    }
+  }
+
+  function openLicenseModal(id) {
+    const modal = $("licenseModal");
+    if (!modal) return;
+    const row = id ? (state.licenses || []).find((x) => x.id === id) : null;
+    $("licEditId").value = row?.id || "";
+    $("licenseModalTitle").textContent = row ? "Edit license" : "New license";
+    $("licenseModalSub").textContent = row
+      ? "Update customer, devices, flags, or reset expiry from today."
+      : "Create a rental code for a customer.";
+    $("licCode").value = row?.code || "";
+    $("licCode").disabled = !!row;
+    $("licCustomer").value = row?.customer_name || "";
+    $("licPhone").value = row?.customer_phone || "";
+    $("licDays").value = row ? "" : "30";
+    $("licMaxDevices").value = String(row?.max_devices || 1);
+    $("licCanSuggest").checked = !!row?.can_suggest;
+    $("licCanApprove").checked = !!row?.can_approve;
+    $("licNotes").value = row?.notes || "";
+    modal.classList.remove("hidden");
+  }
+
+  function closeLicenseModal() {
+    $("licenseModal")?.classList.add("hidden");
+  }
+
+  async function saveLicenseModal() {
+    const id = ($("licEditId")?.value || "").trim();
+    const code = (($("licCode")?.value || "") + "").replace(/\s+/g, "").toUpperCase();
+    const daysRaw = ($("licDays")?.value || "").trim();
+    const days = daysRaw === "" ? null : Math.max(1, Math.min(Number(daysRaw) || 30, 730));
+    const max_devices = Math.max(1, Math.min(Number($("licMaxDevices")?.value) || 1, 5));
+    const payload = {
+      customer_name: ($("licCustomer")?.value || "").trim(),
+      customer_phone: ($("licPhone")?.value || "").trim(),
+      max_devices,
+      can_suggest: !!$("licCanSuggest")?.checked,
+      can_approve: !!$("licCanApprove")?.checked,
+      notes: ($("licNotes")?.value || "").trim(),
+    };
+    const btn = $("btnLicModalSave");
+    if (btn) btn.disabled = true;
+    try {
+      let json;
+      if (id) {
+        const body = { action: "update", id, ...payload };
+        if (days != null) body.set_days = days;
+        json = await catalogPost("/functions/v1/license-admin", body);
+      } else {
+        if (!code || code.length < 4) {
+          toast("Enter a license code (min 4 chars)");
+          return;
+        }
+        json = await catalogPost("/functions/v1/license-admin", {
+          action: "create",
+          code,
+          days: days != null ? days : 30,
+          ...payload,
+        });
+      }
+      if (!json.ok) {
+        toast(`Save failed: ${json.error || "unknown"}`);
+        return;
+      }
+      toast(id ? "License updated" : "License created");
+      closeLicenseModal();
+      await loadLicenses();
+    } catch (err) {
+      console.error(err);
+      toast("Save failed (network)");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function extendLicense(id, days) {
+    const row = (state.licenses || []).find((x) => x.id === id);
+    if (!row) return;
+    const ok = await window.SlmDialog.confirm({
+      title: "Extend license",
+      message: `Add ${days} days to ${row.code}?`,
+      okLabel: "Extend",
+    });
+    if (!ok) return;
+    try {
+      const json = await catalogPost("/functions/v1/license-admin", {
+        action: "update",
+        id,
+        extend_days: days,
+      });
+      if (!json.ok) {
+        toast(`Extend failed: ${json.error || "unknown"}`);
+        return;
+      }
+      toast("Extended +30 days");
+      await loadLicenses();
+    } catch (err) {
+      console.error(err);
+      toast("Extend failed (network)");
+    }
+  }
+
+  async function setLicenseStatus(id, status) {
+    const row = (state.licenses || []).find((x) => x.id === id);
+    if (!row) return;
+    const ok = await window.SlmDialog.confirm({
+      title: status === "blocked" ? "Block license" : "Unblock license",
+      message:
+        status === "blocked"
+          ? `Block ${row.code}? Devices will stop validating.`
+          : `Set ${row.code} back to active?`,
+      okLabel: status === "blocked" ? "Block" : "Unblock",
+    });
+    if (!ok) return;
+    try {
+      const json = await catalogPost("/functions/v1/license-admin", {
+        action: "update",
+        id,
+        status,
+      });
+      if (!json.ok) {
+        toast(`Update failed: ${json.error || "unknown"}`);
+        return;
+      }
+      toast(status === "blocked" ? "Blocked" : "Unblocked");
+      await loadLicenses();
+    } catch (err) {
+      console.error(err);
+      toast("Update failed (network)");
+    }
   }
 
   async function catalogPost(path, body) {
@@ -1185,9 +1707,10 @@
       return;
     }
     // Prefer draft (unsaved) so user can suggest without local Save.
+    // Suggestions never set Final — only you mark Final after Accept.
     const proposed = {
       enabled: $("kitEnabled")?.checked ?? !!state.draft.enabled,
-      complete: $("kitComplete")?.checked ?? !!state.draft.complete,
+      complete: false,
       notes: ($("kitNotes")?.value || state.draft.notes || "").trim(),
       lines: (state.draft.lines || []).map((l) => ({
         code: l.code,
@@ -1396,7 +1919,8 @@
     const kit = state.kitsById[kitId];
     if (!kit || !proposed) return false;
     kit.enabled = proposed.enabled !== false;
-    kit.complete = !!proposed.complete;
+    // Accepted suggestion → Draft until you tick Final yourself.
+    kit.complete = false;
     kit.notes = String(proposed.notes || "");
     kit.lines = Array.isArray(proposed.lines)
       ? proposed.lines.map((l) => ({
@@ -1446,7 +1970,7 @@
       }
       if (action === "accept") {
         const ok = applyProposedToKit(json.kit_id, json.proposed);
-        toast(ok ? "Merged — publish when ready" : "Accepted (kit missing locally)");
+        toast(ok ? "Merged as Draft — tick Final when you’re happy" : "Accepted (kit missing locally)");
         renderStats();
       } else {
         toast("Suggestion rejected");
@@ -1688,7 +2212,17 @@
     renderStats();
     updatePermissionUi();
     refreshPendingBadge();
-    showTab("structure");
+    wireBoqUi();
+
+    const params = new URLSearchParams(location.search);
+    const startTab = params.get("tab");
+    const fromSession = tryLoadBoqFromSession();
+    if (startTab === "boq" || fromSession) {
+      showTab("boq");
+      if (fromSession && state.boqSurvey) generateBoq();
+    } else {
+      showTab("structure");
+    }
 
     document.querySelectorAll(".est-tab").forEach((tab) => {
       tab.addEventListener("click", () => showTab(tab.dataset.tab));
@@ -1751,9 +2285,18 @@
     document.querySelectorAll(".ed-view-tab").forEach((tab) => {
       tab.addEventListener("click", () => setEditorView(tab.dataset.edView));
     });
+    $("kitFinal")?.addEventListener("change", () => {
+      if (state.draft) {
+        state.draft.complete = $("kitFinal").checked;
+        if ($("kitComplete")) $("kitComplete").checked = state.draft.complete;
+        markDraftDirty();
+        renderEditorSummary();
+      }
+    });
     $("kitComplete")?.addEventListener("change", () => {
       if (state.draft) {
         state.draft.complete = $("kitComplete").checked;
+        if ($("kitFinal")) $("kitFinal").checked = state.draft.complete;
         markDraftDirty();
         renderEditorSummary();
       }
@@ -1803,6 +2346,15 @@
     });
     $("btnRefreshSuggestions")?.addEventListener("click", loadSuggestions);
     $("sugStatusFilter")?.addEventListener("change", loadSuggestions);
+    $("btnRefreshLicenses")?.addEventListener("click", loadLicenses);
+    $("licSearch")?.addEventListener("input", renderLicenses);
+    $("licStatusFilter")?.addEventListener("change", renderLicenses);
+    $("btnNewLicense")?.addEventListener("click", () => openLicenseModal(null));
+    $("btnLicModalCancel")?.addEventListener("click", closeLicenseModal);
+    $("btnLicModalSave")?.addEventListener("click", () => saveLicenseModal());
+    $("licenseModal")?.addEventListener("click", (e) => {
+      if (e.target === $("licenseModal")) closeLicenseModal();
+    });
   }
 
   boot().catch((err) => {

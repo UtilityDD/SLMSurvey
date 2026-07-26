@@ -32,11 +32,20 @@
             android:id="@+id/action_survey_to_preset_settings"
             app:destination="@id/presetSettingsFragment" />
         <action
+            android:id="@+id/action_survey_to_estimate"
+            app:destination="@id/estimateFragment" />
+        <action
             android:id="@+id/action_survey_to_license"
             app:destination="@id/licenseFragment"
             app:popUpTo="@id/surveyMapFragment"
             app:popUpToInclusive="true" />
     </fragment>
+
+    <fragment
+        android:id="@+id/estimateFragment"
+        android:name="com.blackgrapes.slmtoolbox.ui.estimate.EstimateFragment"
+        android:label="@string/estimate_title"
+        tools:layout="@layout/fragment_estimate" />
 
     <fragment
         android:id="@+id/presetSettingsFragment"

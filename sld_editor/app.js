@@ -566,6 +566,11 @@ function loadWorkspace(data) {
     document.getElementById('infoCard').classList.remove('hidden');
     document.getElementById('toolsCard').classList.remove('hidden');
     document.getElementById('actionsCard').classList.remove('hidden');
+    const btnEst = document.getElementById('btnGenerateEstimate');
+    if (btnEst) {
+        btnEst.disabled = false;
+        btnEst.title = 'Generate final BOQ in Assembly Builder';
+    }
 
     // Parse assets and connections
     nodes = [];
@@ -2376,6 +2381,30 @@ function getStructureEnum(label) {
    Export Events & Data Synthesis
    ========================================================================== */
 function initExportEvents() {
+    document.getElementById('btnGenerateEstimate')?.addEventListener('click', () => {
+        if (!surveyData) {
+            if (window.SlmDialog) {
+                window.SlmDialog.alert({
+                    title: 'No survey',
+                    message: 'Load a survey workspace first, then generate the estimate.',
+                });
+            }
+            return;
+        }
+        try {
+            sessionStorage.setItem('slm_estimate_workspace_v1', JSON.stringify(surveyData));
+        } catch (err) {
+            if (window.SlmDialog) {
+                window.SlmDialog.alert({
+                    title: 'Could not pass survey',
+                    message: String(err?.message || err),
+                });
+            }
+            return;
+        }
+        location.href = './estimate/?tab=boq';
+    });
+
     // Save JSON Button click
     document.getElementById('btnSaveJson').addEventListener('click', () => {
         if (!surveyData) return;

@@ -1,3 +1,5 @@
+-- DEPRECATED: use schema_all.sql (survey schema) for new installs.
+-- Existing public tables: run migrate_to_survey_schema.sql.
 -- SLM ToolBox rental licenses (run in Supabase SQL Editor)
 -- Step 1 of rental licensing setup.
 

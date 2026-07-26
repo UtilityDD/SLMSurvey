@@ -29,6 +29,11 @@ data class AssetParcelable(
     val remarks: String?,
     val structure: String?,
     val seriesId: Long?,
+    val kitLocation: String?,
+    val kitArrangement: String?,
+    val kitExtension: String?,
+    val dtrMount: String?,
+    val kitWire: String?,
     val deviceLatitude: Double?,
     val deviceLongitude: Double?,
     val deviceAccuracyM: Float?,
@@ -61,6 +66,11 @@ data class AssetParcelable(
         parcel.readString(),
         parcel.readString(),
         parcel.readValue(Long::class.java.classLoader) as Long?,
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
+        parcel.readString(),
         parcel.readValue(Double::class.java.classLoader) as Double?,
         parcel.readValue(Double::class.java.classLoader) as Double?,
         parcel.readValue(Float::class.java.classLoader) as Float?,
@@ -94,6 +104,11 @@ data class AssetParcelable(
         parcel.writeString(remarks)
         parcel.writeString(structure)
         parcel.writeValue(seriesId)
+        parcel.writeString(kitLocation)
+        parcel.writeString(kitArrangement)
+        parcel.writeString(kitExtension)
+        parcel.writeString(dtrMount)
+        parcel.writeString(kitWire)
         parcel.writeValue(deviceLatitude)
         parcel.writeValue(deviceLongitude)
         parcel.writeValue(deviceAccuracyM)
@@ -129,6 +144,11 @@ data class AssetParcelable(
         remarks = remarks,
         structure = structure,
         seriesId = seriesId,
+        kitLocation = kitLocation,
+        kitArrangement = kitArrangement,
+        kitExtension = kitExtension,
+        dtrMount = dtrMount,
+        kitWire = kitWire,
         deviceLatitude = deviceLatitude,
         deviceLongitude = deviceLongitude,
         deviceAccuracyM = deviceAccuracyM,
@@ -168,6 +188,11 @@ fun SurveyAsset.toParcelable(): AssetParcelable = AssetParcelable(
     remarks = remarks,
     structure = structure,
     seriesId = seriesId,
+    kitLocation = kitLocation,
+    kitArrangement = kitArrangement,
+    kitExtension = kitExtension,
+    dtrMount = dtrMount,
+    kitWire = kitWire,
     deviceLatitude = deviceLatitude,
     deviceLongitude = deviceLongitude,
     deviceAccuracyM = deviceAccuracyM,

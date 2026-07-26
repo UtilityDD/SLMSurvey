@@ -13,12 +13,20 @@ Desktop admin UI to turn the Mat/Lab rate book into reusable estimate kits.
 
 ## Kit families
 
-**Structure kits (210)** — `Voltage × Structure × Position × Conductor size`  
-Example: `11kV · 2P/DP · Angular · Dog 100` vs `… · Rabbit 50` get different hardware fittings.  
-Use **Add size fittings** for suggested Mat codes (Weasel/Rabbit / Dog / Wolf / Panther).  
-Use **Copy from…** to clone a sibling kit (same DP/position, other size) then swap fittings.
+**Structure kits** — usually `Voltage × Structure × Location × Arrangement × Conductor size`.  
+Locations: **Tangent / Angular / Dead-end / T-Off**.  
+**T-Off** = take-off where a new network starts from an existing network (In-line/Sectional × ext).  
+- LT T-Off: SP, or from DTR  
+- 11kV T-Off: SP/DP/TP/4P, or DTR  
+- 33kV T-Off: existing DP (2P) or 4P only  
 
-**Conductor kits (36)** — wire/cable + stringing labour per km (ACSR × 2/3/4 wire, ABC sizes).
+**Estimate (desktop primary):** Assembly Builder → **Estimate** tab. Import phone workspace JSON (or **Generate estimate** from CAD with a loaded survey). Matches Proposed poles/spans to **Final** kits and builds the BOQ.  
+
+**Size-agnostic exceptions:** all **LT**; and **11kV · 1P · Tangent · In-line** (any conductor size → one structure kit; size stays on Conductor kits).  
+Example HT size-based: `11kV · 2P · Angular · Dog 100`.  
+Example size-agnostic: `11kV · 1P · Tangent · In-line arr. · ACSR · 3 wire`.
+
+**Conductor kits** — wire/cable + stringing labour per km (still by size).
 
 **Add-ons (6)** — Road crossing / Along highway per voltage.
 

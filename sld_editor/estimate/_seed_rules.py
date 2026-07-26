@@ -67,6 +67,19 @@ def needs_disc(kit: dict) -> bool:
 
 def conductor_class(kit: dict) -> str:
     """light / medium / heavy for steel sizing."""
+    if kit.get("conductorSizeAgnostic"):
+        fam = kit.get("conductorFamily") or ""
+        if fam == "ABC":
+            return "abc"
+        # 11kV size-agnostic (1P tangent in-line) uses typical medium steel
+        if kit.get("voltage") == "11kV":
+            return "medium"
+        return "light"
+    if kit.get("voltage") == "LT":
+        fam = kit.get("conductorFamily") or ""
+        if fam == "ABC":
+            return "abc"
+        return "light"
     short = (kit.get("conductorShort") or "").lower()
     fam = kit.get("conductorFamily") or ""
     if fam == "ABC":
@@ -356,7 +369,7 @@ def apply_seeds(matrix: dict) -> dict:
             kit["lines"] = seed_guarding_kit(kit)
             kit["complete"] = False
             kit["seeded"] = True
-    matrix["seedVersion"] = 1
+    matrix["seedVersion"] = 4
     matrix["seedNote"] = (
         "Pre-seeded from Mat/Lab + domain rules. "
         "Review quantities; add/remove/edit freely in the Assembly Builder."

@@ -21,3 +21,6 @@ verify_jwt = false
 
 [functions.catalog-suggestion-review]
 verify_jwt = false
+
+[functions.license-admin]
+verify_jwt = false

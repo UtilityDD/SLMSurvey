@@ -161,6 +161,11 @@
     } catch (_) {
       json = { ok: false, error: "bad_response" };
     }
+    // Our Edge Functions use HTTP 404 for business errors (not_activated, etc.).
+    // Only treat gateway "function not found" as functions_missing.
+    if (json && json.error) {
+      return json;
+    }
     if (res.status === 404 || json.code === "NOT_FOUND") {
       return { ok: false, error: "functions_missing" };
     }
@@ -338,11 +343,14 @@
     }
     var date = formatDate(prefs.expiresAtEpochMs);
     var days = daysRemaining(prefs);
-    badge.textContent = isTrial(prefs)
-      ? "Trial · expires " + date + " · " + days + "d left · tap to switch"
-      : "License · expires " + date + " · " + days + "d left · tap to switch";
+    var code = prefs.licenseCode || (isTrial(prefs) ? "Trial" : "License");
+    badge.textContent = code + " · " + days + "d";
     badge.classList.remove("hidden");
-    badge.title = "Tap to view license or sign out / switch code";
+    badge.title =
+      (isTrial(prefs) ? "Trial" : "License") +
+      " · expires " +
+      date +
+      " · tap for details / sign out";
   }
 
   async function onActivateClick() {
@@ -476,6 +484,8 @@
     deviceId: deviceId,
     readPrefs: readPrefs,
     signOut: signOut,
+    activate: activate,
+    validate: validate,
     canSuggest: function () {
       return !!readPrefs().canSuggest;
     },
@@ -489,5 +499,6 @@
     anonKey: function () {
       return ANON;
     },
+    errorMessage: errorMessage,
   };
 })(window);

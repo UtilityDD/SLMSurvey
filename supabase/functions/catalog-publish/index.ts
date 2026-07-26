@@ -3,19 +3,7 @@
 // Deploy: supabase functions deploy catalog-publish --no-verify-jwt
 // Do NOT put the service role key in the browser — only this publish key.
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...cors, "Content-Type": "application/json" },
-  });
-}
+import { cors, json, supabaseAdmin } from "../_shared/catalog_auth.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -43,10 +31,7 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "missing_fields" }, 400);
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    const supabase = supabaseAdmin();
 
     // Clear previous current flag, then insert new current row.
     const { error: clearErr } = await supabase

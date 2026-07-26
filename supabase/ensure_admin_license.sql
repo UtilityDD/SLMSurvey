@@ -1,7 +1,5 @@
--- Run this in Supabase SQL Editor on the SAME project where you see "Trial User"
--- Creates / upgrades your admin license
-
-insert into public.licenses (
+-- Ensure admin license exists in survey.licenses (SQL Editor).
+insert into survey.licenses (
   code, customer_name, customer_phone, status, expires_at,
   max_devices, can_suggest, can_approve, notes
 )
@@ -14,28 +12,21 @@ values (
   3,
   true,
   true,
-  'Owner admin: suggest + approve + Publish to app'
+  'Desktop admin — suggest, approve, publish, licenses'
 )
 on conflict (code) do update set
   status = 'active',
-  customer_name = excluded.customer_name,
-  expires_at = excluded.expires_at,
-  max_devices = 3,
   can_suggest = true,
   can_approve = true,
-  notes = excluded.notes,
+  max_devices = greatest(survey.licenses.max_devices, 3),
+  expires_at = greatest(survey.licenses.expires_at, excluded.expires_at),
   updated_at = now();
 
--- Also promote existing trial to admin rights (optional)
-update public.licenses
-set
-  can_suggest = true,
-  can_approve = true,
-  max_devices = greatest(max_devices, 2),
-  status = 'active',
-  updated_at = now()
+-- Optional: also allow trial to suggest (not approve)
+update survey.licenses
+set can_suggest = true
 where code = 'SLM-TRIAL-001';
 
 select code, customer_name, status, can_suggest, can_approve, max_devices, expires_at
-from public.licenses
+from survey.licenses
 order by code;

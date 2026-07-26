@@ -1,6 +1,6 @@
-/** Shared helpers for catalog suggestion Edge Functions. */
+/** Shared helpers for catalog / license Edge Functions (survey schema). */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 export const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -14,10 +14,15 @@ export function json(body: unknown, status = 200) {
   });
 }
 
-export function supabaseAdmin() {
+/** Service-role client scoped to the `survey` schema (not SmartLineman public). */
+export function supabaseAdmin(): SupabaseClient {
   return createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    {
+      auth: { persistSession: false, autoRefreshToken: false },
+      db: { schema: "survey" },
+    },
   );
 }
 
@@ -28,7 +33,7 @@ export type AuthedLicense = {
 
 /** Resolve activated device → license. Returns Response on failure. */
 export async function resolveActivatedDevice(
-  supabase: ReturnType<typeof supabaseAdmin>,
+  supabase: SupabaseClient,
   device_id: unknown,
 ): Promise<AuthedLicense | Response> {
   if (!device_id) return json({ ok: false, error: "missing_fields" }, 400);
@@ -54,7 +59,7 @@ export async function resolveActivatedDevice(
     return json({ ok: false, error: "blocked" }, 403);
   }
 
-  const expiresAt = new Date(license.expires_at).getTime();
+  const expiresAt = new Date(license.expires_at as string).getTime();
   if (expiresAt <= Date.now() || license.status === "expired") {
     await supabase.from("licenses").update({ status: "expired" }).eq("id", license.id);
     return json({ ok: false, error: "expired" }, 403);
