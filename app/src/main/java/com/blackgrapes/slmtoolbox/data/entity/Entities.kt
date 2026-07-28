@@ -57,6 +57,7 @@ data class SurveyAssetEntity(
     val kitExtension: String? = null,
     val dtrMount: String? = null,
     val kitWire: String? = null,
+    val guarding: Boolean = false,
     val deviceLatitude: Double? = null,
     val deviceLongitude: Double? = null,
     val deviceAccuracyM: Float? = null,

@@ -34,6 +34,7 @@ data class AssetParcelable(
     val kitExtension: String?,
     val dtrMount: String?,
     val kitWire: String?,
+    val guarding: Boolean,
     val deviceLatitude: Double?,
     val deviceLongitude: Double?,
     val deviceAccuracyM: Float?,
@@ -71,6 +72,7 @@ data class AssetParcelable(
         parcel.readString(),
         parcel.readString(),
         parcel.readString(),
+        parcel.readByte() != 0.toByte(),
         parcel.readValue(Double::class.java.classLoader) as Double?,
         parcel.readValue(Double::class.java.classLoader) as Double?,
         parcel.readValue(Float::class.java.classLoader) as Float?,
@@ -109,6 +111,7 @@ data class AssetParcelable(
         parcel.writeString(kitExtension)
         parcel.writeString(dtrMount)
         parcel.writeString(kitWire)
+        parcel.writeByte(if (guarding) 1 else 0)
         parcel.writeValue(deviceLatitude)
         parcel.writeValue(deviceLongitude)
         parcel.writeValue(deviceAccuracyM)
@@ -149,6 +152,7 @@ data class AssetParcelable(
         kitExtension = kitExtension,
         dtrMount = dtrMount,
         kitWire = kitWire,
+        guarding = guarding,
         deviceLatitude = deviceLatitude,
         deviceLongitude = deviceLongitude,
         deviceAccuracyM = deviceAccuracyM,
@@ -193,6 +197,7 @@ fun SurveyAsset.toParcelable(): AssetParcelable = AssetParcelable(
     kitExtension = kitExtension,
     dtrMount = dtrMount,
     kitWire = kitWire,
+    guarding = guarding,
     deviceLatitude = deviceLatitude,
     deviceLongitude = deviceLongitude,
     deviceAccuracyM = deviceAccuracyM,

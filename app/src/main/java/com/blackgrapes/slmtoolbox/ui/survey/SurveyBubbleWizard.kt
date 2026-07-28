@@ -8,6 +8,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
+import android.view.WindowManager
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
 import androidx.fragment.app.DialogFragment
@@ -59,10 +60,16 @@ class SurveyBubbleWizard : DialogFragment() {
     private var kitArrangement: KitArrangement? = null
     private var kitExtension: KitExtension? = null
     private var dtrMount: DtrMount? = null
+    /** null = not asked yet; only meaningful when With-ext. */
+    private var guarding: Boolean? = null
     private var tipKitLocation: KitLocation? = null
     private var tipKitArrangement: KitArrangement? = null
     private var tipKitExtension: KitExtension? = null
     private var tipDtrMount: DtrMount? = null
+    /** Preferred material when inserting on a line (from adjacent poles). */
+    private var preferredMaterial: PoleMaterial? = null
+    /** True when tapping from a DTR — allow 11kV or LT. */
+    private var sourceIsDtr: Boolean = false
     /** When true, kit steps save edit and dismiss (no place role). */
     private var editingKitOnly: Boolean = false
     private var showAllDtrCapacities: Boolean = false
@@ -105,6 +112,10 @@ class SurveyBubbleWizard : DialogFragment() {
         tipKitArrangement = KitArrangement.fromLabel(requireArguments().getString(ARG_TIP_KIT_ARRANGEMENT))
         tipKitExtension = KitExtension.fromLabel(requireArguments().getString(ARG_TIP_KIT_EXTENSION))
         tipDtrMount = DtrMount.fromLabel(requireArguments().getString(ARG_TIP_DTR_MOUNT))
+        preferredMaterial = PoleMaterial.fromLabel(
+            requireArguments().getString(ARG_PREFERRED_MATERIAL)
+        )
+        sourceIsDtr = requireArguments().getBoolean(ARG_SOURCE_IS_DTR, false)
         val lockedVoltage = requireArguments().getString(ARG_LOCKED_VOLTAGE)
         val lockedStatus = requireArguments().getString(ARG_LOCKED_STATUS)
         val lockedMaterial = requireArguments().getString(ARG_LOCKED_MATERIAL)
@@ -149,6 +160,15 @@ class SurveyBubbleWizard : DialogFragment() {
         return dialog
     }
 
+    override fun onStart() {
+        super.onStart()
+        dialog?.window?.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
+        updateModalHeight()
+    }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -180,6 +200,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 kitExtension = editing!!.kitExtensionEnum
                 dtrMount = editing!!.dtrMountEnum
                 dtCapacityKva = editing!!.dtCapacityKva
+                guarding = editing!!.guarding
                 push(Step.EDIT_MENU)
             }
             mode == Mode.NEAR_LINE && directInsert -> {
@@ -236,19 +257,25 @@ class SurveyBubbleWizard : DialogFragment() {
                             structure = PoleStructure.P1
                             advanceToKitOrPlace()
                         } else {
-                            structure = null
-                            push(Step.STRUCTURE)
+                            // LT phase chosen on pole review
+                            structure = tipStructure?.takeIf {
+                                it in NetworkCatalog.ltPhasesForConductor(series.conductor)
+                            }
+                            advanceToKitOrPlace()
                         }
                     } else {
-                        push(Step.STRUCTURE)
+                        structure = tipStructure?.takeIf {
+                            it in NetworkCatalog.structuresFor(series.voltage)
+                        } ?: NetworkCatalog.defaultStructure(series.voltage)
+                        advanceToKitOrPlace()
                     }
                 }
             }
             mode == Mode.TAPPING_BRANCH -> {
                 voltage = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
-                voltageLocked = true
+                // Non-DTR taps lock voltage; DTR taps choose 11kV or LT after status.
+                voltageLocked = !sourceIsDtr
                 if (PostExecPreferences.isLtConversionAbc(requireContext())) {
-                    // Post-exec LT conversion: tapping stays Existing only.
                     status = WorkStatus.EXISTING
                     voltage = VoltageLevel.LT
                     material = PoleMaterial.PCC_8M
@@ -256,7 +283,11 @@ class SurveyBubbleWizard : DialogFragment() {
                     push(Step.LT_CONV_POLE_KIND)
                 } else if (sourcePoleStatus == WorkStatus.PROPOSED) {
                     status = WorkStatus.PROPOSED
-                    advanceAfterStatusChoice()
+                    if (sourceIsDtr) {
+                        push(Step.DTR_BRANCH_VOLTAGE)
+                    } else {
+                        advanceAfterStatusChoice()
+                    }
                 } else {
                     push(Step.STATUS)
                 }
@@ -290,8 +321,11 @@ class SurveyBubbleWizard : DialogFragment() {
 
     private fun render() {
         val step = stepStack.lastOrNull() ?: return
+        clearProceedError()
         binding.btnBubbleBack.isVisible = stepStack.size > 1
         binding.bubbleChoices.removeAllViews()
+        binding.poleReviewRows.removeAllViews()
+        showPoleReview(false)
         showFeederInputs(step == Step.FEEDER_INFO)
         when (step) {
             Step.LINE_ACTION_CHOICE -> {
@@ -363,23 +397,45 @@ class SurveyBubbleWizard : DialogFragment() {
                 WorkStatus.entries.forEach { option ->
                     addChoice(option.label) {
                         status = option
+                        if (mode == Mode.TAPPING_BRANCH && sourceIsDtr) {
+                            push(Step.DTR_BRANCH_VOLTAGE)
+                        } else {
+                            advanceAfterStatusChoice()
+                        }
+                        render()
+                    }
+                }
+            }
+            Step.DTR_BRANCH_VOLTAGE -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_dtr_branch_voltage)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_dtr_branch_voltage_hint)
+                listOf(VoltageLevel.KV_11, VoltageLevel.LT).forEach { option ->
+                    addChoice(option.label, highlighted = voltage == option) {
+                        voltage = option
+                        voltageLocked = true
+                        material = null
+                        structure = null
+                        conductor = null
                         advanceAfterStatusChoice()
                         render()
                     }
                 }
             }
             Step.MATERIAL -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_material)
-                binding.bubbleSubtitle.text = voltage!!.label
-                NetworkCatalog.materialsFor(voltage!!).forEach { option ->
-                    addChoice(option.label) {
-                        material = option
-                        push(Step.STRUCTURE)
-                        render()
-                    }
-                }
+                // Legacy step — always fold into the compact review modal.
+                material = material ?: preferredMaterial ?: NetworkCatalog.defaultMaterial(
+                    voltage ?: VoltageLevel.KV_11
+                )
+                advanceToKitOrPlace()
+                render()
             }
             Step.STRUCTURE -> {
+                // If we somehow land here during place flow, fold into review.
+                if (editing == null && status == WorkStatus.PROPOSED) {
+                    advanceToKitOrPlace()
+                    render()
+                    return
+                }
                 val v = voltage ?: lockedSeries!!.voltage
                 val isLtPhase = v == VoltageLevel.LT
                 binding.bubbleTitle.text = if (isLtPhase) {
@@ -396,139 +452,107 @@ class SurveyBubbleWizard : DialogFragment() {
                         append(status?.label ?: lockedSeries?.status?.label)
                     }
                 }
-                val structureOptions = if (isLtPhase) {
-                    NetworkCatalog.ltPhasesForConductor(conductor)
-                } else {
-                    NetworkCatalog.structuresFor(v)
-                }
-                structureOptions.forEach { option ->
-                    val label = if (isLtPhase) {
-                        when (option) {
-                            PoleStructure.P1 -> getString(R.string.lt_phase_1p)
-                            PoleStructure.P2 -> getString(R.string.lt_phase_2p)
-                            PoleStructure.P3 -> getString(R.string.lt_phase_3p)
-                            else -> option.label
-                        }
-                    } else {
-                        option.label
-                    }
-                    addChoice(label) {
+                structureOptionsForCurrent().forEach { option ->
+                    addChoice(structureLabel(option), highlighted = option == structure) {
                         structure = option
-                        if (lockedSeries != null) {
+                        if (stepStack.contains(Step.POLE_REVIEW)) {
+                            returnToPoleReview()
+                        } else if (editing != null) {
+                            // Edit structure only — keep old path short
                             advanceToKitOrPlace()
-                        } else if (v == VoltageLevel.LT) {
-                            if (conductor == null) push(Step.CONDUCTOR) else advanceToKitOrPlace()
+                            render()
                         } else {
-                            push(Step.CONDUCTOR)
+                            advanceToKitOrPlace()
+                            render()
                         }
-                        render()
                     }
                 }
             }
             Step.CONDUCTOR -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_conductor)
-                binding.bubbleSubtitle.text = if (voltage == VoltageLevel.LT) {
-                    getString(R.string.bubble_lt_conductor_hint)
-                } else {
-                    voltage!!.label
+                // Legacy step — fold into compact review.
+                if (conductor.isNullOrBlank()) {
+                    val v = voltage ?: VoltageLevel.KV_11
+                    conductor = NetworkCatalog.conductorsFor(v).first()
                 }
-                NetworkCatalog.conductorsFor(voltage!!).forEach { option ->
-                    val label = if (voltage == VoltageLevel.LT && option == "ABC") {
-                        getString(R.string.conductor_abc_label)
-                    } else if (voltage == VoltageLevel.LT) {
-                        getString(R.string.conductor_bare_size, option)
-                    } else {
-                        option
-                    }
-                    addChoice(label) {
-                        conductor = option
-                        when {
-                            needsFeederInfo() -> push(Step.FEEDER_INFO)
-                            voltage == VoltageLevel.LT && !NetworkCatalog.isAbcConductor(option) -> {
-                                structure = null
-                                push(Step.STRUCTURE)
-                            }
-                            voltage == VoltageLevel.LT -> {
-                                structure = PoleStructure.P1
-                                advanceToKitOrPlace()
-                            }
-                            else -> advanceToKitOrPlace()
-                        }
-                        render()
-                    }
-                }
+                advanceToKitOrPlace()
+                render()
             }
             Step.FEEDER_INFO -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_feeder_info)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_feeder_hint)
-                // Pre-fill if returning via back
-                binding.etFeederName.setText(feederName ?: "")
-                binding.etSourceSs.setText(sourceSubstation ?: "")
-                binding.btnFeederConfirm.setOnClickListener {
-                    val fn = binding.etFeederName.text?.toString()?.trim() ?: ""
-                    val ss = binding.etSourceSs.text?.toString()?.trim() ?: ""
-                    if (fn.isBlank() || ss.isBlank()) {
-                        if (fn.isBlank()) binding.tilFeederName.error = getString(R.string.feeder_required_error)
-                        if (ss.isBlank()) binding.tilSourceSs.error = getString(R.string.feeder_required_error)
-                        return@setOnClickListener
-                    }
-                    binding.tilFeederName.error = null
-                    binding.tilSourceSs.error = null
-                    feederName = fn
-                    sourceSubstation = ss
-                    advanceToKitOrPlace()
-                    render()
-                }
+                // Fold feeder into the same review card (no separate one-by-one screen).
+                advanceToKitOrPlace()
+                render()
             }
-            Step.KIT_SUGGEST -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_kit_suggest)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_suggest_hint)
-                val summary = NetworkCatalog.kitSummary(
-                    kitLocation, kitArrangement, kitExtension, dtrMount, dtCapacityKva
-                )
-                addChoice(getString(R.string.bubble_kit_use, summary)) {
-                    advanceAfterKitAccept()
-                    render()
-                }
-                addChoice(getString(R.string.bubble_kit_change)) {
-                    push(Step.KIT_LOCATION)
-                    render()
-                }
+            Step.POLE_REVIEW -> {
+                showPoleReview(true)
+                bindPoleReviewHeader()
+                bindPoleReviewFeeder()
+                buildPoleReviewRows()
+                binding.btnUsePoleReview.setOnClickListener { onUsePoleReview() }
             }
             Step.KIT_LOCATION -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_kit_location)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_location_hint)
-                val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
-                NetworkCatalog.kitLocationsFor(v, structure).forEach { option ->
-                    addChoice(option.label) {
+                binding.bubbleTitle.text = getString(R.string.bubble_field_location)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_pick_hint)
+                locationOptionsForCurrent().forEach { option ->
+                    addChoice(option.label, highlighted = option == kitLocation) {
                         kitLocation = option
                         if (option == KitLocation.DEAD_END) {
                             kitArrangement = null
-                            push(Step.KIT_EXTENSION)
-                        } else {
-                            push(Step.KIT_ARRANGEMENT)
+                            val v = voltage ?: lockedSeries?.voltage
+                            if (v != null &&
+                                structure != null &&
+                                !NetworkCatalog.allowsDeadEnd(v, structure)
+                            ) {
+                                structure = null
+                            }
+                        } else if (kitArrangement == null) {
+                            kitArrangement = KitArrangement.INLINE
                         }
-                        render()
+                        returnToPoleReview()
                     }
                 }
             }
             Step.KIT_ARRANGEMENT -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_kit_arrangement)
-                binding.bubbleSubtitle.text = kitLocation?.label ?: ""
+                binding.bubbleTitle.text = getString(R.string.bubble_field_arrangement)
+                binding.bubbleSubtitle.text = kitLocation?.label ?: getString(R.string.bubble_pick_hint)
                 NetworkCatalog.kitArrangements().forEach { option ->
-                    addChoice(option.label) {
+                    addChoice(option.label, highlighted = option == kitArrangement) {
                         kitArrangement = option
-                        push(Step.KIT_EXTENSION)
-                        render()
+                        returnToPoleReview()
                     }
                 }
             }
             Step.KIT_EXTENSION -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_kit_extension)
+                binding.bubbleTitle.text = getString(R.string.bubble_field_extension)
                 binding.bubbleSubtitle.text = getString(R.string.bubble_kit_extension_hint)
                 NetworkCatalog.kitExtensions().forEach { option ->
-                    addChoice(option.label) {
+                    addChoice(option.label, highlighted = option == kitExtension) {
                         kitExtension = option
+                        if (option != KitExtension.WITH_EXT) {
+                            guarding = false
+                        } else if (guarding == null) {
+                            guarding = false
+                        }
+                        returnToPoleReview()
+                    }
+                }
+            }
+            Step.GUARDING -> {
+                binding.bubbleTitle.text = getString(R.string.bubble_field_guarding)
+                binding.bubbleSubtitle.text = getString(R.string.bubble_guarding_hint)
+                addChoice(getString(R.string.yes), highlighted = guarding == true) {
+                    guarding = true
+                    if (stepStack.contains(Step.POLE_REVIEW)) {
+                        returnToPoleReview()
+                    } else {
+                        advanceAfterKitAccept()
+                        render()
+                    }
+                }
+                addChoice(getString(R.string.no), highlighted = guarding == false) {
+                    guarding = false
+                    if (stepStack.contains(Step.POLE_REVIEW)) {
+                        returnToPoleReview()
+                    } else {
                         advanceAfterKitAccept()
                         render()
                     }
@@ -589,19 +613,36 @@ class SurveyBubbleWizard : DialogFragment() {
             Step.PLACE_ROLE -> {
                 binding.bubbleTitle.text = getString(R.string.bubble_place)
                 binding.bubbleSubtitle.text = summaryLine()
-                if (lockedSeries == null && editing == null && splitConnectionId == null) {
+                val deadEnd = kitLocation == KitLocation.DEAD_END
+                val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+                fun tryPlaceEnd() {
+                    val st = structure ?: NetworkCatalog.defaultStructure(v)
+                    // Place & End forces Dead-end for Proposed — HT 1P cannot end a network.
+                    if (status == WorkStatus.PROPOSED && !NetworkCatalog.allowsDeadEnd(v, st)) {
+                        push(Step.POLE_REVIEW)
+                        render()
+                        showProceedError(getString(R.string.bubble_need_deadend_structure), "type")
+                        return
+                    }
+                    finishPlace(PoleRole.END)
+                }
+                if (deadEnd) {
+                    addChoice(getString(R.string.place_end)) {
+                        tryPlaceEnd()
+                    }
+                } else if (lockedSeries == null && editing == null && splitConnectionId == null) {
                     addChoice(getString(R.string.place_continue)) {
                         finishPlace(PoleRole.START)
                     }
                     addChoice(getString(R.string.place_end)) {
-                        finishPlace(PoleRole.END)
+                        tryPlaceEnd()
                     }
                 } else {
                     addChoice(getString(R.string.place_continue)) {
                         finishPlace(PoleRole.CONTINUE)
                     }
                     addChoice(getString(R.string.place_end)) {
-                        finishPlace(PoleRole.END)
+                        tryPlaceEnd()
                     }
                 }
             }
@@ -659,7 +700,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     addChoice(getString(R.string.bubble_change_kit)) {
                         editingKitOnly = true
                         applySmartKitDefaults()
-                        push(Step.KIT_LOCATION)
+                        push(Step.POLE_REVIEW)
                         render()
                     }
                 }
@@ -840,6 +881,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
         }
+        updateModalHeight()
     }
 
     private fun summaryLine(): String = buildString {
@@ -861,6 +903,9 @@ class SurveyBubbleWizard : DialogFragment() {
                     kitLocation, kitArrangement, kitExtension, dtrMount, dtCapacityKva
                 )
             )
+            if (kitExtension == KitExtension.WITH_EXT && guarding == true) {
+                append(" · Guarding")
+            }
         }
         if (mode == Mode.TAPPING_BRANCH && voltage != VoltageLevel.LT) {
             append("\n")
@@ -869,24 +914,40 @@ class SurveyBubbleWizard : DialogFragment() {
         }
     }
 
-    /** Smart defaults then suggest / skip for Existing. */
+    /** Smart defaults then open labeled pole review (Existing + Proposed). */
     private fun advanceToKitOrPlace() {
-        val s = status ?: lockedSeries?.status ?: WorkStatus.PROPOSED
-        if (s == WorkStatus.EXISTING) {
-            // Existing poles are context only — no kit chips required for BOQ.
-            kitLocation = null
-            kitArrangement = null
-            kitExtension = null
-            push(Step.PLACE_ROLE)
-            return
-        }
         applySmartKitDefaults()
-        push(Step.KIT_SUGGEST)
+        if (stepStack.lastOrNull() != Step.POLE_REVIEW) {
+            push(Step.POLE_REVIEW)
+        }
     }
 
     private fun applySmartKitDefaults() {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        if (material == null) {
+            material = preferredMaterial?.takeIf { it in NetworkCatalog.materialsFor(v) }
+                ?: lockedSeries?.material
+                ?: NetworkCatalog.defaultMaterial(v)
+        }
+        if (conductor.isNullOrBlank()) {
+            conductor = lockedSeries?.conductor?.takeIf { it in NetworkCatalog.conductorsFor(v) }
+                ?: NetworkCatalog.conductorsFor(v).first()
+        }
+        if (structure == null) {
+            val tip = tipStructure
+            val options = structureOptionsForCurrent()
+            structure = when {
+                tip != null && tip in options -> tip
+                v == VoltageLevel.LT &&
+                    (NetworkCatalog.isAbcConductor(conductor) ||
+                        NetworkCatalog.isPvcConductor(conductor)) -> PoleStructure.P1
+                else -> NetworkCatalog.defaultStructure(v).takeIf { it in options }
+            }
+        }
         if (kitLocation == null) {
             kitLocation = when {
+                // Mid-span insert: T-Off for most cases
+                splitConnectionId != null || mode == Mode.NEAR_LINE -> KitLocation.T_OFF
                 mode == Mode.TAPPING_BRANCH ||
                     (sourceAssetId != null && lockedSeries == null) -> KitLocation.T_OFF
                 tipKitLocation != null -> tipKitLocation
@@ -906,7 +967,559 @@ class SurveyBubbleWizard : DialogFragment() {
         }
     }
 
+    private fun normalizeArrangementForReview() {
+        if (kitLocation == KitLocation.DEAD_END) {
+            kitArrangement = null
+        } else if (kitArrangement == null) {
+            kitArrangement = KitArrangement.INLINE
+        }
+    }
+
+    /** True for brand-new network start (titles / feeder); options are same as any pole. */
+    private fun isNetworkStart(): Boolean {
+        if (editing != null && editingKitOnly) return false
+        if (mode == Mode.CONTINUE_SERIES || lockedSeries != null) return false
+        if (mode == Mode.TAPPING_BRANCH || sourceAssetId != null) return false
+        if (splitConnectionId != null || mode == Mode.NEAR_LINE) return false
+        return mode == Mode.NEW_NETWORK || tipKitLocation == null && tipStructure == null
+    }
+
+    private fun structureOptionsForCurrent(): List<PoleStructure> {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        return if (v == VoltageLevel.LT) {
+            NetworkCatalog.ltPhasesForConductor(conductor)
+        } else {
+            NetworkCatalog.structuresForLocation(v, kitLocation)
+        }
+    }
+
+    private fun locationOptionsForCurrent(): List<KitLocation> {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        return NetworkCatalog.kitLocationsFor(v, structure)
+    }
+
+    private fun structureLabel(option: PoleStructure): String {
+        val v = voltage ?: lockedSeries?.voltage
+        if (v == VoltageLevel.LT) {
+            return when (option) {
+                PoleStructure.P1 -> getString(R.string.lt_phase_1p)
+                PoleStructure.P2 -> getString(R.string.lt_phase_2p)
+                PoleStructure.P3 -> getString(R.string.lt_phase_3p)
+                else -> option.label
+            }
+        }
+        return option.label
+    }
+
+    private fun showPoleReview(show: Boolean) {
+        binding.poleReviewContainer.isVisible = show
+        binding.btnUsePoleReview.isVisible = show
+        if (show) {
+            binding.bubbleChoices.isVisible = false
+        } else {
+            binding.feederInputContainer.isVisible = false
+            binding.btnFeederConfirm.isVisible = true
+            if (stepStack.lastOrNull() != Step.FEEDER_INFO) {
+                binding.bubbleChoices.isVisible = true
+            }
+        }
+    }
+
+    private fun showFeederInputs(show: Boolean) {
+        if (stepStack.lastOrNull() == Step.POLE_REVIEW) return
+        binding.feederInputContainer.isVisible = show
+        binding.btnFeederConfirm.isVisible = true
+        if (show) {
+            binding.bubbleChoices.isVisible = false
+            binding.poleReviewContainer.isVisible = false
+        } else if (stepStack.lastOrNull() != Step.POLE_REVIEW) {
+            binding.bubbleChoices.isVisible = true
+        }
+    }
+
+    private fun returnToPoleReview() {
+        while (stepStack.isNotEmpty() && stepStack.last() != Step.POLE_REVIEW) {
+            stepStack.removeLast()
+        }
+        if (stepStack.isEmpty() || stepStack.last() != Step.POLE_REVIEW) {
+            push(Step.POLE_REVIEW)
+        }
+        render()
+    }
+
+    private fun shortArrangement(option: KitArrangement): String = when (option) {
+        KitArrangement.INLINE -> "In-line"
+        KitArrangement.SECTIONAL -> "Section"
+    }
+
+    private fun shortExtension(option: KitExtension): String = when (option) {
+        KitExtension.NO_EXT -> "No-ext"
+        KitExtension.WITH_EXT -> "With-ext"
+    }
+
+    private data class CompactOpt(
+        val key: String,
+        val label: String,
+        val enabled: Boolean = true
+    )
+
+    private fun bindPoleReviewHeader() {
+        val first = isNetworkStart()
+        val isExisting = (status ?: lockedSeries?.status) == WorkStatus.EXISTING
+        binding.bubbleTitle.text = when {
+            isExisting && first -> getString(R.string.bubble_existing_review_first)
+            isExisting -> getString(R.string.bubble_existing_review_next)
+            first -> getString(R.string.bubble_pole_review_first)
+            else -> getString(R.string.bubble_pole_review_next)
+        }
+        binding.bubbleSubtitle.text = when {
+            isExisting -> getString(R.string.bubble_existing_review_hint)
+            else -> getString(R.string.bubble_pole_review_compact_hint)
+        }
+    }
+
+    private fun bindPoleReviewFeeder() {
+        val needFeeder = needsFeederInfo()
+        if (needFeeder) {
+            binding.feederInputContainer.isVisible = true
+            if (binding.etFeederName.text.isNullOrEmpty()) {
+                binding.etFeederName.setText(feederName ?: "")
+            }
+            if (binding.etSourceSs.text.isNullOrEmpty()) {
+                binding.etSourceSs.setText(sourceSubstation ?: "")
+            }
+            binding.btnFeederConfirm.isVisible = false
+        } else {
+            binding.feederInputContainer.isVisible = false
+        }
+    }
+
+    /** Rebuild option rows only — keeps scroll position so taps don’t jump the sheet. */
+    private fun refreshPoleReview() {
+        if (_binding == null || stepStack.lastOrNull() != Step.POLE_REVIEW) return
+        clearProceedError()
+        val y = binding.bubbleScroll.scrollY
+        binding.poleReviewRows.removeAllViews()
+        buildPoleReviewRows()
+        binding.bubbleScroll.post {
+            if (_binding != null) binding.bubbleScroll.scrollTo(0, y)
+        }
+    }
+
+    private fun clearProceedError() {
+        if (_binding == null) return
+        binding.bubbleProceedError.isVisible = false
+        binding.bubbleProceedError.text = ""
+    }
+
+    /** Sticky banner when Use this / Next cannot proceed — always visible above the footer. */
+    private fun showProceedError(message: String, scrollToTag: String? = null) {
+        if (_binding == null) return
+        binding.bubbleProceedError.text = message
+        binding.bubbleProceedError.isVisible = true
+        binding.bubbleProceedError.announceForAccessibility(message)
+        when (scrollToTag) {
+            "feeder" -> {
+                binding.bubbleScroll.post {
+                    if (_binding == null) return@post
+                    binding.bubbleScroll.smoothScrollTo(0, 0)
+                    binding.feederInputContainer.requestFocus()
+                }
+            }
+            null -> Unit
+            else -> {
+                binding.bubbleScroll.post {
+                    if (_binding == null) return@post
+                    val target = binding.poleReviewRows.findViewWithTag<android.view.View>(scrollToTag)
+                        ?: return@post
+                    val y = (target.top + binding.poleReviewContainer.top).coerceAtLeast(0)
+                    binding.bubbleScroll.smoothScrollTo(0, y)
+                }
+            }
+        }
+    }
+
+    private fun buildPoleReviewRows() {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        normalizeArrangementForReview()
+        if (kitExtension == null) {
+            kitExtension = KitExtension.NO_EXT
+        }
+        val arrEnabled = kitLocation != null && kitLocation != KitLocation.DEAD_END
+        val guardEnabled = kitExtension == KitExtension.WITH_EXT
+
+        addReviewSectionHeader(getString(R.string.bubble_section_pole))
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_material_short),
+            NetworkCatalog.materialsFor(v).map { CompactOpt(it.name, it.label) },
+            selectedKey = material?.name,
+            rowTag = "material"
+        ) { key ->
+            material = NetworkCatalog.materialsFor(v).firstOrNull { it.name == key }
+            refreshPoleReview()
+        }
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_conductor_short),
+            NetworkCatalog.conductorsFor(v).map { opt ->
+                val label = when {
+                    v == VoltageLevel.LT && opt == "ABC" -> "ABC"
+                    v == VoltageLevel.LT && opt == "PVC" -> "PVC"
+                    else -> opt
+                }
+                CompactOpt(opt, label)
+            },
+            selectedKey = conductor,
+            rowTag = "conductor"
+        ) { key ->
+            conductor = key
+            if (v == VoltageLevel.LT) {
+                if (NetworkCatalog.isAbcConductor(key) || NetworkCatalog.isPvcConductor(key)) {
+                    structure = PoleStructure.P1
+                } else {
+                    structure = structure?.takeIf {
+                        it in NetworkCatalog.ltPhasesForConductor(key)
+                    }
+                }
+            }
+            refreshPoleReview()
+        }
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_pole_type_short),
+            structureOptionsForCurrent().map {
+                CompactOpt(it.name, structureLabel(it))
+            },
+            selectedKey = structure?.name,
+            rowTag = "type"
+        ) { key ->
+            structure = structureOptionsForCurrent().firstOrNull { it.name == key }
+            // Picking HT 1P drops Dead-end (not allowed).
+            if (structure != null &&
+                kitLocation == KitLocation.DEAD_END &&
+                !NetworkCatalog.allowsDeadEnd(v, structure)
+            ) {
+                kitLocation = KitLocation.TANGENT
+                if (kitArrangement == null) kitArrangement = KitArrangement.INLINE
+            }
+            refreshPoleReview()
+        }
+
+        addReviewSectionHeader(getString(R.string.bubble_section_kit))
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_location_short),
+            locationOptionsForCurrent().map { loc -> CompactOpt(loc.name, loc.label) },
+            selectedKey = kitLocation?.name,
+            rowTag = "location"
+        ) { key ->
+            val option = locationOptionsForCurrent().firstOrNull { it.name == key }
+                ?: return@addCompactOptionRow
+            kitLocation = option
+            if (option == KitLocation.DEAD_END) {
+                kitArrangement = null
+                // Dead-end filters type list — drop HT 1P if selected.
+                if (structure != null && !NetworkCatalog.allowsDeadEnd(v, structure)) {
+                    structure = null
+                }
+            } else if (kitArrangement == null) {
+                kitArrangement = KitArrangement.INLINE
+            }
+            refreshPoleReview()
+        }
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_arrangement_short),
+            NetworkCatalog.kitArrangements().map {
+                CompactOpt(it.name, shortArrangement(it), enabled = arrEnabled)
+            },
+            selectedKey = kitArrangement?.name,
+            rowEnabled = arrEnabled,
+            rowTag = "arrangement"
+        ) { key ->
+            kitArrangement = NetworkCatalog.kitArrangements().firstOrNull { it.name == key }
+            refreshPoleReview()
+        }
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_extension_short),
+            NetworkCatalog.kitExtensions().map {
+                CompactOpt(it.name, shortExtension(it))
+            },
+            selectedKey = kitExtension?.name,
+            rowTag = "extension"
+        ) { key ->
+            val option = NetworkCatalog.kitExtensions().firstOrNull { it.name == key }
+            kitExtension = option
+            if (option != KitExtension.WITH_EXT) {
+                guarding = false
+            } else if (guarding == null) {
+                guarding = false
+            }
+            refreshPoleReview()
+        }
+
+        addCompactOptionRow(
+            getString(R.string.bubble_field_guarding_short),
+            listOf(
+                CompactOpt("YES", getString(R.string.yes), enabled = guardEnabled),
+                CompactOpt("NO", getString(R.string.no), enabled = guardEnabled)
+            ),
+            selectedKey = when (guarding) {
+                true -> "YES"
+                false -> "NO"
+                null -> null
+            },
+            rowEnabled = guardEnabled,
+            showDivider = false,
+            rowTag = "guarding"
+        ) { key ->
+            guarding = key == "YES"
+            refreshPoleReview()
+        }
+    }
+
+    private fun onUsePoleReview() {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        val needFeeder = needsFeederInfo()
+        if (needFeeder) {
+            val fn = binding.etFeederName.text?.toString()?.trim() ?: ""
+            val ss = binding.etSourceSs.text?.toString()?.trim() ?: ""
+            if (fn.isBlank() || ss.isBlank()) {
+                if (fn.isBlank()) {
+                    binding.tilFeederName.error = getString(R.string.feeder_required_error)
+                } else {
+                    binding.tilFeederName.error = null
+                }
+                if (ss.isBlank()) {
+                    binding.tilSourceSs.error = getString(R.string.feeder_required_error)
+                } else {
+                    binding.tilSourceSs.error = null
+                }
+                showProceedError(getString(R.string.bubble_need_feeder), scrollToTag = "feeder")
+                return
+            }
+            binding.tilFeederName.error = null
+            binding.tilSourceSs.error = null
+            feederName = fn
+            sourceSubstation = ss
+        }
+        when {
+            material == null -> {
+                showProceedError(getString(R.string.bubble_need_material), "material")
+            }
+            conductor.isNullOrBlank() -> {
+                showProceedError(getString(R.string.bubble_need_conductor), "conductor")
+            }
+            structure == null -> {
+                showProceedError(getString(R.string.bubble_need_pole_type), "type")
+            }
+            kitLocation == null -> {
+                showProceedError(getString(R.string.bubble_need_location), "location")
+            }
+            kitLocation != KitLocation.DEAD_END && kitArrangement == null -> {
+                showProceedError(getString(R.string.bubble_need_arrangement), "arrangement")
+            }
+            kitLocation == KitLocation.DEAD_END &&
+                structure != null &&
+                !NetworkCatalog.allowsDeadEnd(v, structure) -> {
+                showProceedError(getString(R.string.bubble_need_deadend_structure), "type")
+            }
+            kitExtension == null -> {
+                showProceedError(getString(R.string.bubble_need_extension), "extension")
+            }
+            kitExtension == KitExtension.WITH_EXT && guarding == null -> {
+                showProceedError(getString(R.string.bubble_need_guarding), "guarding")
+            }
+            else -> {
+                clearProceedError()
+                advanceAfterKitAccept()
+                render()
+            }
+        }
+    }
+
+    private fun addReviewSectionHeader(title: String) {
+        val ctx = requireContext()
+        val density = resources.displayMetrics.density
+        binding.poleReviewRows.addView(
+            android.widget.TextView(ctx).apply {
+                text = title.uppercase(java.util.Locale.getDefault())
+                setTextColor(ctx.getColor(R.color.primary))
+                textSize = 12f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                letterSpacing = 0.06f
+                setPadding(0, (10 * density).toInt(), 0, (4 * density).toInt())
+            }
+        )
+    }
+
+    /** Outdoor-friendly block: label above, large chips below. */
+    private fun addCompactOptionRow(
+        shortLabel: String,
+        options: List<CompactOpt>,
+        selectedKey: String?,
+        rowEnabled: Boolean = true,
+        showDivider: Boolean = true,
+        rowTag: String? = null,
+        onSelect: (String) -> Unit
+    ) {
+        val ctx = requireContext()
+        val density = resources.displayMetrics.density
+        val chipH = 44f * density
+        val padH = (2 * density).toInt()
+
+        val block = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, (6 * density).toInt(), padH, (6 * density).toInt())
+            alpha = if (rowEnabled) 1f else 0.45f
+            if (rowTag != null) tag = rowTag
+        }
+        block.addView(
+            android.widget.TextView(ctx).apply {
+                text = shortLabel
+                setTextColor(ctx.getColor(R.color.text_secondary))
+                textSize = 13f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(0, 0, 0, (4 * density).toInt())
+            }
+        )
+        val group = com.google.android.material.chip.ChipGroup(ctx).apply {
+            isSingleSelection = true
+            isSelectionRequired = false
+            chipSpacingHorizontal = (8 * density).toInt()
+            chipSpacingVertical = (8 * density).toInt()
+        }
+        options.forEach { opt ->
+            val chip = Chip(ctx).apply {
+                text = opt.label
+                isCheckable = true
+                isChecked = opt.enabled && opt.key == selectedKey
+                isEnabled = opt.enabled && rowEnabled
+                isClickable = opt.enabled && rowEnabled
+                isFocusable = opt.enabled && rowEnabled
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setEnsureMinTouchTargetSize(true)
+                chipMinHeight = chipH
+                textSize = 14f
+                chipStartPadding = 14f * density
+                chipEndPadding = 14f * density
+                chipStrokeWidth = density
+                chipStrokeColor = android.content.res.ColorStateList.valueOf(
+                    ctx.getColor(R.color.outline)
+                )
+                setOnClickListener {
+                    if (opt.enabled && rowEnabled && opt.key != selectedKey) {
+                        onSelect(opt.key)
+                    } else if (opt.enabled && rowEnabled) {
+                        isChecked = true
+                    }
+                }
+            }
+            group.addView(chip)
+        }
+        block.addView(group)
+        binding.poleReviewRows.addView(block)
+        if (showDivider) {
+            binding.poleReviewRows.addView(
+                android.view.View(ctx).apply {
+                    layoutParams = android.widget.LinearLayout.LayoutParams(
+                        android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                        (1 * density).toInt().coerceAtLeast(1)
+                    ).apply {
+                        topMargin = (2 * density).toInt()
+                        bottomMargin = (2 * density).toInt()
+                    }
+                    setBackgroundColor(ctx.getColor(R.color.surface_variant))
+                }
+            )
+        }
+    }
+
+    private fun updateModalHeight() {
+        if (_binding == null) return
+        binding.bubbleCard.post {
+            if (_binding == null || binding.root.height == 0) return@post
+            val maxHeight = (binding.root.height * 0.86f).toInt()
+            val isReview = stepStack.lastOrNull() == Step.POLE_REVIEW
+            val target = if (isReview) {
+                maxHeight
+            } else {
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            }
+            val lp = binding.bubbleCard.layoutParams
+            if (lp.height != target) {
+                lp.height = target
+                binding.bubbleCard.layoutParams = lp
+            }
+        }
+    }
+
+    private fun addOptionSection(
+        title: String,
+        options: List<Pair<String, String>>,
+        selectedKey: String?,
+        onSelect: (String) -> Unit
+    ) {
+        addCompactOptionRow(
+            title,
+            options.map { CompactOpt(it.first, it.second) },
+            selectedKey,
+            onSelect = onSelect
+        )
+    }
+
+    private fun addReviewRow(label: String, value: String?, onClick: () -> Unit) {
+        // Kept for any legacy callers; prefer addOptionSection.
+        val ctx = requireContext()
+        val row = android.widget.LinearLayout(ctx).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, 10, 0, 10)
+            isClickable = true
+            isFocusable = true
+            setBackgroundResource(android.R.attr.selectableItemBackground.let { attr ->
+                val out = android.util.TypedValue()
+                ctx.theme.resolveAttribute(attr, out, true)
+                out.resourceId
+            })
+            setOnClickListener { onClick() }
+        }
+        val labelView = android.widget.TextView(ctx).apply {
+            text = label
+            setTextColor(ctx.getColor(R.color.text_secondary))
+            textSize = 13f
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                0,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                1f
+            )
+        }
+        val valueChip = Chip(ctx).apply {
+            text = value ?: getString(R.string.bubble_value_unset)
+            isClickable = false
+            isCheckable = value != null
+            isChecked = value != null
+            textSize = 14f
+            setEnsureMinTouchTargetSize(false)
+        }
+        row.addView(labelView)
+        row.addView(valueChip)
+        binding.poleReviewRows.addView(row)
+    }
+
     private fun advanceAfterKitAccept() {
+        if (kitLocation == KitLocation.DEAD_END) {
+            pendingPlaceRole = PoleRole.END
+        }
+        if (kitExtension == KitExtension.WITH_EXT && guarding == null) {
+            guarding = false
+        }
+        if (kitExtension != KitExtension.WITH_EXT) {
+            guarding = false
+        }
         if (structure == PoleStructure.DTR && dtrMount == null) {
             push(Step.DTR_MOUNT)
             return
@@ -933,6 +1546,8 @@ class SurveyBubbleWizard : DialogFragment() {
         val v = voltage ?: asset.voltage
         val st = structure ?: asset.poleStructure ?: PoleStructure.P1
         val c = conductor ?: asset.conductor
+        val ext = kitExtension
+        val guard = if (ext == KitExtension.WITH_EXT) (guarding == true) else false
         onEdit?.invoke(
             asset.copy(
                 kitLocation = kitLocation?.label,
@@ -944,6 +1559,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 kitExtension = kitExtension?.label,
                 dtrMount = dtrMount?.id,
                 kitWire = NetworkCatalog.kitWireFor(v, c, st),
+                guarding = guard,
                 dtCapacityKva = dtCapacityKva ?: asset.dtCapacityKva,
                 structure = st.label,
                 conductor = c,
@@ -954,20 +1570,24 @@ class SurveyBubbleWizard : DialogFragment() {
         dismiss()
     }
 
-    /** Start a new series from an existing pole; voltage inherits from that line. */
+    /** Start a new series from an existing pole; voltage inherits unless source is DTR. */
     private fun beginBranchFrom(pole: SurveyAsset) {
         sourceAssetId = pole.id
-        // Do not selectTapPole here — that would arm CONTINUE of the Existing series.
         voltage = pole.voltage
         sourcePoleStatus = pole.status
         status = null
         lockedSeries = null
         splitConnectionId = null
         mode = Mode.TAPPING_BRANCH
-        voltageLocked = true
+        sourceIsDtr = pole.poleStructure == PoleStructure.DTR
+        voltageLocked = !sourceIsDtr
         if (pole.status == WorkStatus.PROPOSED) {
             status = WorkStatus.PROPOSED
-            advanceAfterStatusChoice()
+            if (sourceIsDtr) {
+                push(Step.DTR_BRANCH_VOLTAGE)
+            } else {
+                advanceAfterStatusChoice()
+            }
         } else {
             push(Step.STATUS)
         }
@@ -975,29 +1595,33 @@ class SurveyBubbleWizard : DialogFragment() {
 
     /**
      * After Existing/Proposed is chosen:
-     * - Branch/tap with presets: apply preset material/structure/conductor (keep chosen status + locked voltage).
-     * - Insert on line with presets: same (split keeps voltage lock).
-     * - Without presets: continue normal material / conductor steps.
+     * Both open the compact review — Existing chooses Material/Conductor/Type only;
+     * Proposed also chooses Location/Extension (estimate tags).
      */
     private fun advanceAfterStatusChoice() {
         val v = voltage ?: return
+        val isInsert = splitConnectionId != null
         val branchOrInsert =
             mode == Mode.TAPPING_BRANCH ||
                 sourceAssetId != null ||
-                splitConnectionId != null
-        if (branchOrInsert && PresetPreferences.isEnabled(requireContext())) {
+                isInsert
+
+        // Mid-line insert: inherit material from the line poles when available.
+        if (isInsert && preferredMaterial != null) {
+            material = preferredMaterial
+        }
+
+        if (branchOrInsert && PresetPreferences.isEnabled(requireContext()) && !isInsert) {
             applyPresetFieldsForBranch(v)
+            if (preferredMaterial != null) material = preferredMaterial
             advanceToKitOrPlace()
             return
         }
-        when (v) {
-            VoltageLevel.LT -> {
-                material = PoleMaterial.PCC_8M
-                structure = null
-                push(Step.CONDUCTOR)
-            }
-            else -> push(Step.MATERIAL)
+
+        if (v == VoltageLevel.LT && material == null) {
+            material = preferredMaterial ?: PoleMaterial.PCC_8M
         }
+        advanceToKitOrPlace()
     }
 
     /** Apply preset pole specs for a branch; status stays user-chosen, voltage stays locked. */
@@ -1009,7 +1633,9 @@ class SurveyBubbleWizard : DialogFragment() {
         material = preset.material.takeIf { it in materials } ?: NetworkCatalog.defaultMaterial(v)
         structure = preset.structure.takeIf { it in structures } ?: NetworkCatalog.defaultStructure(v)
         conductor = preset.conductor.takeIf { it in conductors } ?: conductors.first()
-        if (v == VoltageLevel.LT && NetworkCatalog.isAbcConductor(conductor)) {
+        if (v == VoltageLevel.LT &&
+            (NetworkCatalog.isAbcConductor(conductor) || NetworkCatalog.isPvcConductor(conductor))
+        ) {
             structure = PoleStructure.P1
         }
         if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
@@ -1035,22 +1661,29 @@ class SurveyBubbleWizard : DialogFragment() {
         var arr = kitArrangement
         if (role == PoleRole.END && s == WorkStatus.PROPOSED) {
             if (loc == null || loc == KitLocation.TANGENT || loc == KitLocation.ANGULAR) {
-                loc = KitLocation.DEAD_END
-                arr = null
+                if (NetworkCatalog.allowsDeadEnd(v, st)) {
+                    loc = KitLocation.DEAD_END
+                    arr = null
+                }
+                // HT 1P: leave location as-is; tryPlaceEnd already blocks End.
             }
         }
-        if (loc == KitLocation.DEAD_END) arr = null
-        val ext = if (s == WorkStatus.PROPOSED) {
-            kitExtension ?: KitExtension.NO_EXT
-        } else {
-            null
+        if (loc == KitLocation.DEAD_END && !NetworkCatalog.allowsDeadEnd(v, st)) {
+            // Safety: never persist illegal HT Dead-end 1P.
+            loc = KitLocation.TANGENT
+            arr = arr ?: KitArrangement.INLINE
         }
+        if (loc == KitLocation.DEAD_END) arr = null
+        val ext = kitExtension ?: KitExtension.NO_EXT
         val mount = if (st == PoleStructure.DTR) dtrMount else null
         val wire = if (s == WorkStatus.PROPOSED) {
             NetworkCatalog.kitWireFor(v, c, st)
         } else {
             null
         }
+        val guard = ext == KitExtension.WITH_EXT && guarding == true
+        // Dead-end always ends the run.
+        val placeRole = if (loc == KitLocation.DEAD_END) PoleRole.END else role
         if (editing != null) {
             onEdit?.invoke(
                 editing!!.copy(
@@ -1060,14 +1693,15 @@ class SurveyBubbleWizard : DialogFragment() {
                     structure = st.label,
                     conductor = c,
                     type = NetworkCatalog.assetTypeFor(st),
-                    poleRole = role,
+                    poleRole = placeRole,
                     dtCapacityKva = dtCapacityKva ?: editing!!.dtCapacityKva,
                     remarks = remarks ?: editing!!.remarks,
                     kitLocation = loc?.label,
                     kitArrangement = arr?.label,
                     kitExtension = ext?.label,
                     dtrMount = mount?.id,
-                    kitWire = wire
+                    kitWire = wire,
+                    guarding = guard
                 )
             )
             dismiss()
@@ -1077,9 +1711,9 @@ class SurveyBubbleWizard : DialogFragment() {
         val effectiveRole = when {
             splitConnectionId != null -> PoleRole.CONTINUE
             lockedSeries == null && mode != Mode.CONTINUE_SERIES -> {
-                if (role == PoleRole.END) PoleRole.END else PoleRole.START
+                if (placeRole == PoleRole.END) PoleRole.END else PoleRole.START
             }
-            else -> role
+            else -> placeRole
         }
         onPlace?.invoke(
             PlacementDraft(
@@ -1102,19 +1736,25 @@ class SurveyBubbleWizard : DialogFragment() {
                 kitArrangement = arr?.label,
                 kitExtension = ext?.label,
                 dtrMount = mount?.id,
-                kitWire = wire
+                kitWire = wire,
+                guarding = guard
             )
         )
         dismiss()
     }
 
-    private fun addChoice(label: String, onClick: () -> Unit) {
+    private fun addChoice(label: String, highlighted: Boolean = false, onClick: () -> Unit) {
+        val density = resources.displayMetrics.density
         val chip = Chip(requireContext()).apply {
             text = label
             isClickable = true
-            isCheckable = false
+            isCheckable = highlighted
+            isChecked = highlighted
             textSize = 15f
             setEnsureMinTouchTargetSize(true)
+            chipMinHeight = 48f * density
+            chipStartPadding = 16f * density
+            chipEndPadding = 16f * density
             setOnClickListener { onClick() }
         }
         binding.bubbleChoices.addView(chip)
@@ -1128,7 +1768,8 @@ class SurveyBubbleWizard : DialogFragment() {
     enum class Mode { NEW_NETWORK, CONTINUE_SERIES, NEAR_LINE, TAPPING_BRANCH }
     private enum class Step {
         VOLTAGE, STATUS, MATERIAL, STRUCTURE, CONDUCTOR, FEEDER_INFO, PRESET_SUMMARY, PLACE_ROLE,
-        KIT_SUGGEST, KIT_LOCATION, KIT_ARRANGEMENT, KIT_EXTENSION, DTR_MOUNT, DTR_CAPACITY,
+        POLE_REVIEW, KIT_LOCATION, KIT_ARRANGEMENT, KIT_EXTENSION, GUARDING,
+        DTR_MOUNT, DTR_CAPACITY, DTR_BRANCH_VOLTAGE,
         TAPPING_YES_NO, SOURCE_POLE, EDIT_MENU, CONFIRM_DELETE, LINE_ACTION_CHOICE,
         LT_CONV_START_DTR, LT_CONV_DTR_CAPACITY, LT_CONV_DTR_CODE, LT_CONV_DTR_POLE,
         LT_CONV_FIRST_SPAN, LT_CONV_POLE_KIND
@@ -1168,11 +1809,6 @@ class SurveyBubbleWizard : DialogFragment() {
         return true
     }
 
-    private fun showFeederInputs(show: Boolean) {
-        binding.feederInputContainer.isVisible = show
-        binding.bubbleChoices.isVisible = !show
-    }
-
     companion object {
         const val TAG = "SurveyBubbleWizard"
         private const val ARG_LAT = "lat"
@@ -1200,6 +1836,8 @@ class SurveyBubbleWizard : DialogFragment() {
         private const val ARG_TIP_KIT_ARRANGEMENT = "tip_kit_arrangement"
         private const val ARG_TIP_KIT_EXTENSION = "tip_kit_extension"
         private const val ARG_TIP_DTR_MOUNT = "tip_dtr_mount"
+        private const val ARG_PREFERRED_MATERIAL = "preferred_material"
+        private const val ARG_SOURCE_IS_DTR = "source_is_dtr"
 
         fun forNew(lat: Double, lng: Double): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
@@ -1254,14 +1892,16 @@ class SurveyBubbleWizard : DialogFragment() {
             sourceSubstation: String = ""
         ): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
+                val fromDtr = source.poleStructure == PoleStructure.DTR
                 arguments = bundleOf(
                     ARG_LAT to lat,
                     ARG_LNG to lng,
                     ARG_MODE to Mode.TAPPING_BRANCH.name,
                     ARG_SOURCE_ID to source.id,
                     ARG_LOCKED_VOLTAGE to source.voltage.label,
-                    ARG_VOLTAGE_LOCKED to true,
+                    ARG_VOLTAGE_LOCKED to !fromDtr,
                     ARG_SOURCE_STATUS to source.status.label,
+                    ARG_SOURCE_IS_DTR to fromDtr,
                     ARG_FEEDER_NAME to feederName,
                     ARG_SOURCE_SS to sourceSubstation
                 )
@@ -1277,7 +1917,8 @@ class SurveyBubbleWizard : DialogFragment() {
             feederName: String = "",
             sourceSubstation: String = "",
             /** When true, skip the "Action near line" menu and start insert immediately. */
-            directInsert: Boolean = false
+            directInsert: Boolean = false,
+            preferredMaterial: PoleMaterial? = null
         ): SurveyBubbleWizard =
             SurveyBubbleWizard().apply {
                 arguments = Bundle().apply {
@@ -1290,6 +1931,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     putString(ARG_FEEDER_NAME, feederName)
                     putString(ARG_SOURCE_SS, sourceSubstation)
                     putBoolean(ARG_DIRECT_INSERT, directInsert)
+                    putString(ARG_PREFERRED_MATERIAL, preferredMaterial?.label)
                     putParcelableArrayList(
                         ARG_CANDIDATES,
                         ArrayList(candidates.map { it.toParcelable() })

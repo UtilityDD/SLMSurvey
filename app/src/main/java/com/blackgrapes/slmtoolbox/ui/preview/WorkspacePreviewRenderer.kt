@@ -83,11 +83,28 @@ object WorkspacePreviewRenderer {
                     pathEffect = DashPathEffect(floatArrayOf(16f, 12f), 0f)
                 }
             }
-            canvas.drawLine(
-                x(from.longitude), y(from.latitude),
-                x(to.longitude), y(to.latitude),
-                stroke
-            )
+            val x1 = x(from.longitude)
+            val y1 = y(from.latitude)
+            val x2 = x(to.longitude)
+            val y2 = y(to.latitude)
+            canvas.drawLine(x1, y1, x2, y2, stroke)
+            if (from.guarding || to.guarding) {
+                val markPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = color
+                    style = Paint.Style.STROKE
+                    strokeWidth = 2.5f
+                    strokeCap = Paint.Cap.ROUND
+                }
+                val markCount = 5
+                val arm = 7f
+                for (i in 1 until markCount) {
+                    val t = i.toFloat() / markCount
+                    val mx = x1 + (x2 - x1) * t
+                    val my = y1 + (y2 - y1) * t
+                    canvas.drawLine(mx - arm, my - arm, mx + arm, my + arm, markPaint)
+                    canvas.drawLine(mx - arm, my + arm, mx + arm, my - arm, markPaint)
+                }
+            }
         }
 
         survey.assets.forEach { asset ->

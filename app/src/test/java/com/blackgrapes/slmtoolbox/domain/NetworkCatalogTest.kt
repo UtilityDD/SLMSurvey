@@ -25,11 +25,89 @@ class NetworkCatalogTest {
     }
 
     @Test
-    fun kv11CatalogIncludesDtr() {
+    fun kv11CatalogIncludesDtrAndRail() {
         assertTrue(PoleStructure.DTR in NetworkCatalog.structuresFor(VoltageLevel.KV_11))
+        assertTrue(PoleMaterial.RAIL in NetworkCatalog.materialsFor(VoltageLevel.KV_11))
         assertEquals(
             listOf("30", "50", "100", "ABC"),
             NetworkCatalog.conductorsFor(VoltageLevel.KV_11)
+        )
+    }
+
+    @Test
+    fun kv33AllowsTOffOn1P() {
+        assertTrue(
+            com.blackgrapes.slmtoolbox.domain.model.KitLocation.T_OFF in
+                NetworkCatalog.kitLocationsFor(VoltageLevel.KV_33, PoleStructure.P1)
+        )
+    }
+
+    @Test
+    fun htDeadEndNever1P() {
+        val dead = com.blackgrapes.slmtoolbox.domain.model.KitLocation.DEAD_END
+        assertFalse(NetworkCatalog.allowsDeadEnd(VoltageLevel.KV_33, PoleStructure.P1))
+        assertFalse(NetworkCatalog.allowsDeadEnd(VoltageLevel.KV_11, PoleStructure.P1))
+        assertTrue(NetworkCatalog.allowsDeadEnd(VoltageLevel.KV_33, PoleStructure.P2))
+        assertTrue(NetworkCatalog.allowsDeadEnd(VoltageLevel.KV_11, PoleStructure.DTR))
+        assertTrue(NetworkCatalog.allowsDeadEnd(VoltageLevel.LT, PoleStructure.P1))
+        assertFalse(
+            dead in NetworkCatalog.kitLocationsFor(VoltageLevel.KV_33, PoleStructure.P1)
+        )
+        assertFalse(
+            dead in NetworkCatalog.kitLocationsFor(VoltageLevel.KV_11, PoleStructure.P1)
+        )
+        assertTrue(
+            dead in NetworkCatalog.kitLocationsFor(VoltageLevel.KV_11, PoleStructure.DTR)
+        )
+        assertEquals(
+            listOf(PoleStructure.P2, PoleStructure.P3, PoleStructure.P4),
+            NetworkCatalog.structuresForLocation(VoltageLevel.KV_33, dead)
+        )
+        assertTrue(
+            PoleStructure.DTR in
+                NetworkCatalog.structuresForLocation(VoltageLevel.KV_11, dead)
+        )
+        assertFalse(
+            PoleStructure.P1 in
+                NetworkCatalog.structuresForLocation(VoltageLevel.KV_11, dead)
+        )
+    }
+
+    @Test
+    fun ltPvcForces1PPhase() {
+        assertEquals(listOf(PoleStructure.P1), NetworkCatalog.ltPhasesForConductor("PVC"))
+        assertTrue(NetworkCatalog.isPvcConductor("PVC"))
+    }
+
+    @Test
+    fun continueSpanGuidanceLimits() {
+        assertEquals(
+            40f,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.LT, PoleMaterial.PCC_8M, "ABC")
+        )
+        assertEquals(
+            null,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.LT, PoleMaterial.PCC_8M, "50")
+        )
+        assertEquals(
+            70f,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.KV_11, PoleMaterial.PCC_9M, "100")
+        )
+        assertEquals(
+            80f,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.KV_11, PoleMaterial.RAIL, "100")
+        )
+        assertEquals(
+            70f,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.KV_33, PoleMaterial.PCC_9M, "150")
+        )
+        assertEquals(
+            80f,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.KV_33, PoleMaterial.RAIL, "200")
+        )
+        assertEquals(
+            null,
+            ContinueSpanGuidance.maxSpanM(VoltageLevel.KV_11, PoleMaterial.PCC_8M, "50")
         )
     }
 
@@ -41,7 +119,7 @@ class NetworkCatalogTest {
             NetworkCatalog.structuresFor(VoltageLevel.LT)
         )
         assertEquals(PoleMaterial.PCC_8M, NetworkCatalog.defaultMaterial(VoltageLevel.LT))
-        assertEquals(listOf("30", "50", "ABC"), NetworkCatalog.conductorsFor(VoltageLevel.LT))
+        assertEquals(listOf("30", "50", "ABC", "PVC"), NetworkCatalog.conductorsFor(VoltageLevel.LT))
         assertTrue(NetworkCatalog.isAbcConductor("ABC"))
         assertFalse(NetworkCatalog.isAbcConductor("30"))
         assertEquals(

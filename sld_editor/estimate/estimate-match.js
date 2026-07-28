@@ -1,6 +1,6 @@
 /**
- * Desktop auto-estimate matcher (Final kits × survey workspace).
- * Mirrors Android EstimateMatcher — desktop is the primary BOQ device.
+ * Desktop auto-estimate matcher (Draft or Final kits × survey workspace).
+ * Prefers Final when both exist; Draft is allowed for BOQ / field check.
  */
 (function (global) {
   "use strict";
@@ -37,16 +37,21 @@
   }
 
   function agnosticConductorIds(voltage, tag) {
-    if (!tag || isPvc(tag)) return [];
-    if (voltage === "LT") return isAbc(tag) ? ["LT|ANY|ABC"] : ["LT|ANY|ACSR"];
+    if (!tag) return [];
+    if (voltage === "LT") {
+      if (isPvc(tag)) return ["LT|ANY|PVC"];
+      return isAbc(tag) ? ["LT|ANY|ABC"] : ["LT|ANY|ACSR"];
+    }
     if (voltage === "11kV") {
+      if (isPvc(tag)) return [];
       return isAbc(tag) ? ["11kV|ANY|ABC", "ABC|HT|3x95"] : ["11kV|ANY|ACSR"];
     }
     return [];
   }
 
   function conductorFamily(tag) {
-    if (!tag || isPvc(tag)) return null;
+    if (!tag) return null;
+    if (isPvc(tag)) return "PVC";
     return isAbc(tag) ? "ABC" : "ACSR";
   }
 
@@ -128,7 +133,8 @@
       return (
         !kit.wireCount ||
         String(kit.wireLabel || "").toLowerCase() === "cable" ||
-        kit.conductorFamily === "ABC"
+        kit.conductorFamily === "ABC" ||
+        kit.conductorFamily === "PVC"
       );
     }
     if (!want) return !kit.wireCount;
@@ -191,20 +197,20 @@
     const voltage = sample.voltage;
     const tag = sample.conductor;
     if (isCable(tag)) {
+      const wantFam = conductorFamily(tag); // ABC or PVC
       const familyKits = kits.filter(
         (k) =>
           k.voltage === voltage &&
           k.enabled !== false &&
           (!finalOnly || k.complete) &&
-          (k.conductorFamily === "ABC" ||
-            (k.conductorId && k.conductorId.includes("ABC")))
+          (k.conductorFamily === wantFam ||
+            (wantFam && k.conductorId && String(k.conductorId).includes(wantFam)))
       );
       const finals = familyKits.filter((k) => k.complete);
-      if (finalOnly) {
-        if (finals.length === 1) return finals[0];
-        return null;
-      }
-      return familyKits.length === 1 ? familyKits[0] : familyKits[0] || null;
+      // Prefer Final; Draft allowed when finalOnly is false
+      if (finals.length >= 1) return finals[0];
+      if (finalOnly) return null;
+      return familyKits[0] || null;
     }
     const sized = sizedConductorIds(voltage, tag);
     if (!sized.length) return null;
@@ -223,56 +229,301 @@
 
   function money(n) {
     if (n == null || Number.isNaN(n)) return "—";
-    return Number(n).toLocaleString(undefined, {
+    return (
+      "₹" +
+      Number(n).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })
+    );
+  }
+
+  function moneyPlain(n) {
+    if (n == null || Number.isNaN(n)) return "—";
+    return Number(n).toLocaleString("en-IN", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
   }
 
-  function kitMaterialAmount(kit, rateIndex) {
-    if (!kit || !Array.isArray(kit.lines) || !kit.lines.length) return null;
-    let sum = 0;
-    let any = false;
-    for (const line of kit.lines) {
-      const code = line.code || line.matCode;
-      const qty = Number(line.qty ?? line.quantity ?? 0);
-      const rate =
-        line.rate != null
-          ? Number(line.rate)
-          : rateIndex[code] != null
-            ? Number(rateIndex[code])
-            : null;
-      if (rate == null || Number.isNaN(qty)) continue;
-      sum += qty * rate;
-      any = true;
+  function buildItemIndex(ratebook) {
+    const idx = {};
+    for (const m of ratebook?.materials || []) {
+      if (!m.code) continue;
+      idx[m.code] = {
+        code: m.code,
+        description: m.description || m.code,
+        unit: m.unit || "NOS",
+        rate: Number(m.rate) || 0,
+        type: "material",
+      };
     }
-    return any ? sum : null;
+    for (const l of ratebook?.labour || []) {
+      if (!l.code) continue;
+      idx[l.code] = {
+        code: l.code,
+        description: l.description || l.code,
+        unit: l.unit || "NOS",
+        rate: Number(l.rate) || 0,
+        type: "labour",
+      };
+    }
+    return idx;
   }
 
-  function buildRateIndex(ratebook) {
-    const idx = {};
-    const mats = ratebook?.materials || [];
-    const labs = ratebook?.labour || [];
-    for (const m of mats) if (m.code) idx[m.code] = m.rate;
-    for (const l of labs) if (l.code) idx[l.code] = l.rate;
-    return idx;
+  function lineIsLabour(line, item) {
+    if (item?.type === "labour") return true;
+    if (item?.type === "material") return false;
+    if (line?.type === "labour") return true;
+    const code = String(line?.code || line?.matCode || "");
+    return /^L/i.test(code);
+  }
+
+  /** Default WB-style abstract extras (editable in UI). */
+  function defaultExtras() {
+    return [
+      {
+        id: "cont_mat",
+        label: "Contingency on Material",
+        applyTo: "material",
+        pct: 3,
+      },
+      {
+        id: "cont_lab",
+        label: "Contingency on Labour",
+        applyTo: "labour",
+        pct: 3,
+      },
+      {
+        id: "gst",
+        label: "GST",
+        applyTo: "after_extras",
+        pct: 18,
+      },
+      {
+        id: "cess",
+        label: "Labour Cess",
+        applyTo: "after_gst",
+        pct: 1,
+      },
+    ];
+  }
+
+  function accumulateKitLines(acc, kit, factor, itemIndex) {
+    if (!kit || !Array.isArray(kit.lines)) return;
+    const f = Number(factor) || 0;
+    if (f <= 0) return;
+    for (const line of kit.lines) {
+      const code = line.code || line.matCode;
+      if (!code) continue;
+      const q = (Number(line.qty ?? line.quantity ?? 0) || 0) * f;
+      if (q === 0) continue;
+      const item = itemIndex[code];
+      const labour = lineIsLabour(line, item);
+      const bucket = labour ? acc.labour : acc.material;
+      const prev = bucket.get(code) || {
+        code,
+        description: item?.description || code,
+        unit: item?.unit || "NOS",
+        rate: item?.rate != null ? Number(item.rate) : Number(line.rate) || 0,
+        qty: 0,
+      };
+      prev.qty += q;
+      if (item?.description) prev.description = item.description;
+      if (item?.unit) prev.unit = item.unit;
+      if (item?.rate != null) prev.rate = Number(item.rate);
+      bucket.set(code, prev);
+    }
+  }
+
+  function scheduleFromMap(map) {
+    const rows = [...map.values()]
+      .filter((r) => r.qty > 0)
+      .sort((a, b) => String(a.code).localeCompare(String(b.code)));
+    return rows.map((r, i) => {
+      const amount = (Number(r.rate) || 0) * (Number(r.qty) || 0);
+      return {
+        sl: i + 1,
+        code: r.code,
+        description: r.description,
+        unit: r.unit,
+        qty: Number(r.qty) || 0,
+        rate: Number(r.rate) || 0,
+        amount,
+      };
+    });
+  }
+
+  function sumSchedule(rows) {
+    return rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  }
+
+  /**
+   * Compute abstract from schedule totals + editable extras.
+   * applyTo: material | labour | both | after_extras | after_gst
+   */
+  function computeAbstract(materialTotal, labourTotal, extras) {
+    const list = Array.isArray(extras) && extras.length ? extras : defaultExtras();
+    const mat = Number(materialTotal) || 0;
+    const lab = Number(labourTotal) || 0;
+    const steps = [];
+    steps.push({ id: "mat", label: "Total Material", amount: mat, pct: null });
+    steps.push({ id: "lab", label: "Total Labour", amount: lab, pct: null });
+
+    let afterMat = mat;
+    let afterLab = lab;
+    let runningExtras = 0;
+
+    for (const ex of list) {
+      const pct = Number(ex.pct) || 0;
+      if (!pct || ex.applyTo === "after_extras" || ex.applyTo === "after_gst") continue;
+      let base = 0;
+      if (ex.applyTo === "material") base = mat;
+      else if (ex.applyTo === "labour") base = lab;
+      else if (ex.applyTo === "both") base = mat + lab;
+      else continue;
+      const amt = (base * pct) / 100;
+      runningExtras += amt;
+      if (ex.applyTo === "material") afterMat += amt;
+      if (ex.applyTo === "labour") afterLab += amt;
+      steps.push({
+        id: ex.id,
+        label: `${ex.label} (${pct}%)`,
+        amount: amt,
+        pct,
+        applyTo: ex.applyTo,
+      });
+    }
+
+    const subtotal = mat + lab + runningExtras;
+    steps.push({
+      id: "subtotal",
+      label: "Sub-total (Mat + Lab + extras)",
+      amount: subtotal,
+      pct: null,
+    });
+
+    let withGst = subtotal;
+    for (const ex of list) {
+      if (ex.applyTo !== "after_extras") continue;
+      const pct = Number(ex.pct) || 0;
+      if (!pct) continue;
+      const amt = (subtotal * pct) / 100;
+      withGst += amt;
+      steps.push({
+        id: ex.id,
+        label: `${ex.label} (${pct}%)`,
+        amount: amt,
+        pct,
+        applyTo: ex.applyTo,
+      });
+    }
+
+    let grand = withGst;
+    for (const ex of list) {
+      if (ex.applyTo !== "after_gst") continue;
+      const pct = Number(ex.pct) || 0;
+      if (!pct) continue;
+      const amt = (withGst * pct) / 100;
+      grand += amt;
+      steps.push({
+        id: ex.id,
+        label: `${ex.label} (${pct}%)`,
+        amount: amt,
+        pct,
+        applyTo: ex.applyTo,
+      });
+    }
+
+    const rounded = Math.round(grand);
+    return {
+      materialTotal: mat,
+      labourTotal: lab,
+      extras: list,
+      steps,
+      subtotal,
+      grandTotal: grand,
+      grandTotalRounded: rounded,
+      amountInWords: amountInWordsINR(rounded),
+    };
+  }
+
+  /** Indian numbering: Rupees … Only */
+  function amountInWordsINR(num) {
+    const n = Math.round(Number(num) || 0);
+    if (n === 0) return "Rupees Zero Only";
+    const ones = [
+      "",
+      "One",
+      "Two",
+      "Three",
+      "Four",
+      "Five",
+      "Six",
+      "Seven",
+      "Eight",
+      "Nine",
+      "Ten",
+      "Eleven",
+      "Twelve",
+      "Thirteen",
+      "Fourteen",
+      "Fifteen",
+      "Sixteen",
+      "Seventeen",
+      "Eighteen",
+      "Nineteen",
+    ];
+    const tens = [
+      "",
+      "",
+      "Twenty",
+      "Thirty",
+      "Forty",
+      "Fifty",
+      "Sixty",
+      "Seventy",
+      "Eighty",
+      "Ninety",
+    ];
+    function two(x) {
+      if (x < 20) return ones[x];
+      return (tens[Math.floor(x / 10)] + " " + ones[x % 10]).trim();
+    }
+    function three(x) {
+      if (x === 0) return "";
+      if (x < 100) return two(x);
+      return (ones[Math.floor(x / 100)] + " Hundred " + two(x % 100)).trim();
+    }
+    const crore = Math.floor(n / 10000000);
+    const lakh = Math.floor((n % 10000000) / 100000);
+    const thousand = Math.floor((n % 100000) / 1000);
+    const rem = n % 1000;
+    const parts = [];
+    if (crore) parts.push(three(crore) + " Crore");
+    if (lakh) parts.push(three(lakh) + " Lakh");
+    if (thousand) parts.push(three(thousand) + " Thousand");
+    if (rem) parts.push(three(rem));
+    return ("Rupees " + parts.join(" ") + " Only").replace(/\s+/g, " ").trim();
   }
 
   /**
    * @param {object} survey workspace JSON { assets, connections, title, ... }
    * @param {object[]} kits merged kits from Assembly Builder (state.kitsById values)
    * @param {object} [ratebook]
+   * @param {object[]} [extras] abstract % rows
    */
-  function buildReport(survey, kits, ratebook) {
+  function buildReport(survey, kits, ratebook, extras) {
     const assets = survey?.assets || [];
     const connections = survey?.connections || [];
-    const rateIndex = buildRateIndex(ratebook || {});
+    const itemIndex = buildItemIndex(ratebook || {});
     const structures = kits.filter((k) => k.family === "structure" && k.enabled !== false);
     const conductors = kits.filter((k) => k.family === "conductor" && k.enabled !== false);
 
     const proposed = assets.filter((a) => a.status === "Proposed");
     const gaps = [];
     const structureHits = [];
+    const acc = { material: new Map(), labour: new Map() };
 
     for (const pole of [...proposed].sort((a, b) => (a.sequence || 0) - (b.sequence || 0))) {
       if (!isEstimateReady(pole)) {
@@ -286,41 +537,28 @@
         });
         continue;
       }
-      const finalHit = findStructureKit(pole, structures, true);
-      if (finalHit) {
-        structureHits.push(finalHit);
+      const hit = findStructureKit(pole, structures, false);
+      if (hit) {
+        structureHits.push(hit);
         continue;
       }
-      const draftHit = findStructureKit(pole, structures, false);
-      gaps.push(
-        draftHit
-          ? {
-              kind: "gap",
-              title: `Pole #${pole.sequence}: no Final kit`,
-              qty: 1,
-              unit: "pole",
-              kitId: draftHit.id,
-              detail: `Draft exists — mark Final: ${kitTitle(draftHit)}`,
-              amount: null,
-            }
-          : {
-              kind: "gap",
-              title: `Pole #${pole.sequence}: no matching kit`,
-              qty: 1,
-              unit: "pole",
-              detail: [
-                pole.voltage,
-                pole.structure,
-                pole.kitLocation,
-                pole.kitArrangement,
-                pole.kitExtension,
-                pole.conductor,
-              ]
-                .filter(Boolean)
-                .join(" · "),
-              amount: null,
-            }
-      );
+      gaps.push({
+        kind: "gap",
+        title: `Pole #${pole.sequence}: no matching kit`,
+        qty: 1,
+        unit: "pole",
+        detail: [
+          pole.voltage,
+          pole.structure,
+          pole.kitLocation,
+          pole.kitArrangement,
+          pole.kitExtension,
+          pole.conductor,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        amount: null,
+      });
     }
 
     const structureQty = new Map();
@@ -328,18 +566,8 @@
       const prev = structureQty.get(kit.id);
       structureQty.set(kit.id, { kit, n: (prev?.n || 0) + 1 });
     }
-    const lines = [];
     for (const { kit, n } of structureQty.values()) {
-      const unitAmt = kitMaterialAmount(kit, rateIndex);
-      lines.push({
-        kind: "structure",
-        title: kitTitle(kit),
-        qty: n,
-        unit: "nos",
-        kitId: kit.id,
-        detail: null,
-        amount: unitAmt != null ? unitAmt * n : null,
-      });
+      accumulateKitLines(acc, kit, n, itemIndex);
     }
 
     const byId = new Map(assets.map((a) => [a.id, a]));
@@ -355,7 +583,6 @@
     }
 
     let matchedKm = 0;
-    const condAgg = new Map();
     for (const [key, conns] of spanGroups) {
       const sample = byId.get(conns[0].toAssetId);
       if (!sample) continue;
@@ -375,62 +602,32 @@
         continue;
       }
       const km = metres / 1000;
-      const finalHit = findConductorKit(sample, conductors, true);
-      if (finalHit) {
+      const hit = findConductorKit(sample, conductors, false);
+      if (hit) {
         matchedKm += km;
-        const unitAmt = kitMaterialAmount(finalHit, rateIndex);
-        const prev = condAgg.get(finalHit.id);
-        const amount = unitAmt != null ? unitAmt * km : null;
-        if (prev) {
-          prev.qty += km;
-          if (amount != null) prev.amount = (prev.amount || 0) + amount;
-          prev.detail = `${prev.detail || ""} · ${metres.toFixed(0)} m`.trim();
-        } else {
-          condAgg.set(finalHit.id, {
-            kind: "conductor",
-            title: kitTitle(finalHit),
-            qty: km,
-            unit: "km",
-            kitId: finalHit.id,
-            detail: `${metres.toFixed(0)} m · ${conns.length} span(s)`,
-            amount,
-          });
-        }
+        accumulateKitLines(acc, hit, km, itemIndex);
         continue;
       }
-      const draftHit = findConductorKit(sample, conductors, false);
-      gaps.push(
-        draftHit
-          ? {
-              kind: "gap",
-              title: `Conductor ${sample.voltage} ${sample.conductor}: no Final kit`,
-              qty: km,
-              unit: "km",
-              kitId: draftHit.id,
-              detail: `Draft exists — mark Final: ${kitTitle(draftHit)}`,
-              amount: null,
-            }
-          : {
-              kind: "gap",
-              title: `Conductor ${sample.voltage} ${sample.conductor}: no matching kit`,
-              qty: km,
-              unit: "km",
-              detail:
-                isAbc(sample.conductor) && sample.voltage === "LT"
-                  ? "ABC size ambiguous — finalize one ABC conductor kit on desktop"
-                  : key,
-              amount: null,
-            }
-      );
+      gaps.push({
+        kind: "gap",
+        title: `Conductor ${sample.voltage} ${sample.conductor}: no matching kit`,
+        qty: km,
+        unit: "km",
+        detail:
+          isAbc(sample.conductor) && sample.voltage === "LT"
+            ? "No ABC conductor kit in catalog"
+            : isPvc(sample.conductor)
+              ? "No PVC conductor kit in catalog"
+              : key,
+        amount: null,
+      });
     }
 
-    for (const row of condAgg.values()) lines.push(row);
-
-    const totalAmount = lines.reduce(
-      (s, r) => s + (r.amount != null ? r.amount : 0),
-      0
-    );
-    const hasAmounts = lines.some((r) => r.amount != null);
+    const materialSchedule = scheduleFromMap(acc.material);
+    const labourSchedule = scheduleFromMap(acc.labour);
+    const materialTotal = sumSchedule(materialSchedule);
+    const labourTotal = sumSchedule(labourSchedule);
+    const abstract = computeAbstract(materialTotal, labourTotal, extras);
 
     return {
       title: survey.title || survey.surveyTitle || "Survey",
@@ -439,16 +636,21 @@
       readyPoles: proposed.filter(isEstimateReady).length,
       matchedStructures: structureHits.length,
       matchedConductorKm: matchedKm,
-      lines,
+      materialSchedule,
+      labourSchedule,
+      materialTotal,
+      labourTotal,
+      abstract,
       gaps,
-      totalAmount: hasAmounts ? totalAmount : null,
+      totalAmount: abstract.grandTotal,
       money,
+      moneyPlain,
     };
   }
 
   function reportAsText(report) {
     const lines = [];
-    lines.push("SLM Auto-estimate (desktop)");
+    lines.push("SLM Estimate (West Bengal style)");
     lines.push(`Survey: ${report.title}`);
     lines.push(
       `Proposed poles: ${report.proposedPoles} · ready: ${report.readyPoles} · matched: ${report.matchedStructures}`
@@ -457,21 +659,50 @@
       lines.push(`Conductor km matched: ${report.matchedConductorKm.toFixed(3)}`);
     }
     lines.push("");
-    if (report.lines.length) {
-      lines.push("BOQ (Final kits)");
-      for (const row of report.lines) {
+
+    function dumpSchedule(title, rows, total) {
+      lines.push(title);
+      lines.push(
+        "Sl.\tCode\tDescription\tUnit\tQty\tRate (Rs.)\tAmount (Rs.)"
+      );
+      for (const r of rows || []) {
         const qty =
-          row.qty === Math.floor(row.qty) ? String(row.qty) : row.qty.toFixed(3);
-        let line = `• ${row.title}: ${qty} ${row.unit}`;
-        if (row.amount != null) line += ` = ${money(row.amount)}`;
-        lines.push(line);
+          r.qty === Math.floor(r.qty) ? String(r.qty) : r.qty.toFixed(3);
+        lines.push(
+          `${r.sl}\t${r.code}\t${r.description}\t${r.unit}\t${qty}\t${moneyPlain(
+            r.rate
+          )}\t${moneyPlain(r.amount)}`
+        );
       }
-      if (report.totalAmount != null) {
-        lines.push(`Total (from kit lines): ${money(report.totalAmount)}`);
-      }
+      lines.push(`Total\t\t\t\t\t\t${moneyPlain(total)}`);
       lines.push("");
     }
-    if (report.gaps.length) {
+
+    dumpSchedule(
+      "SCHEDULE OF MATERIALS",
+      report.materialSchedule,
+      report.materialTotal
+    );
+    dumpSchedule(
+      "SCHEDULE OF LABOUR",
+      report.labourSchedule,
+      report.labourTotal
+    );
+
+    lines.push("ABSTRACT / SUMMARY");
+    const abs = report.abstract || {};
+    for (const s of abs.steps || []) {
+      lines.push(`${s.label}\t${moneyPlain(s.amount)}`);
+    }
+    lines.push(
+      `Grand Total (say)\t${moneyPlain(abs.grandTotalRounded ?? abs.grandTotal)}`
+    );
+    if (abs.amountInWords) {
+      lines.push(`Amount in words: ${abs.amountInWords}`);
+    }
+    lines.push("");
+
+    if (report.gaps?.length) {
       lines.push("Gaps");
       for (const row of report.gaps) {
         lines.push(`• ${row.title}`);
@@ -484,8 +715,12 @@
   global.SlmEstimateMatch = {
     buildReport,
     reportAsText,
+    computeAbstract,
+    defaultExtras,
+    amountInWordsINR,
     isEstimateReady,
     kitTitle,
     money,
+    moneyPlain,
   };
 })(typeof window !== "undefined" ? window : globalThis);

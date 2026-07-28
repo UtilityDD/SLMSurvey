@@ -151,30 +151,16 @@ def pin_disc_qty(kit: dict, kind: str) -> int:
 
 
 def default_pole_code(kit: dict) -> str:
-    allowed = kit.get("allowedPoleCodes") or []
-    voltage = kit.get("voltage")
-    if voltage == "LT" and "110030141" in allowed:
-        return "110030141"  # 8m PCC
-    if "110030241" in allowed:
-        return "110030241"  # 9m PCC preferred default
-    return allowed[0] if allowed else "110030241"
+    from _kit_codes import default_pole_code as _default_pole_code
+
+    return _default_pole_code(kit)
 
 
 def erection_labour(kit: dict) -> list[dict]:
-    voltage = kit.get("voltage")
-    st = mount_structure(kit.get("structure") or "")
-    lines = []
-    if voltage == "LT":
-        lines.append(line("L0007", 1))  # SP 8m LT
-    elif st == "1P":
-        lines.append(line("L0005", 1))  # SP 9m HT
-    elif st == "2P":
-        lines.append(line("L0008", 1))  # DP 9m
-    elif st == "3P":
-        lines.append(line("L0010", 1))  # TP 9m
-    elif st == "4P":
-        lines.append(line("L0011", 1))  # 4P 9m
-    return lines
+    from _kit_codes import erection_labour_codes
+
+    codes = erection_labour_codes(kit, kit.get("poleCode"))
+    return [line(c, 1) for c in codes]
 
 
 def seed_structure_kit(kit: dict) -> list[dict]:
@@ -187,6 +173,7 @@ def seed_structure_kit(kit: dict) -> list[dict]:
 
     # --- Poles ---
     pole = default_pole_code(kit)
+    kit["poleCode"] = pole
     lines.append(line(pole, poles))
 
     # --- Steel ---
@@ -212,7 +199,7 @@ def seed_structure_kit(kit: dict) -> list[dict]:
                 lines.append(line("113020941", max(1, poles // 2 or 1)))
                 lines.append(line("113021541", 1))
 
-    # --- Insulators / ABC hardware ---
+    # --- Insulators / ABC / PVC ---
     if fam == "ABC":
         # Suspension on tangent-ish; anchoring on dead-end / sectional
         loc = kit.get("location") or kit.get("position")
@@ -226,6 +213,9 @@ def seed_structure_kit(kit: dict) -> list[dict]:
         if voltage == "LT":
             lines.append(line("508040441", poles * 2))  # shackle LT
             lines.append(line("L0042", poles * 2))
+    elif fam == "PVC":
+        # LT PVC cable — no bare-conductor pin/disc; cable km is on conductor kits.
+        pass
     else:
         if voltage == "LT":
             lines.append(line("508040441", pin_disc_qty(kit, "pin")))
@@ -322,6 +312,11 @@ def seed_conductor_kit(kit: dict) -> list[dict]:
             lines.append(line("L0053", 1000))
         return lines
 
+    if fam == "PVC":
+        # Drawal of PVC cable (Mat/Lab starter — refine per size in Assembly Builder)
+        lines.append(line("L0033", 1))
+        return lines
+
     # ACSR stringing labour (per KM in Lab sheet)
     if voltage == "LT":
         if wire == "2W":
@@ -356,10 +351,13 @@ def seed_guarding_kit(kit: dict) -> list[dict]:
 
 
 def apply_seeds(matrix: dict) -> dict:
+    from _kit_codes import attach_structure_codes
+
     for kit in matrix.get("structureKits") or []:
         kit["lines"] = seed_structure_kit(kit)
         kit["complete"] = False
         kit["seeded"] = True
+        attach_structure_codes(kit)
     for kit in matrix.get("conductorKits") or []:
         kit["lines"] = seed_conductor_kit(kit)
         kit["complete"] = False
@@ -369,9 +367,11 @@ def apply_seeds(matrix: dict) -> dict:
             kit["lines"] = seed_guarding_kit(kit)
             kit["complete"] = False
             kit["seeded"] = True
-    matrix["seedVersion"] = 4
+    matrix["seedVersion"] = 6
     matrix["seedNote"] = (
         "Pre-seeded from Mat/Lab + domain rules. "
+        "Structure kits carry short `code` incl. pole token (see poleVariants). "
+        "LT PVC structure + conductor kits from Mat list. "
         "Review quantities; add/remove/edit freely in the Assembly Builder."
     )
     return matrix

@@ -40,15 +40,16 @@ object ConductorTagMap {
     /** Size-agnostic structure conductorIds (LT all; some 11kV). */
     fun agnosticConductorIds(voltage: VoltageLevel, tag: String?): List<String> {
         if (tag.isNullOrBlank()) return emptyList()
-        if (NetworkCatalog.isPvcConductor(tag)) return emptyList()
         return when (voltage) {
-            VoltageLevel.LT -> if (NetworkCatalog.isAbcConductor(tag)) {
-                listOf("LT|ANY|ABC")
-            } else {
-                listOf("LT|ANY|ACSR")
+            VoltageLevel.LT -> when {
+                NetworkCatalog.isPvcConductor(tag) -> listOf("LT|ANY|PVC")
+                NetworkCatalog.isAbcConductor(tag) -> listOf("LT|ANY|ABC")
+                else -> listOf("LT|ANY|ACSR")
             }
             VoltageLevel.KV_11 -> if (NetworkCatalog.isAbcConductor(tag)) {
                 listOf("11kV|ANY|ABC", "ABC|HT|3x95")
+            } else if (NetworkCatalog.isPvcConductor(tag)) {
+                emptyList()
             } else {
                 listOf("11kV|ANY|ACSR")
             }
@@ -58,7 +59,7 @@ object ConductorTagMap {
 
     fun conductorFamily(tag: String?): String? {
         if (tag.isNullOrBlank()) return null
-        if (NetworkCatalog.isPvcConductor(tag)) return null
+        if (NetworkCatalog.isPvcConductor(tag)) return "PVC"
         if (NetworkCatalog.isAbcConductor(tag)) return "ABC"
         return "ACSR"
     }

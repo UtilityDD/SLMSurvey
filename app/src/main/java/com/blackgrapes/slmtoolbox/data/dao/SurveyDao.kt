@@ -79,6 +79,50 @@ interface SurveyDao {
     @Query("DELETE FROM surveys WHERE id = :surveyId")
     suspend fun deleteSurvey(surveyId: Long)
 
+    /** Partial meta update — never touches isSavedWorkspace / savedAt (avoids save race). */
+    @Query(
+        """
+        UPDATE surveys
+        SET title = :title,
+            linemanName = :linemanName,
+            linemanMobile = :linemanMobile,
+            updatedAt = :updatedAt
+        WHERE id = :surveyId
+        """
+    )
+    suspend fun updateSurveyMetaFields(
+        surveyId: Long,
+        title: String,
+        linemanName: String,
+        linemanMobile: String,
+        updatedAt: Long
+    )
+
+    /** Mark survey as a My Maps workspace in one write (name + surveyor + flag). */
+    @Query(
+        """
+        UPDATE surveys
+        SET title = :title,
+            linemanName = :linemanName,
+            linemanMobile = :linemanMobile,
+            isSavedWorkspace = 1,
+            savedAt = :savedAt,
+            updatedAt = :updatedAt
+        WHERE id = :surveyId
+        """
+    )
+    suspend fun markWorkspaceSaved(
+        surveyId: Long,
+        title: String,
+        linemanName: String,
+        linemanMobile: String,
+        savedAt: Long,
+        updatedAt: Long
+    ): Int
+
+    @Query("SELECT * FROM surveys WHERE isSavedWorkspace = 0 ORDER BY updatedAt DESC LIMIT 1")
+    suspend fun getLatestDraftSurvey(): SurveyEntity?
+
     @Query("SELECT * FROM survey_connections WHERE id = :connectionId")
     suspend fun getConnectionWithDetails(connectionId: Long): SurveyConnectionEntity?
 

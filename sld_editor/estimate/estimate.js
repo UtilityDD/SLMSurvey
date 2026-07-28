@@ -18,6 +18,10 @@
     licenses: [],
     boqSurvey: null,
     boqReport: null,
+    /** Editable abstract % extras (WB-style). */
+    boqExtras: null,
+    /** Expanded family keys on the structure board (By family view). */
+    expandedFamilies: new Set(),
   };
 
   const $ = (id) => document.getElementById(id);
@@ -70,7 +74,6 @@
     if (kit.family === "structure") {
       const loc = kit.locationLabel || kit.position || "";
       const arr = kit.arrangementLabel ? ` · ${kit.arrangementLabel}` : "";
-      // Size-agnostic kits (LT; 11kV 1P Tangent In-line): show family + wire, not Rabbit/Dog/etc.
       const agnostic = !!kit.conductorSizeAgnostic;
       const cond = agnostic
           ? ""
@@ -86,6 +89,8 @@
             : "";
       const ext = kit.extensionLabel ? ` · ${kit.extensionLabel}` : "";
       const dtr = kit.dtrCapacityLabel ? ` · ${kit.dtrCapacityLabel}` : "";
+      // Pole is a variant (code + chips), not part of the config name — avoid
+      // "9m PCC" in the title when 8M/RL/… are also allowed on the same kit.
       return `${kit.voltage} · ${kit.structureLabel} · ${loc}${arr}${cond}${fam}${wire}${ext}${dtr}`;
     }
     if (kit.family === "conductor") {
@@ -97,6 +102,34 @@
       return `${kit.voltage} · ${kit.label}${struct}`;
     }
     return `${kit.voltage} · ${kit.label}`;
+  }
+
+  function kitCode(kit, preferredPoleToken) {
+    if (!kit) return "";
+    if (preferredPoleToken && Array.isArray(kit.poleVariants)) {
+      const hit = kit.poleVariants.find((v) => v.poleToken === preferredPoleToken);
+      if (hit?.code) return hit.code;
+    }
+    return kit.code || "";
+  }
+
+  function activePoleFilter() {
+    return ($("filterPole")?.value || "").trim();
+  }
+
+  function kitSearchBlob(kit) {
+    const bits = [
+      kitTitle(kit),
+      kitCode(kit),
+      kit.familyKey || "",
+      kit.poleToken || "",
+      kit.poleLabel || "",
+      kit.id || "",
+    ];
+    for (const v of kit.poleVariants || []) {
+      bits.push(v.code || "", v.poleToken || "", v.poleLabel || "");
+    }
+    return bits.join(" ").toLowerCase();
   }
 
   function kitLineCounts(kit) {
@@ -114,11 +147,14 @@
     const basis =
       state.matrix?.qtyBasisLabels?.[kit.qtyBasis] || kit.qtyBasis || "";
     const { mat, lab, total } = kitLineCounts(kit);
-    const height =
-      kit.poleHeightHint ? ` · Pole ${kit.poleHeightHint}` : "";
     if (kit.family === "addon") {
       return `${kit.hint || ""} · ${basis} · ${mat} mat · ${lab} lab`;
     }
+    // Custom kits may still carry a free-text pole hint; matrix poles use chips.
+    const height =
+      kit.custom && (kit.poleLabel || kit.poleHeightHint)
+        ? ` · Pole ${kit.poleLabel || kit.poleHeightHint}`
+        : "";
     return `${basis}${height} · ${mat} mat · ${lab} lab · ${total} items`;
   }
 
@@ -352,8 +388,10 @@
     const location = $("filterLocation")?.value || "";
     const arrangement = $("filterArrangement")?.value || "";
     const extension = $("filterExtension")?.value || "";
+    const pole = $("filterPole")?.value || "";
     const status = $("filterStatus").value;
     const origin = $("filterOrigin")?.value || "";
+    const showDtr = !!$("filterShowDtr")?.checked;
 
     let rows = kitsForTab();
     const tabTotal = rows.length;
@@ -364,6 +402,13 @@
       } else {
         rows = rows.filter((k) => k.structure === structure);
       }
+    } else if (
+      state.tab === "structure" &&
+      !showDtr &&
+      !String(structure || "").startsWith("DTR")
+    ) {
+      // Default: hide DTR mount kits until Show DTR is on (or structure=DTR*).
+      rows = rows.filter((k) => !k.isDtr && !(k.structure || "").startsWith("DTR"));
     }
     if (conductor) rows = rows.filter((k) => k.conductorId === conductor);
     if (wire) {
@@ -381,11 +426,17 @@
     }
     if (arrangement) rows = rows.filter((k) => k.arrangement === arrangement);
     if (extension) rows = rows.filter((k) => k.extension === extension);
+    if (pole) {
+      rows = rows.filter((k) => {
+        if (k.poleToken === pole) return true;
+        return (k.poleVariants || []).some((v) => v.poleToken === pole);
+      });
+    }
     if (status) rows = rows.filter((k) => kitStatus(k) === status);
     if (origin === "custom") rows = rows.filter((k) => k.custom);
     if (origin === "matrix") rows = rows.filter((k) => !k.custom);
     if (q) {
-      rows = rows.filter((k) => kitTitle(k).toLowerCase().includes(q));
+      rows = rows.filter((k) => kitSearchBlob(k).includes(q));
     }
     return { rows, tabTotal };
   }
@@ -395,6 +446,13 @@
     if (!el) return;
     const s = countByStatus(rows);
     const parts = [`${rows.length} of ${tabTotal}`];
+    if (
+      state.tab === "structure" &&
+      ($("boardViewMode")?.value || "family") === "family"
+    ) {
+      const fams = new Set(rows.map((k) => familyKeyOf(k)));
+      parts.push(`${fams.size} families`);
+    }
     if (s.final) parts.push(`${s.final} final`);
     if (s.draft) parts.push(`${s.draft} draft`);
     if (s.empty) parts.push(`${s.empty} empty`);
@@ -507,9 +565,9 @@
     let allowed = voltage && rules[voltage]?.structures
       ? new Set(rules[voltage].structures)
       : null;
-    // 33kV T-Off is only from existing DP (2P) or 4P
+    // 33kV T-Off allowed for 1P–4P (see domainRules.tOffOnly)
     if (allowed && voltage === "33kV" && loc === "T-Off") {
-      const tOffOnly = rules["33kV"]?.tOffOnly || ["2P", "4P"];
+      const tOffOnly = rules["33kV"]?.tOffOnly || ["1P", "2P", "3P", "4P"];
       allowed = new Set(tOffOnly);
     }
     [...sel.options].forEach((opt) => {
@@ -522,6 +580,61 @@
     if (sel.value && allowed && !allowed.has(sel.value)) {
       sel.value = "";
     }
+  }
+
+  function familyKeyOf(kit) {
+    if (kit.familyKey) return kit.familyKey;
+    const v = (kit.voltage || "?").replace("kV", "");
+    return `${v}|${kit.structure || "?"}`;
+  }
+
+  function familyHeading(familyKey, sample) {
+    if (sample) {
+      const label = sample.structureLabel || sample.structure || "";
+      return `${sample.voltage || "?"} · ${label}`.trim();
+    }
+    return String(familyKey || "?").replace("|", " · ");
+  }
+
+  function renderKitRow(kit) {
+    const st = kitStatus(kit);
+    const counts = kitLineCounts(kit);
+    const items =
+      counts.total > 0 ? `${counts.mat + counts.lab} items` : "No items yet";
+    const poleFilter = activePoleFilter();
+    const code = kitCode(kit, poleFilter || undefined);
+    const poles = (kit.poleVariants || [])
+      .map((v) => v.poleToken)
+      .filter(Boolean);
+    const poleHtml =
+      poles.length > 0
+        ? `<span class="est-row-poles">${poles
+            .map((t) => {
+              const on =
+                (poleFilter && t === poleFilter) ||
+                (!poleFilter && t === kit.poleToken);
+              return `<span class="est-pole-chip${on ? " is-active" : ""}">${escapeHtml(
+                t
+              )}</span>`;
+            })
+            .join("")}</span>`
+        : "";
+    const bits = [kitSubtitle(kit), items];
+    if (kit.custom) bits.push("custom");
+    const codeHtml = code
+      ? `<span class="est-kit-code" title="Kit code">${escapeHtml(code)}</span>`
+      : "";
+    return `
+      <button type="button" class="est-row ${st === "off" ? "disabled-row" : ""}" data-open="${escapeAttr(kit.id)}">
+        <span class="est-row-main">
+          ${codeHtml}
+          <span class="est-row-title">${escapeHtml(kitTitle(kit))}</span>
+          ${poleHtml}
+          <span class="est-row-meta">${escapeHtml(bits.filter(Boolean).join(" · "))}</span>
+        </span>
+        <span class="est-badge ${st}">${statusLabel(st)}</span>
+      </button>
+    `;
   }
 
   function renderBoard() {
@@ -537,6 +650,7 @@
     if (more) {
       const secondaryIds = [
         "filterStructure",
+        "filterPole",
         "filterOrigin",
         "filterConductor",
         "filterDtrCapacity",
@@ -545,7 +659,8 @@
         "filterArrangement",
         "filterExtension",
       ];
-      if (secondaryIds.some((id) => $(id)?.value)) more.open = true;
+      const dtrOn = !!$("filterShowDtr")?.checked;
+      if (secondaryIds.some((id) => $(id)?.value) || dtrOn) more.open = true;
     }
 
     if (!rows.length) {
@@ -553,30 +668,71 @@
       return;
     }
 
-    list.innerHTML = rows
-      .map((kit) => {
-        const st = kitStatus(kit);
-        const counts = kitLineCounts(kit);
-        const items =
-          counts.total > 0
-            ? `${counts.mat + counts.lab} items`
-            : "No items yet";
-        const bits = [kitSubtitle(kit), items];
-        if (kit.custom) bits.push("custom");
-        return `
-          <button type="button" class="est-row ${st === "off" ? "disabled-row" : ""}" data-open="${escapeAttr(kit.id)}">
-            <span class="est-row-main">
-              <span class="est-row-title">${escapeHtml(kitTitle(kit))}</span>
-              <span class="est-row-meta">${escapeHtml(bits.filter(Boolean).join(" · "))}</span>
-            </span>
-            <span class="est-badge ${st}">${statusLabel(st)}</span>
+    const byFamily =
+      state.tab === "structure" &&
+      ($("boardViewMode")?.value || "family") === "family";
+
+    if (!byFamily) {
+      list.innerHTML = rows.map((kit) => renderKitRow(kit)).join("");
+      list.querySelectorAll("[data-open]").forEach((btn) => {
+        btn.addEventListener("click", () => openEditor(btn.getAttribute("data-open")));
+      });
+      return;
+    }
+
+    const byFam = new Map();
+    for (const kit of rows) {
+      const fk = familyKeyOf(kit);
+      if (!byFam.has(fk)) byFam.set(fk, []);
+      byFam.get(fk).push(kit);
+    }
+    const familyKeys = [...byFam.keys()].sort((a, b) => a.localeCompare(b));
+    const forceExpand =
+      !!($("boardSearch").value || "").trim() || familyKeys.length === 1;
+
+    list.innerHTML = familyKeys
+      .map((fk) => {
+        const famRows = byFam.get(fk);
+        const sample = famRows[0];
+        const expanded = forceExpand || state.expandedFamilies.has(fk);
+        const s = countByStatus(famRows);
+        const poleSet = [
+          ...new Set(
+            famRows.flatMap((k) =>
+              (k.poleVariants || []).map((v) => v.poleToken).filter(Boolean)
+            )
+          ),
+        ].sort();
+        const body = expanded
+          ? `<div class="est-family-body">${famRows.map((k) => renderKitRow(k)).join("")}</div>`
+          : "";
+        return `<div class="est-family ${expanded ? "is-open" : ""}" data-family="${escapeAttr(fk)}">
+          <button type="button" class="est-family-head" data-family-toggle="${escapeAttr(fk)}">
+            <span class="est-family-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
+            <span class="est-family-title">${escapeHtml(familyHeading(fk, sample))}</span>
+            <span class="est-family-meta">${famRows.length} kits · ${s.final || 0} final · ${s.draft || 0} draft</span>
+            <span class="est-family-poles">${poleSet
+              .map((t) => `<span class="est-pole-chip">${escapeHtml(t)}</span>`)
+              .join("")}</span>
           </button>
-        `;
+          ${body}
+        </div>`;
       })
       .join("");
 
+    list.querySelectorAll("[data-family-toggle]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const fk = btn.getAttribute("data-family-toggle");
+        if (state.expandedFamilies.has(fk)) state.expandedFamilies.delete(fk);
+        else state.expandedFamilies.add(fk);
+        renderBoard();
+      });
+    });
     list.querySelectorAll("[data-open]").forEach((btn) => {
-      btn.addEventListener("click", () => openEditor(btn.getAttribute("data-open")));
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditor(btn.getAttribute("data-open"));
+      });
     });
   }
 
@@ -613,6 +769,202 @@
     `;
   }
 
+  function polesQty(kit) {
+    const st = String(kit?.structure || "");
+    if (st === "DTR2P" || st === "2P") return 2;
+    if (st === "3P") return 3;
+    if (st === "DTR4P" || st === "4P") return 4;
+    return 1;
+  }
+
+  function poleMatCodeSet() {
+    const set = new Set();
+    for (const p of state.matrix?.poleOptions || []) {
+      if (p.code) set.add(p.code);
+    }
+    // Fallback known Mat pole codes
+    for (const c of [
+      "110030141",
+      "110030241",
+      "110010341",
+      "110011541",
+      "110010741",
+      "110020711",
+      "110051211",
+    ]) {
+      set.add(c);
+    }
+    return set;
+  }
+
+  function erectionLabCodeSet(kit) {
+    const set = new Set([
+      "L0005",
+      "L0006",
+      "L0007",
+      "L0008",
+      "L0009",
+      "L0010",
+      "L0011",
+      "L0084",
+      "L0085",
+      "L0086",
+      "L0091",
+      "L0092",
+      "L0093",
+    ]);
+    for (const v of kit?.poleVariants || []) {
+      for (const c of v.labourCodes || []) set.add(c);
+    }
+    return set;
+  }
+
+  function labourCodesForVariant(kit, variant) {
+    if (Array.isArray(variant?.labourCodes) && variant.labourCodes.length) {
+      return variant.labourCodes;
+    }
+    // Fallback if matrix predates labourCodes on variants
+    const st = String(kit?.structure || "");
+    const m =
+      st === "DTR2P" || st === "2P"
+        ? "2P"
+        : st === "3P"
+          ? "3P"
+          : st === "DTR4P" || st === "4P"
+            ? "4P"
+            : "1P";
+    const tok = variant?.poleToken || "";
+    const voltage = kit?.voltage || "";
+    if (tok === "RL" || tok === "WF") {
+      return { "1P": ["L0084"], "2P": ["L0085"], "3P": ["L0085"], "4P": ["L0086"] }[m];
+    }
+    if (tok === "8M") {
+      if (voltage === "LT" && m === "1P") return ["L0007"];
+      return { "1P": ["L0006"], "2P": ["L0009"], "3P": ["L0010"], "4P": ["L0091"] }[m];
+    }
+    if (voltage === "LT" && m === "1P") return ["L0007"];
+    return { "1P": ["L0005"], "2P": ["L0008"], "3P": ["L0010"], "4P": ["L0011"] }[m];
+  }
+
+  /** Swap kit lines to the selected pole mat (+ erection lab if in ratebook). */
+  function applyPoleVariant(kit, variant) {
+    if (!state.draft || !variant) return;
+    const idx = itemIndex();
+    const matCode = variant.matCode || variant.poleCode || "";
+    const labCodes = labourCodesForVariant(kit, variant);
+    const poleMats = poleMatCodeSet();
+    const erectionLabs = erectionLabCodeSet(kit);
+    const qty = polesQty(kit);
+
+    state.draft.lines = (state.draft.lines || []).filter(
+      (l) => !poleMats.has(l.code) && !erectionLabs.has(l.code)
+    );
+
+    let addedMat = false;
+    let addedLab = 0;
+    if (matCode && idx.has(matCode)) {
+      const item = idx.get(matCode);
+      state.draft.lines.unshift({
+        code: matCode,
+        type: item.type || "material",
+        qty,
+      });
+      addedMat = true;
+    }
+    for (const lc of labCodes) {
+      if (!idx.has(lc)) continue;
+      const item = idx.get(lc);
+      state.draft.lines.push({
+        code: lc,
+        type: item.type || "labour",
+        qty: 1,
+      });
+      addedLab += 1;
+    }
+
+    state.draft.activePoleToken = variant.poleToken || "";
+    state.draft.activePoleCode = matCode;
+    markDraftDirty();
+    renderKitLines();
+    renderEditorSummary();
+
+    const kitCodeStr = variant.code || "";
+    if ($("editorSub") && kitCodeStr) {
+      const bits = ($("editorSub").textContent || "")
+        .split(" · ")
+        .filter((b) => b && !b.startsWith("Code "));
+      $("editorSub").textContent = [`Code ${kitCodeStr}`, ...bits].join(" · ");
+      $("editorSub").classList.remove("hidden");
+    }
+
+    if (!addedMat && !addedLab) {
+      toast(
+        matCode
+          ? `Pole ${variant.poleToken || matCode} not found in ratebook`
+          : "No pole code on this variant"
+      );
+      return;
+    }
+    const parts = [];
+    if (addedMat) parts.push(variant.poleLabel || variant.poleToken || matCode);
+    if (addedLab) parts.push(`${addedLab} lab`);
+    toast(`Pole set · ${parts.join(" · ")}`);
+  }
+
+  function renderEditorPoleVariants(kit) {
+    const host = $("editorPoleVariants");
+    if (!host) return;
+    const variants = kit.poleVariants || [];
+    if (kit.family !== "structure" || variants.length < 1) {
+      host.classList.add("hidden");
+      host.innerHTML = "";
+      return;
+    }
+    const idx = itemIndex();
+    const activeToken =
+      state.draft?.activePoleToken || kit.poleToken || "";
+    host.classList.remove("hidden");
+    host.innerHTML =
+      `<span class="ed-pole-label">Pole variants</span>` +
+      variants
+        .map((v, i) => {
+          const matCode = v.matCode || v.poleCode || "";
+          const hasMat = !!(matCode && idx.has(matCode));
+          const labCodes = labourCodesForVariant(kit, v);
+          const hasLab = labCodes.some((c) => idx.has(c));
+          const active = activeToken
+            ? v.poleToken === activeToken
+            : !!v.isDefault;
+          const tip = [
+            v.poleLabel || v.poleToken || "",
+            hasMat ? `Mat ${matCode}` : matCode ? `Mat ${matCode} missing` : "No mat",
+            hasLab
+              ? `Lab ${labCodes.filter((c) => idx.has(c)).join(",")}`
+              : labCodes.length
+                ? "Lab missing"
+                : "No lab",
+            "Click to load into kit",
+          ].join(" · ");
+          return `<button type="button" class="est-pole-chip est-pole-chip-btn ${
+            active ? "is-active" : ""
+          } ${!hasMat ? "is-missing" : ""}" data-pole-idx="${i}" title="${escapeAttr(
+            tip
+          )}">${escapeHtml(v.poleToken || "?")}<span class="est-pole-chip-code">${escapeHtml(
+            v.code || matCode || ""
+          )}</span></button>`;
+        })
+        .join("");
+    host.querySelectorAll("[data-pole-idx]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-pole-idx"));
+        const variant = variants[i];
+        if (!variant) return;
+        applyPoleVariant(kit, variant);
+        renderEditorPoleVariants(kit);
+      });
+    });
+  }
+
   function openEditor(kitId) {
     const kit = state.kitsById[kitId];
     if (!kit) return;
@@ -622,6 +974,8 @@
       complete: kit.complete,
       notes: kit.notes || "",
       lines: (kit.lines || []).map((l) => ({ ...l })),
+      activePoleToken: kit.poleToken || "",
+      activePoleCode: kit.poleCode || "",
       _dirty: false,
     };
 
@@ -632,9 +986,16 @@
 
     $("editorTitle").textContent = kitTitle(kit);
     if ($("editorSub")) {
-      $("editorSub").textContent = "";
-      $("editorSub").classList.add("hidden");
+      const code = kitCode(kit);
+      const subBits = [
+        code ? `Code ${code}` : "",
+        kit.familyKey ? `Family ${kit.familyKey}` : "",
+        kit.id ? `id ${kit.id}` : "",
+      ].filter(Boolean);
+      $("editorSub").textContent = subBits.join(" · ");
+      $("editorSub").classList.toggle("hidden", !subBits.length);
     }
+    renderEditorPoleVariants(kit);
     $("kitEnabled").checked = !!state.draft.enabled;
     if ($("kitFinal")) $("kitFinal").checked = !!state.draft.complete;
     if ($("kitComplete")) $("kitComplete").checked = !!state.draft.complete;
@@ -1198,6 +1559,48 @@
     renderBoqPanel();
   }
 
+  const BOQ_EXTRAS_KEY = "slm_estimate_boq_extras_v1";
+
+  function loadBoqExtras() {
+    try {
+      const raw = localStorage.getItem(BOQ_EXTRAS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      }
+    } catch {
+      /* ignore */
+    }
+    return window.SlmEstimateMatch
+      ? window.SlmEstimateMatch.defaultExtras()
+      : [
+          { id: "cont_mat", label: "Contingency on Material", applyTo: "material", pct: 3 },
+          { id: "cont_lab", label: "Contingency on Labour", applyTo: "labour", pct: 3 },
+          { id: "gst", label: "GST", applyTo: "after_extras", pct: 18 },
+          { id: "cess", label: "Labour Cess", applyTo: "after_gst", pct: 1 },
+        ];
+  }
+
+  function saveBoqExtras() {
+    try {
+      localStorage.setItem(BOQ_EXTRAS_KEY, JSON.stringify(state.boqExtras || []));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function refreshBoqAbstract() {
+    const report = state.boqReport;
+    if (!report || !window.SlmEstimateMatch) return;
+    report.abstract = window.SlmEstimateMatch.computeAbstract(
+      report.materialTotal || 0,
+      report.labourTotal || 0,
+      state.boqExtras
+    );
+    report.totalAmount = report.abstract.grandTotal;
+    renderBoqPanel();
+  }
+
   function generateBoq() {
     if (!state.boqSurvey) {
       toast("Import a survey workspace first");
@@ -1207,24 +1610,144 @@
       toast("Estimate matcher failed to load");
       return;
     }
+    if (!state.boqExtras) state.boqExtras = loadBoqExtras();
     mergeKits();
     const kits = Object.values(state.kitsById);
     const report = window.SlmEstimateMatch.buildReport(
       state.boqSurvey,
       kits,
-      state.ratebook
+      state.ratebook,
+      state.boqExtras
     );
     state.boqReport = report;
     $("btnBoqExport").disabled = false;
     $("btnBoqCopy").disabled = false;
     const countEl = $("tabCountBoq");
-    if (countEl) countEl.textContent = String(report.lines.length);
+    const n =
+      (report.materialSchedule?.length || 0) + (report.labourSchedule?.length || 0);
+    if (countEl) countEl.textContent = String(n);
     renderBoqPanel();
     toast(
-      report.lines.length
-        ? `BOQ: ${report.lines.length} line(s), ${report.gaps.length} gap(s)`
-        : `No Final matches — ${report.gaps.length} gap(s)`
+      n
+        ? `Estimate: ${report.materialSchedule.length} mat · ${report.labourSchedule.length} lab · ${report.gaps.length} gap(s)`
+        : `No schedule lines — ${report.gaps.length} gap(s)`
     );
+  }
+
+  function fmtQty(q) {
+    if (q == null || Number.isNaN(q)) return "—";
+    return q === Math.floor(q) ? String(q) : Number(q).toFixed(3);
+  }
+
+  function renderScheduleTable(title, rows, total) {
+    if (!rows?.length) {
+      return `<h3 class="boq-section">${escapeHtml(title)}</h3>
+        <div class="est-empty">No items</div>`;
+    }
+    const body = rows
+      .map(
+        (r) => `<tr>
+        <td class="boq-num">${r.sl}</td>
+        <td class="boq-code">${escapeHtml(r.code)}</td>
+        <td class="boq-desc">${escapeHtml(r.description)}</td>
+        <td>${escapeHtml(r.unit)}</td>
+        <td class="boq-num">${escapeHtml(fmtQty(r.qty))}</td>
+        <td class="boq-num">${escapeHtml(window.SlmEstimateMatch.moneyPlain(r.rate))}</td>
+        <td class="boq-num">${escapeHtml(window.SlmEstimateMatch.moneyPlain(r.amount))}</td>
+      </tr>`
+      )
+      .join("");
+    return `<h3 class="boq-section">${escapeHtml(title)}</h3>
+      <div class="boq-table-wrap">
+        <table class="boq-table">
+          <thead>
+            <tr>
+              <th>Sl.</th>
+              <th>Code</th>
+              <th>Description of item</th>
+              <th>Unit</th>
+              <th>Qty</th>
+              <th>Rate (₹)</th>
+              <th>Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody>${body}</tbody>
+          <tfoot>
+            <tr>
+              <td colspan="6" class="boq-total-label">Total</td>
+              <td class="boq-num">${escapeHtml(
+                window.SlmEstimateMatch.moneyPlain(total)
+              )}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>`;
+  }
+
+  function renderAbstractBlock(report) {
+    if (!state.boqExtras) state.boqExtras = loadBoqExtras();
+    const abs = report.abstract || {};
+    const applyLabels = {
+      material: "on Material",
+      labour: "on Labour",
+      both: "on Mat+Lab",
+      after_extras: "after extras",
+      after_gst: "after GST",
+    };
+    const extraRows = state.boqExtras
+      .map((ex, i) => {
+        return `<tr>
+          <td>${escapeHtml(ex.label)}</td>
+          <td class="boq-muted">${escapeHtml(applyLabels[ex.applyTo] || ex.applyTo)}</td>
+          <td>
+            <input type="number" class="boq-pct-input" data-extra-idx="${i}" min="0" max="100" step="0.1" value="${
+              Number(ex.pct) || 0
+            }" /> %
+          </td>
+        </tr>`;
+      })
+      .join("");
+
+    const steps = (abs.steps || [])
+      .map(
+        (s) => `<tr class="${s.id === "subtotal" || s.id === "mat" || s.id === "lab" ? "boq-abs-key" : ""}">
+          <td colspan="2">${escapeHtml(s.label)}</td>
+          <td class="boq-num">${escapeHtml(
+            window.SlmEstimateMatch.moneyPlain(s.amount)
+          )}</td>
+        </tr>`
+      )
+      .join("");
+
+    return `<h3 class="boq-section">Abstract / Summary</h3>
+      <div class="boq-abstract-grid">
+        <div class="boq-extras-card">
+          <div class="boq-extras-title">Editable extras (%)</div>
+          <table class="boq-table boq-extras-table">
+            <thead><tr><th>Item</th><th>Applies</th><th>%</th></tr></thead>
+            <tbody>${extraRows}</tbody>
+          </table>
+          <p class="boq-hint">Change % and totals update (saved in this browser).</p>
+        </div>
+        <div class="boq-abs-card">
+          <table class="boq-table">
+            <tbody>
+              ${steps}
+              <tr class="boq-grand">
+                <td colspan="2"><strong>Grand Total (say)</strong></td>
+                <td class="boq-num"><strong>${escapeHtml(
+                  window.SlmEstimateMatch.moneyPlain(
+                    abs.grandTotalRounded ?? abs.grandTotal
+                  )
+                )}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+          <p class="boq-words"><strong>Amount in words:</strong> ${escapeHtml(
+            abs.amountInWords || ""
+          )}</p>
+        </div>
+      </div>`;
   }
 
   function renderBoqPanel() {
@@ -1238,47 +1761,36 @@
       return;
     }
     if (!report) {
-      summary.innerHTML = `<span class="est-chip">Survey ready</span> <span class="muted">Click <strong>Generate BOQ</strong> to match Final kits.</span>`;
+      summary.innerHTML = `<span class="est-chip">Survey ready</span> <span class="muted">Click <strong>Generate BOQ</strong> for WB-style Mat / Lab schedules.</span>`;
       list.innerHTML = "";
       return;
     }
+    const M = window.SlmEstimateMatch;
     summary.innerHTML = `
       <span class="est-chip"><strong>${report.proposedPoles}</strong> Proposed</span>
-      <span class="est-chip"><strong>${report.readyPoles}</strong> ready</span>
-      <span class="est-chip"><strong>${report.matchedStructures}</strong> structures matched</span>
-      <span class="est-chip"><strong>${report.matchedConductorKm.toFixed(3)}</strong> km conductor</span>
-      ${
-        report.totalAmount != null
-          ? `<span class="est-chip complete"><strong>${window.SlmEstimateMatch.money(
-              report.totalAmount
-            )}</strong> kit total</span>`
-          : `<span class="est-chip">Amounts appear when Final kits have Mat/Lab lines</span>`
-      }
+      <span class="est-chip"><strong>${report.matchedStructures}</strong> structures</span>
+      <span class="est-chip"><strong>${(report.matchedConductorKm || 0).toFixed(3)}</strong> km conductor</span>
+      <span class="est-chip"><strong>${M.money(report.materialTotal)}</strong> Mat</span>
+      <span class="est-chip"><strong>${M.money(report.labourTotal)}</strong> Lab</span>
+      <span class="est-chip complete"><strong>${M.money(
+        report.abstract?.grandTotalRounded ?? report.totalAmount
+      )}</strong> Grand</span>
     `;
+
     let html = "";
-    if (report.lines.length) {
-      html += `<h3 class="boq-section">BOQ (Final kits)</h3>`;
-      html += report.lines
-        .map((row) => {
-          const qty =
-            row.qty === Math.floor(row.qty) ? String(row.qty) : row.qty.toFixed(3);
-          const amt =
-            row.amount != null
-              ? `<div class="boq-amt">${window.SlmEstimateMatch.money(row.amount)}</div>`
-              : "";
-          return `<div class="boq-row">
-            <div class="boq-kind">${escapeHtml(row.kind)}</div>
-            <div class="boq-row-main">
-              <div class="boq-row-title">${escapeHtml(row.title)}</div>
-              ${row.detail ? `<div class="boq-row-detail">${escapeHtml(row.detail)}</div>` : ""}
-            </div>
-            <div class="boq-qty">${escapeHtml(qty)} ${escapeHtml(row.unit)}</div>
-            ${amt}
-          </div>`;
-        })
-        .join("");
-    }
-    if (report.gaps.length) {
+    html += renderScheduleTable(
+      "Schedule of Materials",
+      report.materialSchedule,
+      report.materialTotal
+    );
+    html += renderScheduleTable(
+      "Schedule of Labour",
+      report.labourSchedule,
+      report.labourTotal
+    );
+    html += renderAbstractBlock(report);
+
+    if (report.gaps?.length) {
       html += `<h3 class="boq-section boq-section-gap">Gaps</h3>`;
       html += report.gaps
         .map(
@@ -1288,23 +1800,28 @@
               <div class="boq-row-title">${escapeHtml(row.title)}</div>
               ${row.detail ? `<div class="boq-row-detail">${escapeHtml(row.detail)}</div>` : ""}
             </div>
-            <div class="boq-qty">${
-              row.qty > 0
-                ? `${escapeHtml(
-                    row.qty === Math.floor(row.qty)
-                      ? String(row.qty)
-                      : row.qty.toFixed(3)
-                  )} ${escapeHtml(row.unit || "")}`
-                : ""
-            }</div>
           </div>`
         )
         .join("");
     }
-    if (!html) {
-      html = `<div class="est-empty">No Proposed work in this survey.</div>`;
-    }
     list.innerHTML = html;
+
+    list.querySelectorAll("[data-extra-idx]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const i = Number(input.getAttribute("data-extra-idx"));
+        if (!state.boqExtras?.[i]) return;
+        state.boqExtras[i].pct = Number(input.value) || 0;
+        saveBoqExtras();
+        refreshBoqAbstract();
+      });
+      input.addEventListener("input", () => {
+        const i = Number(input.getAttribute("data-extra-idx"));
+        if (!state.boqExtras?.[i]) return;
+        state.boqExtras[i].pct = Number(input.value) || 0;
+        saveBoqExtras();
+        refreshBoqAbstract();
+      });
+    });
   }
 
   function exportBoq() {
@@ -1362,6 +1879,20 @@
         }
       };
       reader.readAsText(file);
+    });
+    $("btnBoqLoadDemo")?.addEventListener("click", async () => {
+      try {
+        const res = await fetch("../demo/sample_workspace_33_11_lt.json");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setBoqSurvey(data, "demo survey");
+        toast("Demo survey loaded");
+      } catch (err) {
+        toast(
+          "Demo load failed — serve sld_editor over HTTP. " +
+            (err.message || err)
+        );
+      }
     });
     $("btnBoqFromCad")?.addEventListener("click", () => {
       if (tryLoadBoqFromSession()) {
@@ -2213,6 +2744,7 @@
     updatePermissionUi();
     refreshPendingBadge();
     wireBoqUi();
+    state.boqExtras = loadBoqExtras();
 
     const params = new URLSearchParams(location.search);
     const startTab = params.get("tab");
@@ -2227,12 +2759,13 @@
     document.querySelectorAll(".est-tab").forEach((tab) => {
       tab.addEventListener("click", () => showTab(tab.dataset.tab));
     });
-    ["boardSearch", "filterVoltage", "filterStructure", "filterConductor", "filterWire", "filterDtrCapacity", "filterLocation", "filterArrangement", "filterExtension", "filterStatus", "filterOrigin"].forEach((id) => {
+    ["boardSearch", "filterVoltage", "filterStructure", "filterConductor", "filterWire", "filterDtrCapacity", "filterLocation", "filterArrangement", "filterExtension", "filterPole", "filterStatus", "filterOrigin", "boardViewMode"].forEach((id) => {
       const el = $(id);
       if (!el) return;
       el.addEventListener("input", renderBoard);
       el.addEventListener("change", renderBoard);
     });
+    $("filterShowDtr")?.addEventListener("change", renderBoard);
     $("btnCloseEditor").addEventListener("click", () => closeEditor());
     $("btnSaveKit").addEventListener("click", () => saveKit());
     $("btnSuggestKit")?.addEventListener("click", () => submitSuggestion());

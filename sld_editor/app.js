@@ -376,6 +376,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     initImageCache();
     initDragAndDrop();
+    document.getElementById('btnLoadDemo')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        loadDemoWorkspace();
+    });
     initViewToggles();
     initToolbarEvents();
     initCanvasEvents();
@@ -550,6 +555,32 @@ function handleFile(file) {
         }
     };
     reader.readAsText(file);
+}
+
+/** Bundled demo survey under ./demo/ (no machine file pick). */
+async function loadDemoWorkspace() {
+    const url = './demo/sample_workspace_33_11_lt.json';
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (!data.surveyId || !data.assets) {
+            throw new Error('Invalid demo workspace structure');
+        }
+        loadWorkspace(data);
+        if (window.showToast) {
+            showToast('Demo survey loaded');
+        }
+    } catch (err) {
+        const msg =
+            'Could not load demo survey. Serve sld_editor over HTTP (not file://), then try again.\n\n' +
+            (err && err.message ? err.message : String(err));
+        if (window.SlmDialog) {
+            window.SlmDialog.alert({ title: 'Demo load failed', message: msg });
+        } else {
+            alert(msg);
+        }
+    }
 }
 
 // Load workspace variables

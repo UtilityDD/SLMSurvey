@@ -126,6 +126,7 @@ object ExportHelper {
                         put("kitExtension", asset.kitExtension)
                         put("dtrMount", asset.dtrMount)
                         put("kitWire", asset.kitWire)
+                        put("guarding", asset.guarding)
                         put("deviceLatitude", asset.deviceLatitude)
                         put("deviceLongitude", asset.deviceLongitude)
                         put("deviceAccuracyM", asset.deviceAccuracyM)

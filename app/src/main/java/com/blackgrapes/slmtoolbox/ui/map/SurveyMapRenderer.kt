@@ -19,6 +19,7 @@ import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
 import org.maplibre.android.annotations.IconFactory
 import org.maplibre.android.annotations.Marker
 import org.maplibre.android.annotations.MarkerOptions
+import org.maplibre.android.annotations.Polyline
 import org.maplibre.android.annotations.PolylineOptions
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -27,9 +28,24 @@ import org.maplibre.android.maps.MapLibreMap
 
 object SurveyMapRenderer {
 
+    /** Live tip→drop preview while continuing a series (before + place). */
+    data class ContinuePreviewHandle(
+        val lines: List<Polyline>,
+        val label: Marker?,
+        val ghost: Marker?
+    ) {
+        fun remove() {
+            lines.forEach { it.remove() }
+            label?.remove()
+            ghost?.remove()
+        }
+    }
+
     private val markerCache = object : LruCache<String, Bitmap>(96) {}
     private val spanLabelCache = object : LruCache<Int, Bitmap>(48) {}
+    private val previewLabelCache = object : LruCache<String, Bitmap>(32) {}
     private val lineTagCache = object : LruCache<String, Bitmap>(16) {}
+    private val ghostCache = object : LruCache<Int, Bitmap>(8) {}
 
     /**
      * Renders the survey onto the map.
@@ -71,6 +87,7 @@ object SurveyMapRenderer {
             val a = LatLng(from.latitude, from.longitude)
             val b = LatLng(to.latitude, to.longitude)
             val distM = measuredMetres.toDouble()
+            val guarded = from.guarding || to.guarding
             // All LT (1Ph/2Ph/3Ph/ABC) share the same simple stroke.
             if (connection.status == WorkStatus.PROPOSED) {
                 addDottedLine(
@@ -87,6 +104,15 @@ object SurveyMapRenderer {
                         .add(a, b)
                         .color(color)
                         .width(width)
+                )
+            }
+            if (guarded) {
+                addGuardedCrossMarks(
+                    map = map,
+                    from = a,
+                    to = b,
+                    distanceMetres = distM,
+                    color = color
                 )
             }
             val spanMetres = connection.spanLengthM
@@ -162,6 +188,121 @@ object SurveyMapRenderer {
     }
 
     /**
+     * Draws a live continue preview: soft halo + dashed voltage line, distance chip,
+     * and a ghost drop ring at the aiming point. [warn] uses error red for over-span.
+     */
+    fun showContinuePreview(
+        context: Context,
+        map: MapLibreMap,
+        from: LatLng,
+        to: LatLng,
+        distanceMetres: Double,
+        voltage: VoltageLevel,
+        warn: Boolean
+    ): ContinuePreviewHandle {
+        val lineColor = if (warn) {
+            ContextCompat.getColor(context, R.color.error)
+        } else {
+            colorFor(voltage, context)
+        }
+        val lines = mutableListOf<Polyline>()
+        // Soft halo under the dash for outdoor visibility
+        lines += map.addPolyline(
+            PolylineOptions()
+                .add(from, to)
+                .color(Color.argb(70, Color.red(lineColor), Color.green(lineColor), Color.blue(lineColor)))
+                .width(12f)
+        )
+        val dashGap = 10.0
+        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 16)
+        for (index in 0 until segmentCount) {
+            val startFraction = index.toDouble() / segmentCount
+            val endFraction = (startFraction + 0.48 / segmentCount).coerceAtMost(1.0)
+            lines += map.addPolyline(
+                PolylineOptions()
+                    .add(
+                        interpolate(from, to, startFraction),
+                        interpolate(from, to, endFraction)
+                    )
+                    .color(lineColor)
+                    .width(6.5f)
+            )
+        }
+        val mid = interpolate(from, to, 0.5)
+        val iconFactory = IconFactory.getInstance(context)
+        val label = map.addMarker(
+            MarkerOptions()
+                .position(mid)
+                .title("${distanceMetres.toInt()} m")
+                .icon(iconFactory.fromBitmap(createPreviewSpanLabelBitmap(distanceMetres, warn)))
+        )
+        val ghost = map.addMarker(
+            MarkerOptions()
+                .position(to)
+                .icon(iconFactory.fromBitmap(createGhostDropBitmap(lineColor)))
+        )
+        return ContinuePreviewHandle(lines = lines, label = label, ghost = ghost)
+    }
+
+    private fun createPreviewSpanLabelBitmap(spanMetres: Double, warn: Boolean): Bitmap {
+        val metres = spanMetres.toInt()
+        val key = "$metres|${if (warn) 1 else 0}"
+        previewLabelCache.get(key)?.let { return it }
+        val label = "$metres m"
+        val accent = if (warn) Color.parseColor("#C62828") else Color.parseColor("#0F172A")
+        val fill = if (warn) Color.parseColor("#FFEBEE") else Color.argb(240, 255, 255, 255)
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = accent
+            textSize = 30f
+            textAlign = Paint.Align.CENTER
+            isFakeBoldText = true
+        }
+        val width = (textPaint.measureText(label) + 36f).toInt().coerceAtLeast(96)
+        val height = 52
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val background = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = fill
+            style = Paint.Style.FILL
+        }
+        val border = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = accent
+            style = Paint.Style.STROKE
+            strokeWidth = 3f
+        }
+        canvas.drawRoundRect(2f, 2f, width - 2f, height - 2f, 14f, 14f, background)
+        canvas.drawRoundRect(2f, 2f, width - 2f, height - 2f, 14f, 14f, border)
+        canvas.drawText(label, width / 2f, 36f, textPaint)
+        previewLabelCache.put(key, bitmap)
+        return bitmap
+    }
+
+    private fun createGhostDropBitmap(lineColor: Int): Bitmap {
+        ghostCache.get(lineColor)?.let { return it }
+        val size = 56
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val cx = size / 2f
+        val cy = size / 2f
+        canvas.drawCircle(cx, cy, 16f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.argb(40, Color.red(lineColor), Color.green(lineColor), Color.blue(lineColor))
+            style = Paint.Style.FILL
+        })
+        canvas.drawCircle(cx, cy, 15f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = lineColor
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+            pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 7f), 0f)
+        })
+        canvas.drawCircle(cx, cy, 3.5f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = lineColor
+            style = Paint.Style.FILL
+        })
+        ghostCache.put(lineColor, bitmap)
+        return bitmap
+    }
+
+    /**
      * Fewer, longer dashes — same proposed look with far fewer polylines.
      */
     private fun addDottedLine(
@@ -185,6 +326,46 @@ object SurveyMapRenderer {
                     )
                     .color(color)
                     .width(width)
+            )
+        }
+    }
+
+    /**
+     * Draws repeated × marks along a guarded span (extension + guarding = Yes).
+     */
+    private fun addGuardedCrossMarks(
+        map: MapLibreMap,
+        from: LatLng,
+        to: LatLng,
+        distanceMetres: Double,
+        color: Int
+    ) {
+        val spacingM = 14.0
+        val markCount = (distanceMetres / spacingM).toInt().coerceIn(2, 28)
+        // Approximate metres → lat/lng for a small X arm (~3 m).
+        val midLat = (from.latitude + to.latitude) / 2.0
+        val dLat = 3.0 / 111_320.0
+        val dLng = 3.0 / (111_320.0 * kotlin.math.cos(Math.toRadians(midLat)).coerceAtLeast(0.2))
+        for (i in 1 until markCount) {
+            val f = i.toDouble() / markCount
+            val p = interpolate(from, to, f)
+            map.addPolyline(
+                PolylineOptions()
+                    .add(
+                        LatLng(p.latitude - dLat, p.longitude - dLng),
+                        LatLng(p.latitude + dLat, p.longitude + dLng)
+                    )
+                    .color(color)
+                    .width(3.5f)
+            )
+            map.addPolyline(
+                PolylineOptions()
+                    .add(
+                        LatLng(p.latitude - dLat, p.longitude + dLng),
+                        LatLng(p.latitude + dLat, p.longitude - dLng)
+                    )
+                    .color(color)
+                    .width(3.5f)
             )
         }
     }

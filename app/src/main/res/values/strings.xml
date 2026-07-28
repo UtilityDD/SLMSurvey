@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="license_title">Activate rental license</string>
     <string name="license_subtitle">Enter the license code you received after purchase. Survey data stays on this phone.</string>
@@ -47,6 +47,7 @@
     <string name="preview_summary_route">Route: %1$s</string>
     <string name="workspace_replaced">Map updated in My Maps</string>
     <string name="workspace_created">Map saved to My Maps</string>
+    <string name="workspace_save_failed">Could not save map — try again</string>
     <string name="add_asset">Add asset</string>
     <string name="edit_asset">Edit asset</string>
     <string name="save">Save</string>
@@ -55,12 +56,20 @@
     <string name="undo">Undo</string>
     <string name="recenter">My location</string>
     <string name="gps_follow_resumed">Following GPS - map stays on you while you walk</string>
-    <string name="drop_mode_gps">Drop at GPS</string>
-    <string name="drop_mode_map">Drop at map</string>
-    <string name="drop_mode_gps_hint">+ places at your live GPS</string>
-    <string name="drop_mode_map_hint">Drag map, then + places at the crosshair</string>
-    <string name="drop_mode_map_toast">Map drop: drag to aim, then press +</string>
-    <string name="drop_mode_gps_toast">GPS drop: + places where you stand</string>
+    <string name="lock_gps_label">Lock</string>
+    <string name="lock_gps_cd">Lock GPS drop</string>
+    <string name="lock_gps_off_hint">Off — drag map to aim, then press +</string>
+    <string name="lock_gps_on_hint">On — + drops at your GPS fix</string>
+    <string name="lock_gps_off_toast">Lock GPS off — free map aiming</string>
+    <string name="lock_gps_on_toast">Lock GPS on — + at GPS fix</string>
+    <string name="lock_gps_need_fix">Wait for GPS lock, then press +</string>
+    <string name="drop_mode_map">Free Map</string>
+    <string name="drop_mode_gps">Lock to GPS</string>
+    <string name="drop_mode_map_hint">Off — drag map to aim, then press +</string>
+    <string name="drop_mode_gps_hint">On — + drops at your GPS fix</string>
+    <string name="drop_mode_map_toast">Lock GPS off — free map aiming</string>
+    <string name="drop_mode_gps_toast">Lock GPS on — + at GPS fix</string>
+    <string name="drop_mode_gps_need_lock">Wait for GPS lock, then press +</string>
     <string name="preview">Preview</string>
     <string name="export_share">Share</string>
     <string name="share_via_whatsapp">Share via WhatsApp</string>
@@ -176,7 +185,23 @@
     <string name="next">Next</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
-    <string name="bubble_voltage">Choose voltage</string>
+    <string name="bubble_voltage">Choose voltage (v1.1)</string>
+    <string name="bubble_pole_review_first">NEW: First pole — all options</string>
+    <string name="bubble_field_material">Material</string>
+    <string name="bubble_field_conductor">Conductor</string>
+    <string name="bubble_field_material_short">Material</string>
+    <string name="bubble_field_conductor_short">Conductor</string>
+    <string name="bubble_field_pole_type_short">Type</string>
+    <string name="bubble_field_location_short">Location</string>
+    <string name="bubble_field_arrangement_short">Arrange</string>
+    <string name="bubble_field_extension_short">Extension</string>
+    <string name="bubble_field_guarding_short">Guarding</string>
+    <string name="bubble_section_pole">Pole</string>
+    <string name="bubble_section_kit">Kit</string>
+    <string name="bubble_pole_review_compact_hint">Grey = not allowed for this choice. Guarding needs With-ext.</string>
+    <string name="bubble_existing_review_first">Existing pole</string>
+    <string name="bubble_existing_review_next">Existing pole</string>
+    <string name="bubble_existing_review_hint">Grey = not allowed for this choice. Guarding needs With-ext.</string>
     <string name="bubble_hint_new">Start a new network on the workspace</string>
     <string name="bubble_status">%1$s | Existing or Proposed?</string>
     <string name="bubble_status_hint">Stays locked until this series ends</string>
@@ -195,11 +220,35 @@
     <string name="bubble_kit_suggest_hint">Tap Use if this is right. Change only when this pole differs.</string>
     <string name="bubble_kit_use">Use: %1$s</string>
     <string name="bubble_kit_change">Change kit details</string>
+    <string name="bubble_pole_review_first_hint">Same options as any pole — change chips as needed</string>
+    <string name="bubble_pole_review_next">This pole — all options</string>
+    <string name="bubble_pole_review_next_hint">Change any chip below. Extension required on every pole.</string>
+    <string name="bubble_pole_use_this">Use this</string>
+    <string name="bubble_field_pole_type">Pole type</string>
+    <string name="bubble_field_location">Location</string>
+    <string name="bubble_field_arrangement">Arrangement</string>
+    <string name="bubble_field_extension">Extension</string>
+    <string name="bubble_field_guarding">Guarding</string>
+    <string name="bubble_pick_hint">Choose one</string>
+    <string name="bubble_value_unset">Tap to choose</string>
+    <string name="bubble_need_material">Select Material to continue</string>
+    <string name="bubble_need_conductor">Select Conductor to continue</string>
+    <string name="bubble_need_pole_type">Select Type to continue</string>
+    <string name="bubble_need_location">Select Location to continue</string>
+    <string name="bubble_need_arrangement">Select Arrangement to continue</string>
+    <string name="bubble_need_extension">Select Extension to continue</string>
+    <string name="bubble_need_guarding">Select Guarding (Yes/No) to continue</string>
+    <string name="bubble_need_deadend_structure">Dead-end needs 2P, 3P or 4P (or DTR on 11kV) — change Type</string>
+    <string name="bubble_need_feeder">Enter Feeder name and Source SS to continue</string>
     <string name="bubble_kit_location">Pole job</string>
     <string name="bubble_kit_location_hint">Tangent · Angular · Dead-end · T-Off</string>
     <string name="bubble_kit_arrangement">Arrangement</string>
-    <string name="bubble_kit_extension">Pole extension / guarding</string>
-    <string name="bubble_kit_extension_hint">Hardware on this pole only</string>
+    <string name="bubble_kit_extension">Pole extension?</string>
+    <string name="bubble_kit_extension_hint">With extension only — then we ask about guarding</string>
+    <string name="bubble_guarding">Guarding on this pole?</string>
+    <string name="bubble_guarding_hint">Yes draws the next span with ×× marks. Only asked when With ext.</string>
+    <string name="bubble_dtr_branch_voltage">Network from DTR</string>
+    <string name="bubble_dtr_branch_voltage_hint">From a DTR you may start 11kV or LT</string>
     <string name="bubble_dtr_mount">DTR mount</string>
     <string name="bubble_dtr_mount_hint">Transformer on 2P or 4P</string>
     <string name="bubble_dtr_capacity">DTR capacity</string>
@@ -218,6 +267,7 @@
     <string name="bubble_change_role_end">Mark as End</string>
     <string name="status_idle">Press + to add poles | Long-press a pole to edit / delete</string>
     <string name="status_series_open">%1$s series open | structure + kit chips</string>
+    <string name="span_far_alert">Too far from last pole · %1$s (max %2$s)</string>
     <string name="status_tap_ready">Branch from pole #%1$d</string>
     <string name="not_live_at_site">SLD not verified as created live at site</string>
     <string name="surveyed_by">Surveyed by</string>
@@ -256,8 +306,8 @@
     <string name="quick_drop_error_no_location">Unable to fetch current GPS location. Please wait for a fix.</string>
     <string name="bubble_feeder_info">Feeder details</string>
     <string name="bubble_feeder_hint">Required for 33kV / 11kV networks</string>
-    <string name="hint_feeder_name">Feeder Name</string>
-    <string name="hint_source_ss">Source 33/11kV SS</string>
+    <string name="hint_feeder_name">Feeder</string>
+    <string name="hint_source_ss">SS</string>
     <string name="feeder_confirm">Confirm</string>
     <string name="feeder_required_error">Both fields are required</string>
     <string name="preset_pattern">Network pattern</string>

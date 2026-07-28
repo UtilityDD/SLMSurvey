@@ -64,7 +64,8 @@ data class EstimateReport(
 }
 
 /**
- * Matches Proposed survey poles/spans to Final (complete) kits from the published catalog.
+ * Matches Proposed survey poles/spans to enabled kits from the published catalog.
+ * Prefers Final (complete); Draft kits are allowed for field-check estimates.
  */
 object EstimateMatcher {
 
@@ -82,7 +83,7 @@ object EstimateMatcher {
                 title = "No estimate catalog on this phone",
                 qty = 0.0,
                 unit = "",
-                detail = "Activate license and sync catalog, then Publish Final kits from desktop."
+                detail = "Activate license and sync catalog, then Publish kits from desktop."
             )
         )
     )
@@ -127,30 +128,18 @@ object EstimateMatcher {
                 )
                 continue
             }
-            val finalHit = findStructureKit(pole, structures, finalOnly = true)
-            if (finalHit != null) {
-                structureHits += finalHit to pole
+            val hit = findStructureKit(pole, structures, finalOnly = false)
+            if (hit != null) {
+                structureHits += hit to pole
                 continue
             }
-            val draftHit = findStructureKit(pole, structures, finalOnly = false)
-            gaps += if (draftHit != null) {
-                EstimateLine(
-                    kind = EstimateLineKind.GAP,
-                    title = "Pole #${pole.sequence}: no Final kit",
-                    qty = 1.0,
-                    unit = "pole",
-                    kitId = draftHit.id,
-                    detail = "Draft exists — mark Final on desktop: ${draftHit.displayTitle()}"
-                )
-            } else {
-                EstimateLine(
-                    kind = EstimateLineKind.GAP,
-                    title = "Pole #${pole.sequence}: no matching kit",
-                    qty = 1.0,
-                    unit = "pole",
-                    detail = describePole(pole)
-                )
-            }
+            gaps += EstimateLine(
+                kind = EstimateLineKind.GAP,
+                title = "Pole #${pole.sequence}: no matching kit",
+                qty = 1.0,
+                unit = "pole",
+                detail = describePole(pole)
+            )
         }
 
         // Aggregate structure kits by id
@@ -165,7 +154,8 @@ object EstimateMatcher {
                 title = kit.displayTitle(),
                 qty = n.toDouble(),
                 unit = "nos",
-                kitId = kit.id
+                kitId = kit.id,
+                detail = if (kit.complete) null else "Draft kit"
             )
         }
 
@@ -196,44 +186,27 @@ object EstimateMatcher {
                 continue
             }
             val km = metres / 1000.0
-            val finalHit = findConductorKit(sample, conductors, finalOnly = true)
-            if (finalHit != null) {
+            val hit = findConductorKit(sample, conductors, finalOnly = false)
+            if (hit != null) {
                 matchedKm += km
                 conductorLines += EstimateLine(
                     kind = EstimateLineKind.CONDUCTOR,
-                    title = finalHit.displayTitle(),
+                    title = hit.displayTitle(),
                     qty = km,
                     unit = "km",
-                    kitId = finalHit.id,
-                    detail = "${"%.0f".format(metres)} m · ${conns.size} span(s)"
+                    kitId = hit.id,
+                    detail = "${"%.0f".format(metres)} m · ${conns.size} span(s)" +
+                        if (hit.complete) "" else " · Draft kit"
                 )
                 continue
             }
-            val draftHit = findConductorKit(sample, conductors, finalOnly = false)
-            gaps += if (draftHit != null) {
-                EstimateLine(
-                    kind = EstimateLineKind.GAP,
-                    title = "Conductor ${sample.voltage.label} ${sample.conductor}: no Final kit",
-                    qty = km,
-                    unit = "km",
-                    kitId = draftHit.id,
-                    detail = "Draft exists — mark Final: ${draftHit.displayTitle()}"
-                )
-            } else {
-                EstimateLine(
-                    kind = EstimateLineKind.GAP,
-                    title = "Conductor ${sample.voltage.label} ${sample.conductor}: no matching kit",
-                    qty = km,
-                    unit = "km",
-                    detail = if (ConductorTagMap.isCableTag(sample.conductor) &&
-                        sample.voltage == VoltageLevel.LT
-                    ) {
-                        "ABC size not chosen in survey — finalize 3×50 / 3×70 on desktop"
-                    } else {
-                        key
-                    }
-                )
-            }
+            gaps += EstimateLine(
+                kind = EstimateLineKind.GAP,
+                title = "Conductor ${sample.voltage.label} ${sample.conductor}: no matching kit",
+                qty = km,
+                unit = "km",
+                detail = key
+            )
         }
 
         // Merge conductor lines with same kit id
@@ -312,17 +285,19 @@ object EstimateMatcher {
         val voltage = sample.voltage.label
         val tag = sample.conductor
         if (ConductorTagMap.isCableTag(tag)) {
+            val wantFam = ConductorTagMap.conductorFamily(tag) // ABC or PVC
             val familyKits = kits.filter {
                 it.voltage == voltage &&
                     (!finalOnly || it.complete) &&
-                    (it.conductorFamily == "ABC" || it.conductorId?.contains("ABC") == true)
+                    (
+                        it.conductorFamily == wantFam ||
+                            (wantFam != null && it.conductorId?.contains(wantFam) == true)
+                    )
             }
             val finals = familyKits.filter { it.complete }
-            val pool = if (finalOnly) finals else familyKits
-            // Ambiguous ABC sizes → only auto-pick when exactly one Final
-            if (finalOnly && finals.size == 1) return finals.first()
-            if (finalOnly && finals.size > 1) return null
-            return pool.singleOrNull() ?: pool.firstOrNull()
+            if (finals.isNotEmpty()) return finals.first()
+            if (finalOnly) return null
+            return familyKits.firstOrNull()
         }
         val sized = ConductorTagMap.sizedConductorIds(sample.voltage, tag)
         if (sized.isEmpty()) return null
@@ -379,7 +354,8 @@ object EstimateMatcher {
         if (cable) {
             return kit.wireCount.isNullOrBlank() ||
                 kit.wireLabel.equals("cable", ignoreCase = true) ||
-                kit.conductorFamily == "ABC"
+                kit.conductorFamily == "ABC" ||
+                kit.conductorFamily == "PVC"
         }
         if (want.isNullOrBlank()) return kit.wireCount.isNullOrBlank()
         return kit.wireCount.equals(want, ignoreCase = true)

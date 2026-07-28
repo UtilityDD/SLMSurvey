@@ -75,6 +75,7 @@ import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.Style
 import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.AccuracyGrade
+import com.blackgrapes.slmtoolbox.domain.ContinueSpanGuidance
 import com.blackgrapes.slmtoolbox.domain.EnglishNumbers
 import com.blackgrapes.slmtoolbox.domain.SiteVerification
 import kotlin.coroutines.resume
@@ -101,8 +102,8 @@ class SurveyMapFragment : Fragment() {
     private var gpsFollowEnabled = true
     /** User dragged the map — pause follow until they tap My location. */
     private var followPausedByUser = false
-    /** Where + places poles: live GPS or map-center crosshair. */
-    private var dropMode: DropMode = DropMode.GPS
+    /** Lock GPS switch: off = free map aim; on = + at GPS fix. Default off. */
+    private var lockToGps: Boolean = false
     private var programmaticCameraMove = false
     private var lastRenderedSurveyId: Long? = null
     private var lastRenderedUpdatedAt: Long = -1L
@@ -128,6 +129,9 @@ class SurveyMapFragment : Fragment() {
 
     private var assetMarkers: Map<Long, Marker> = emptyMap()
     private var snappedPoleId: Long? = null
+    private var continuePreview: SurveyMapRenderer.ContinuePreviewHandle? = null
+    /** Avoid redrawing preview when tip/drop/distance unchanged. */
+    private var lastPreviewKey: String? = null
 
     private val gpsResolutionLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -210,13 +214,8 @@ class SurveyMapFragment : Fragment() {
             }
             mapLibreMap.addOnCameraMoveStartedListener { reason ->
                 if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
-                    // Manual drag/zoom — pause follow; switch to map-drop so crosshair aiming works.
+                    // Manual drag — pause follow. Lock to GPS stays selected.
                     followPausedByUser = true
-                    if (dropMode != DropMode.MAP) {
-                        dropMode = DropMode.MAP
-                        binding.tgDropMode.check(R.id.btnDropMap)
-                        updateDropModeHint()
-                    }
                 }
             }
             mapLibreMap.addOnCameraIdleListener {
@@ -228,28 +227,25 @@ class SurveyMapFragment : Fragment() {
         }
 
         binding.btnRecenter.setOnClickListener {
-            // Resume walking follow and snap to GPS.
+            // Center on me; keep Lock GPS switch as-is.
             followPausedByUser = false
             gpsFollowEnabled = true
-            dropMode = DropMode.GPS
-            binding.tgDropMode.check(R.id.btnDropGps)
-            updateDropModeHint()
             requestLocationOrFallback()
             Toast.makeText(requireContext(), R.string.gps_follow_resumed, Toast.LENGTH_SHORT).show()
         }
-        binding.tgDropMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
-            if (!isChecked) return@addOnButtonCheckedListener
-            dropMode = if (checkedId == R.id.btnDropMap) DropMode.MAP else DropMode.GPS
-            if (dropMode == DropMode.MAP) {
-                followPausedByUser = true
-                Toast.makeText(requireContext(), R.string.drop_mode_map_toast, Toast.LENGTH_SHORT).show()
-            } else {
+        binding.switchLockGps.isChecked = false
+        lockToGps = false
+        binding.switchLockGps.setOnCheckedChangeListener { _, isChecked ->
+            setLockToGps(enabled = isChecked, syncSwitch = false)
+            if (isChecked) {
                 followPausedByUser = false
                 gpsFollowEnabled = true
                 requestLocationOrFallback()
-                Toast.makeText(requireContext(), R.string.drop_mode_gps_toast, Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.lock_gps_on_toast, Toast.LENGTH_SHORT).show()
+            } else {
+                followPausedByUser = true
+                Toast.makeText(requireContext(), R.string.lock_gps_off_toast, Toast.LENGTH_SHORT).show()
             }
-            updateDropModeHint()
         }
         updateDropModeHint()
         binding.btnUndo.setOnClickListener { viewModel.undo() }
@@ -427,6 +423,12 @@ class SurveyMapFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val seriesId = candidates.firstOrNull()?.seriesId
             val meta = seriesId?.let { viewModel.getSeriesMeta(it) }
+            val mats = candidates.mapNotNull { it.material }
+            val preferredMat = when {
+                mats.isEmpty() -> null
+                mats.all { it == mats.first() } -> mats.first()
+                else -> mats.first()
+            }
             val wizard = SurveyBubbleWizard.forNearLine(
                 lat = lat,
                 lng = lng,
@@ -436,7 +438,8 @@ class SurveyMapFragment : Fragment() {
                 lineStatus = lineStatus,
                 feederName = meta?.feederName.orEmpty(),
                 sourceSubstation = meta?.sourceSubstation.orEmpty(),
-                directInsert = directInsert
+                directInsert = directInsert,
+                preferredMaterial = preferredMat
             )
             wizard.onPlace = { draft -> placeWithEvidence(draft) }
             wizard.show(parentFragmentManager, SurveyBubbleWizard.TAG)
@@ -474,7 +477,7 @@ class SurveyMapFragment : Fragment() {
             val evidence = captureEvidence(draft.latitude, draft.longitude)
             // GPS mode: snap standing poles to live fix. Map mode: keep crosshair coords.
             val placeDraft =
-                if (dropMode == DropMode.GPS &&
+                if (lockToGps &&
                     draft.splitConnectionId == null &&
                     evidence.deviceLatitude != null &&
                     evidence.deviceLongitude != null
@@ -708,14 +711,18 @@ class SurveyMapFragment : Fragment() {
             if (!isAdded) return@launch
             SaveWorkspaceDialog.show(this@SurveyMapFragment, survey, suggestedName) { name, surveyor, mobile ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    viewModel.updateMeta(title = name, linemanName = surveyor, linemanMobile = mobile)
-                    val replaced = viewModel.saveWorkspaceAndStartNew(name)
+                    val replaced = viewModel.saveWorkspaceAndStartNew(
+                        name = name,
+                        linemanName = surveyor,
+                        linemanMobile = mobile
+                    )
                     if (isAdded) {
-                        Toast.makeText(
-                            requireContext(),
-                            if (replaced) R.string.workspace_replaced else R.string.workspace_created,
-                            Toast.LENGTH_SHORT
-                        ).show()
+                        val msg = when (replaced) {
+                            true -> R.string.workspace_replaced
+                            false -> R.string.workspace_created
+                            null -> R.string.workspace_save_failed
+                        }
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -797,8 +804,8 @@ class SurveyMapFragment : Fragment() {
             series != null -> getString(R.string.status_series_open, series.voltage.label)
             !gpsReady -> getString(R.string.gps_still_off)
             else -> getString(
-                if (dropMode == DropMode.MAP) R.string.drop_mode_map_hint
-                else R.string.drop_mode_gps_hint
+                if (lockToGps) R.string.lock_gps_on_hint
+                else R.string.lock_gps_off_hint
             )
         }
         
@@ -818,10 +825,40 @@ class SurveyMapFragment : Fragment() {
                 preset.displayUnit,
                 preset.displayDecimals
             )
-            binding.hintText.text = "$baseHint · Span: $formattedDistance"
+            val voltage = series?.voltage ?: tip.voltage
+            val material = tip.material ?: series?.material
+            val conductor = tip.conductor ?: series?.conductor
+            val maxM = ContinueSpanGuidance.maxSpanM(voltage, material, conductor)
+            val tooFar = maxM != null && distance > maxM
+            if (tooFar && maxM != null) {
+                val formattedMax = com.blackgrapes.slmtoolbox.domain.SurveyMetrics.formatDistance(
+                    maxM.toDouble(),
+                    preset.displayUnit,
+                    preset.displayDecimals
+                )
+                binding.hintText.text = getString(
+                    R.string.span_far_alert,
+                    formattedDistance,
+                    formattedMax
+                )
+                binding.hintText.setTextColor(requireContext().getColor(R.color.error))
+            } else {
+                binding.hintText.text = "$baseHint · Span: $formattedDistance"
+                binding.hintText.setTextColor(requireContext().getColor(R.color.text_secondary))
+            }
         } else {
             binding.hintText.text = baseHint
+            binding.hintText.setTextColor(requireContext().getColor(R.color.text_secondary))
         }
+
+        updateContinuePreview(
+            tip = tip,
+            drop = centerLatLng,
+            continuing = tip != null && (series != null || tap != null),
+            voltage = series?.voltage ?: tip?.voltage,
+            material = tip?.material ?: series?.material,
+            conductor = tip?.conductor ?: series?.conductor
+        )
         
         val oldSnappedId = snappedPoleId
         snappedPoleId = detectedTapPole?.id
@@ -931,12 +968,62 @@ class SurveyMapFragment : Fragment() {
      * a redraw or update a dead "my location" marker after navigating back.
      */
     private fun invalidateAnnotationState() {
+        clearContinuePreview()
         myLocationMarker = null
         assetMarkers = emptyMap()
         lastRenderedSurveyId = null
         lastRenderedUpdatedAt = -1L
         lastRenderedSelectedId = null
         lastRenderedSnappedId = null
+    }
+
+    private fun clearContinuePreview() {
+        continuePreview?.remove()
+        continuePreview = null
+        lastPreviewKey = null
+    }
+
+    /** Live dashed tip→aim line + distance chip while continuing a network. */
+    private fun updateContinuePreview(
+        tip: SurveyAsset?,
+        drop: LatLng?,
+        continuing: Boolean,
+        voltage: com.blackgrapes.slmtoolbox.domain.model.VoltageLevel?,
+        material: com.blackgrapes.slmtoolbox.domain.model.PoleMaterial?,
+        conductor: String?
+    ) {
+        val mapLibreMap = map
+        if (!styleReady || mapLibreMap == null || !continuing || tip == null || drop == null || voltage == null) {
+            clearContinuePreview()
+            return
+        }
+        // Ignore tiny GPS/camera jitter under ~0.4 m.
+        val tipLat = tip.latitude
+        val tipLng = tip.longitude
+        val results = FloatArray(1)
+        android.location.Location.distanceBetween(
+            tipLat, tipLng, drop.latitude, drop.longitude, results
+        )
+        val distance = results[0].toDouble()
+        if (distance < 0.4) {
+            clearContinuePreview()
+            return
+        }
+        val maxM = ContinueSpanGuidance.maxSpanM(voltage, material, conductor)
+        val warn = maxM != null && distance > maxM
+        val key = "${tip.id}|${"%.5f".format(drop.latitude)}|${"%.5f".format(drop.longitude)}|$warn"
+        if (key == lastPreviewKey && continuePreview != null) return
+        continuePreview?.remove()
+        continuePreview = SurveyMapRenderer.showContinuePreview(
+            context = requireContext(),
+            map = mapLibreMap,
+            from = LatLng(tipLat, tipLng),
+            to = drop,
+            distanceMetres = distance,
+            voltage = voltage,
+            warn = warn
+        )
+        lastPreviewKey = key
     }
 
     private fun renderCurrentSurvey() {
@@ -959,7 +1046,8 @@ class SurveyMapFragment : Fragment() {
             return
         }
 
-        // map.clear() inside render wipes the GPS annotation — always recreate after.
+        // map.clear() inside render wipes GPS + continue preview — recreate after.
+        clearContinuePreview()
         myLocationMarker = null
         assetMarkers = SurveyMapRenderer.render(
             context = requireContext(),
@@ -974,6 +1062,7 @@ class SurveyMapFragment : Fragment() {
         lastRenderedSelectedId = selectedId
         lastRenderedSnappedId = snappedId
         ensureMyLocationMarker(forceRecreate = true)
+        updateDynamicSpanHint()
     }
 
     /** When opening a saved map, frame poles so they are visible (not off-screen at GPS). */
@@ -1186,29 +1275,38 @@ class SurveyMapFragment : Fragment() {
 
     /**
      * Drop / survey point.
-     * GPS mode: live position. Map mode: crosshair (map center).
+     * Lock GPS off: crosshair (map center).
+     * Lock GPS on: live fix only (no silent map-center fallback).
      */
     private fun surveyDropLatLng(): LatLng? {
-        if (dropMode == DropMode.MAP) {
+        if (!lockToGps) {
             return map?.cameraPosition?.target
         }
         val loc = lastDeviceLocation
         val now = System.currentTimeMillis()
-        if (loc != null && loc.time > 0L && now - loc.time <= 8_000L) {
+        if (loc != null && loc.time > 0L && now - loc.time <= 12_000L) {
             return LatLng(loc.latitude, loc.longitude)
         }
-        return map?.cameraPosition?.target
+        return null
+    }
+
+    private fun setLockToGps(enabled: Boolean, syncSwitch: Boolean = true) {
+        lockToGps = enabled
+        if (_binding != null) {
+            if (syncSwitch && binding.switchLockGps.isChecked != enabled) {
+                binding.switchLockGps.isChecked = enabled
+            }
+            updateDropModeHint()
+        }
     }
 
     private fun updateDropModeHint() {
         if (_binding == null) return
         binding.hintText.setText(
-            if (dropMode == DropMode.MAP) R.string.drop_mode_map_hint
-            else R.string.drop_mode_gps_hint
+            if (lockToGps) R.string.lock_gps_on_hint
+            else R.string.lock_gps_off_hint
         )
     }
-
-    private enum class DropMode { GPS, MAP }
 
     override fun onStart() {
         super.onStart()
@@ -1239,6 +1337,7 @@ class SurveyMapFragment : Fragment() {
         viewModel.consumePendingGpsRecenter()
         followPausedByUser = false
         gpsFollowEnabled = true
+        // Keep Free Map default after save; only recenter camera.
         centerOnCurrentLocation(force = true)
         if (gpsReady) startLocationUpdates()
     }
@@ -1377,12 +1476,12 @@ class SurveyMapFragment : Fragment() {
 
     private fun performQuickDrop() {
         viewLifecycleOwner.lifecycleScope.launch {
-            if (dropMode == DropMode.GPS) {
+            if (lockToGps) {
                 viewModel.setProcessing(true, getString(R.string.gps_capturing_best))
                 val location = collectBestGpsFix()
                 if (location == null) {
                     viewModel.setProcessing(false)
-                    Toast.makeText(requireContext(), R.string.quick_drop_error_no_location, Toast.LENGTH_LONG).show()
+                    Toast.makeText(requireContext(), R.string.lock_gps_need_fix, Toast.LENGTH_LONG).show()
                     return@launch
                 }
                 lastDeviceLocation = location
@@ -1404,7 +1503,11 @@ class SurveyMapFragment : Fragment() {
             val dropLatLng = surveyDropLatLng()
             if (dropLatLng == null) {
                 viewModel.setProcessing(false)
-                Toast.makeText(requireContext(), "Map is not ready yet", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    requireContext(),
+                    if (lockToGps) R.string.lock_gps_need_fix else R.string.quick_drop_error_no_location,
+                    Toast.LENGTH_LONG
+                ).show()
                 return@launch
             }
 

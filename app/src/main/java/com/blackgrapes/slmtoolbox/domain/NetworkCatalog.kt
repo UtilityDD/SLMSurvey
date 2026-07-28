@@ -49,7 +49,8 @@ data class PlacementDraft(
     val kitArrangement: String? = null,
     val kitExtension: String? = null,
     val dtrMount: String? = null,
-    val kitWire: String? = null
+    val kitWire: String? = null,
+    val guarding: Boolean = false
 )
 
 object NetworkCatalog {
@@ -90,6 +91,38 @@ object NetworkCatalog {
         )
     }
 
+    /**
+     * HT Dead-end = end of network and never a single pole.
+     * 33kV: 2P/3P/4P only. 11kV: 2P/3P/4P or DTR. LT phases: all allowed.
+     */
+    fun allowsDeadEnd(voltage: VoltageLevel, structure: PoleStructure?): Boolean {
+        if (structure == null) return true
+        return when (voltage) {
+            VoltageLevel.LT -> true
+            VoltageLevel.KV_33 -> structure in listOf(
+                PoleStructure.P2,
+                PoleStructure.P3,
+                PoleStructure.P4
+            )
+            VoltageLevel.KV_11 -> structure in listOf(
+                PoleStructure.P2,
+                PoleStructure.P3,
+                PoleStructure.P4,
+                PoleStructure.DTR
+            )
+        }
+    }
+
+    /** Structures offered for the current location (filters out HT 1P on Dead-end). */
+    fun structuresForLocation(
+        voltage: VoltageLevel,
+        location: KitLocation?
+    ): List<PoleStructure> {
+        val base = structuresFor(voltage)
+        if (location != KitLocation.DEAD_END) return base
+        return base.filter { allowsDeadEnd(voltage, it) }
+    }
+
     fun conductorsFor(voltage: VoltageLevel): List<String> = when (voltage) {
         VoltageLevel.KV_33 -> listOf("100", "150", "200")
         VoltageLevel.KV_11 -> listOf("30", "50", "100", "ABC")
@@ -102,9 +135,9 @@ object NetworkCatalog {
     fun isPvcConductor(conductor: String?): Boolean =
         conductor?.equals("PVC", ignoreCase = true) == true
 
-    /** LT phase options after conductor: ABC has no phase choice; bare allows 1P/2P/3P. */
+    /** LT phase options after conductor: ABC/PVC have no phase choice; bare allows 1P/2P/3P. */
     fun ltPhasesForConductor(conductor: String?): List<PoleStructure> =
-        if (isAbcConductor(conductor)) {
+        if (isAbcConductor(conductor) || isPvcConductor(conductor)) {
             listOf(PoleStructure.P1)
         } else {
             listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
@@ -119,13 +152,12 @@ object NetworkCatalog {
 
     fun kitLocationsFor(voltage: VoltageLevel, structure: PoleStructure?): List<KitLocation> {
         val all = KitLocation.entries.toList()
-        // 33kV T-Off is only from DP (2P) or 4P
-        if (voltage == VoltageLevel.KV_33 && structure != null &&
-            structure != PoleStructure.P2 && structure != PoleStructure.P4
-        ) {
-            return all.filter { it != KitLocation.T_OFF }
+        // HT 1P cannot be Dead-end (end of network needs 2P+ / DTR on 11kV).
+        return if (allowsDeadEnd(voltage, structure)) {
+            all
+        } else {
+            all.filter { it != KitLocation.DEAD_END }
         }
-        return all
     }
 
     fun kitArrangements(): List<KitArrangement> = KitArrangement.entries.toList()
@@ -293,6 +325,37 @@ object SiteVerification {
 
 enum class AccuracyGrade {
     EXCELLENT, GOOD, WEAK, POOR, UNKNOWN
+}
+
+/**
+ * Recommended max span (m) when continuing from the tip pole.
+ * Over this → red “too far” alert in the map status card.
+ *
+ * - LT ABC: 40 m
+ * - 11kV / 33kV · 9m PCC: 70 m
+ * - 11kV / 33kV · Rail: 80 m
+ */
+object ContinueSpanGuidance {
+    const val LT_ABC_MAX_M = 40f
+    const val HT_9M_MAX_M = 70f
+    const val HT_RAIL_MAX_M = 80f
+
+    fun maxSpanM(
+        voltage: VoltageLevel?,
+        material: PoleMaterial?,
+        conductor: String?
+    ): Float? {
+        if (voltage == null) return null
+        return when (voltage) {
+            VoltageLevel.LT ->
+                if (NetworkCatalog.isAbcConductor(conductor)) LT_ABC_MAX_M else null
+            VoltageLevel.KV_11, VoltageLevel.KV_33 -> when (material) {
+                PoleMaterial.PCC_9M -> HT_9M_MAX_M
+                PoleMaterial.RAIL -> HT_RAIL_MAX_M
+                else -> null
+            }
+        }
+    }
 }
 
 object GeometryHitTest {

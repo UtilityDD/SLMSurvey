@@ -137,15 +137,21 @@ class SldPreviewFragment : Fragment() {
             if (!isAdded) return@launch
             SaveWorkspaceDialog.show(this@SldPreviewFragment, survey, suggestedName) { name, surveyor, mobile ->
                 viewLifecycleOwner.lifecycleScope.launch {
-                    viewModel.updateMeta(title = name, linemanName = surveyor, linemanMobile = mobile)
-                    val replaced = viewModel.saveWorkspaceAndStartNew(name)
+                    val replaced = viewModel.saveWorkspaceAndStartNew(
+                        name = name,
+                        linemanName = surveyor,
+                        linemanMobile = mobile
+                    )
                     if (isAdded) {
-                        Toast.makeText(
-                            requireContext(),
-                            if (replaced) R.string.workspace_replaced else R.string.workspace_created,
-                            Toast.LENGTH_SHORT
-                        ).show()
-                        findNavController().navigateUp()
+                        val msg = when (replaced) {
+                            true -> R.string.workspace_replaced
+                            false -> R.string.workspace_created
+                            null -> R.string.workspace_save_failed
+                        }
+                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
+                        if (replaced != null) {
+                            findNavController().navigateUp()
+                        }
                     }
                 }
             }

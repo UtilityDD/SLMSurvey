@@ -345,6 +345,161 @@ body {
     min-width: 0;
 }
 
+.est-kit-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #0f766e;
+    background: #ccfbf1;
+    border-radius: 6px;
+    padding: 2px 7px;
+    width: fit-content;
+}
+
+.est-row-poles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+
+.est-pole-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: #334155;
+    background: #e2e8f0;
+    border-radius: 5px;
+    padding: 1px 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.est-pole-chip-btn {
+    border: 1px solid transparent;
+    cursor: pointer;
+    background: #e2e8f0;
+    padding: 4px 8px;
+}
+
+.est-pole-chip-btn:hover {
+    background: #cbd5e1;
+}
+
+.est-pole-chip-btn.is-active {
+    background: #ccfbf1;
+    color: #0f766e;
+    border-color: #5eead4;
+}
+
+.est-pole-chip-btn.is-missing {
+    opacity: 0.55;
+    border-style: dashed;
+}
+
+.est-pole-chip-code {
+    font-weight: 500;
+    opacity: 0.75;
+    font-size: 9px;
+}
+
+.est-family {
+    border-bottom: 1px solid var(--line);
+}
+
+.est-family-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+        "chev title meta"
+        "chev poles poles";
+    gap: 4px 10px;
+    align-items: center;
+    width: 100%;
+    padding: 12px 16px;
+    border: 0;
+    background: #f8fafc;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+
+.est-family-head:hover {
+    background: #f1f5f9;
+}
+
+.est-family.is-open > .est-family-head {
+    background: #eef2ff;
+    border-bottom: 1px solid var(--line);
+}
+
+.est-family-chevron {
+    grid-area: chev;
+    color: var(--muted);
+    font-size: 0.85rem;
+    width: 1rem;
+}
+
+.est-family-title {
+    grid-area: title;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.est-family-meta {
+    grid-area: meta;
+    font-size: 0.75rem;
+    color: var(--muted);
+    white-space: nowrap;
+}
+
+.est-family-poles {
+    grid-area: poles;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.est-family-body {
+    background: #fff;
+}
+
+.est-family-body .est-row {
+    padding-left: 36px;
+}
+
+.est-check-inline {
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    white-space: nowrap;
+}
+
+.ed-pole-variants {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.ed-pole-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-right: 2px;
+}
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .est-row-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -1221,6 +1376,119 @@ body {
     white-space: nowrap;
     color: #0f766e;
     font-size: 0.9rem;
+}
+
+.boq-table-wrap {
+    overflow: auto;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    margin-bottom: 20px;
+}
+
+.boq-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.boq-table th,
+.boq-table td {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.boq-table thead th {
+    background: #f8fafc;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.boq-table tfoot td {
+    background: #f1f5f9;
+    font-weight: 700;
+}
+
+.boq-num {
+    text-align: right !important;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.boq-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.boq-desc {
+    min-width: 220px;
+}
+
+.boq-total-label {
+    text-align: right !important;
+}
+
+.boq-abstract-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) minmax(280px, 1.2fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.boq-extras-card,
+.boq-abs-card {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    padding: 12px;
+}
+
+.boq-extras-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.boq-pct-input {
+    width: 72px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 6px;
+    font: inherit;
+}
+
+.boq-muted {
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.boq-hint {
+    margin: 8px 0 0;
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+
+.boq-abs-key td {
+    background: #f8fafc;
+}
+
+.boq-grand td {
+    background: #ecfdf3;
+    border-top: 2px solid #86efac;
+}
+
+.boq-words {
+    margin: 12px 0 4px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+    .boq-abstract-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 720px) {

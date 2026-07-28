@@ -155,15 +155,26 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
      * Saves current survey to My Maps.
      * Already-saved workspaces are updated in place (replace); drafts become a new My Maps entry.
      * Then starts a fresh draft for the next survey and requests GPS recenter on the map.
-     * @return true if an existing My Maps entry was replaced; false if newly created.
+     * @return true if an existing My Maps entry was replaced; false if newly created;
+     *         null if save failed.
      */
-    suspend fun saveWorkspaceAndStartNew(name: String): Boolean {
-        val id = surveyId.value ?: return false
+    suspend fun saveWorkspaceAndStartNew(
+        name: String,
+        linemanName: String = "",
+        linemanMobile: String = ""
+    ): Boolean? {
+        val id = surveyId.value ?: return null
         setProcessing(true, "Saving Workspace...")
         return try {
             val existing = repository.getSurvey(id)
             val replaced = existing?.isSavedWorkspace == true
-            repository.saveWorkspace(id, name)
+            val ok = repository.saveWorkspace(
+                surveyId = id,
+                name = name,
+                linemanName = linemanName,
+                linemanMobile = linemanMobile
+            )
+            if (!ok) return null
             undoStack.clear()
             _selectedTapPoleId.value = null
             _pendingProposedBranchFromId.value = null
@@ -329,6 +340,7 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                             kitExtension = draft.kitExtension,
                             dtrMount = draft.dtrMount,
                             kitWire = draft.kitWire,
+                            guarding = draft.guarding,
                             dtCapacityKva = draft.dtCapacityKva,
                             remarks = draft.remarks,
                             deviceLatitude = evidence.deviceLatitude,
@@ -489,6 +501,7 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
                     kitExtension = draft.kitExtension,
                     dtrMount = draft.dtrMount,
                     kitWire = draft.kitWire,
+                    guarding = draft.guarding,
                     dtCapacityKva = draft.dtCapacityKva,
                     remarks = draft.remarks,
                     deviceLatitude = evidence.deviceLatitude,

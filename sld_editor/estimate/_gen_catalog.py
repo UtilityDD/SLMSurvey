@@ -97,6 +97,79 @@ CONDUCTOR_DEFS = [
         "matCode": "501031121",
         "seedFittingCodes": [],
     },
+    # LT PVC 1.1 kV — phone tags "PVC"; size chosen on conductor kits (Mat list).
+    {
+        "id": "PVC|LT|2x4",
+        "family": "PVC",
+        "short": "PVC 2×4",
+        "name": "PVC 1.1kV 2Cx4 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501012921",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|2x6",
+        "family": "PVC",
+        "short": "PVC 2×6",
+        "name": "PVC 1.1kV 2Cx6 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501013021",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x10",
+        "family": "PVC",
+        "short": "PVC 4×10",
+        "name": "PVC 1.1kV 4Cx10 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501017421",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x25",
+        "family": "PVC",
+        "short": "PVC 4×25",
+        "name": "PVC 1.1kV 4Cx25 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501017821",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x50",
+        "family": "PVC",
+        "short": "PVC 4×50",
+        "name": "PVC 1.1kV 4Cx50 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501017921",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x120",
+        "family": "PVC",
+        "short": "PVC 4×120",
+        "name": "PVC 1.1kV 4Cx120 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501018121",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x185",
+        "family": "PVC",
+        "short": "PVC 4×185",
+        "name": "PVC 1.1kV 4Cx185 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501018221",
+        "seedFittingCodes": [],
+    },
+    {
+        "id": "PVC|LT|4x300",
+        "family": "PVC",
+        "short": "PVC 4×300",
+        "name": "PVC 1.1kV 4Cx300 sqmm",
+        "voltageHints": ["LT"],
+        "matCode": "501018321",
+        "seedFittingCodes": [],
+    },
 ]
 
 # DTR capacities from Mat sheet (11kV distribution). Mounted on 2P (DP) or 4P only.
@@ -211,9 +284,9 @@ def conductors_for_voltage(voltage: str):
 def wire_options_for(voltage: str, conductor_family: str):
     """
     HT (11kV/33kV): ACSR is always 3-wire; ABC/cable has no multi-wire choice.
-    LT: ACSR may be 2 / 3 / 4 wire; ABC is cable.
+    LT: ACSR may be 2 / 3 / 4 wire; ABC/PVC are cable.
     """
-    if conductor_family == "ABC":
+    if conductor_family in ("ABC", "PVC"):
         return [{"id": None, "label": "cable"}]
     if voltage in ("33kV", "11kV"):
         return [{"id": "3W", "label": "3 wire"}]
@@ -234,7 +307,7 @@ def lt_structure_variants():
 
 
 def size_agnostic_structure_variants(voltage: str):
-    """One ACSR (any size) + one ABC/cable row for the voltage's wire options."""
+    """One ACSR (any size) + ABC/PVC cable rows for the voltage's wire options."""
     variants = []
     for w in wire_options_for(voltage, "ACSR"):
         variants.append(
@@ -248,23 +321,23 @@ def size_agnostic_structure_variants(voltage: str):
                 "sizeAgnostic": True,
             }
         )
-    for w in wire_options_for(voltage, "ABC"):
-        # Only if this voltage has ABC in conductor defs
+    for fam in ("ABC", "PVC"):
         if not any(
-            c["family"] == "ABC" and voltage in c["voltageHints"] for c in CONDUCTOR_DEFS
+            c["family"] == fam and voltage in c["voltageHints"] for c in CONDUCTOR_DEFS
         ):
             continue
-        variants.append(
-            {
-                "id": f"{voltage}|ANY|ABC",
-                "family": "ABC",
-                "short": "",
-                "name": f"Any {voltage} ABC size",
-                "seedFittingCodes": [],
-                "wire": w,
-                "sizeAgnostic": True,
-            }
-        )
+        for w in wire_options_for(voltage, fam):
+            variants.append(
+                {
+                    "id": f"{voltage}|ANY|{fam}",
+                    "family": fam,
+                    "short": "",
+                    "name": f"Any {voltage} {fam} size",
+                    "seedFittingCodes": [],
+                    "wire": w,
+                    "sizeAgnostic": True,
+                }
+            )
     return variants
 
 
@@ -349,7 +422,7 @@ def build_matrix():
     structures_for_toff = {
         "LT": ["1P"],  # pole T-Off; DTR T-Off is separate
         "11kV": ["1P", "2P", "3P", "4P"],
-        "33kV": ["2P", "4P"],  # always from existing DP or 4P
+        "33kV": ["1P", "2P", "3P", "4P"],
     }
     locations = [
         {"id": "Tangent", "label": "Tangent"},  # straight run (was misnamed In-line)
@@ -430,8 +503,8 @@ def build_matrix():
                                         )
                                     elif v == "33kV":
                                         notes = (
-                                            "33kV T-Off: always from existing DP (2P) or 4P. "
-                                            "In-line/Sectional; With/No ext."
+                                            "33kV T-Off: start of new network from existing network "
+                                            "(1P/2P/3P/4P; In-line/Sectional; With/No ext)."
                                         )
                             if c.get("sizeAgnostic") and v == "11kV" and loc["id"] == "Tangent":
                                     notes = (
@@ -720,7 +793,7 @@ def build_matrix():
         )
 
     return {
-        "version": 11,
+        "version": 13,
         "qtyBasisLabels": {
             "per_structure": "Per 1 proposed structure (with or without extension)",
             "per_km": "Per 1 km (conductor, stringing, or guarding run)",
@@ -737,12 +810,12 @@ def build_matrix():
                 "excludeConductors": ["ACSR|Rabbit|50"],
                 "excludeStructures": ["DTR"],
                 "deadEndNever": ["1P"],
-                "tOffOnly": ["2P", "4P"],
+                "tOffOnly": ["1P", "2P", "3P", "4P"],
                 "wireOptions": ["3W"],
                 "cableOk": True,
                 "allowedPoleCodes": allowed_pole_codes("33kV"),
                 "excludedPoleCodes": [POLE_8M_PCC],
-                "note": "33kV: no DTR, no Rabbit 50, dead-end never 1P, T-Off only 2P/4P, ACSR 3-wire or cable only.",
+                "note": "33kV: no DTR, no Rabbit 50, dead-end never 1P, T-Off 1P/2P/3P/4P, ACSR 3-wire or cable only.",
             },
             "11kV": {
                 "structures": ["1P", "2P", "3P", "4P", "DTR2P", "DTR4P"],
@@ -752,7 +825,7 @@ def build_matrix():
                 "dtrMounts": ["2P", "4P"],
                 "dtrCapacities": [d["id"] for d in DTR_CAPACITIES],
                 "allowedPoleCodes": allowed_pole_codes("11kV"),
-                "note": "11kV: dead-end never 1P; T-Off SP/DP/TP/4P or DTR; ACSR 3-wire or cable; DTR on 2P or 4P with sheet capacities.",
+                "note": "11kV: poles include Rail; dead-end never 1P; T-Off SP/DP/TP/4P or DTR; ACSR 3-wire or cable; DTR on 2P or 4P with sheet capacities.",
             },
             "LT": {
                 "structures": ["1P", "DTR2P", "DTR4P"],
@@ -773,11 +846,13 @@ def build_matrix():
             "T-Off = take-off where new network starts from existing network. "
             "LT T-Off: SP (existing or new) In-line/Sectional × ext, or from DTR. "
             "11kV T-Off: SP/DP/TP/4P (existing or new) or DTR. "
-            "33kV T-Off: always from existing DP (2P) or 4P only. "
+            "33kV T-Off: 1P/2P/3P/4P. "
             "Tangent / Angular / T-Off have In-line vs Sectional; Dead-end has no arrangement split. "
             "33kV: no DTR on normal locations; no Rabbit 50; pole from Mat except 8m PCC. "
-            "11kV/33kV: dead-end is never single pole (1P). "
-            "11kV/33kV: ACSR always 3-wire or cable; LT ACSR may be 2/3/4 wire. "
+            "11kV: poles include Rail (and PCC / H-pole / tubular). "
+            "11kV/33kV: dead-end is never single pole (1P); 33kV dead-end 2P/3P/4P; "
+            "11kV dead-end also allows DTR. "
+            "11kV/33kV: ACSR always 3-wire or cable; LT ACSR may be 2/3/4 wire; LT PVC is cable. "
             "DTR is 11kV on all locations (incl. T-Off); LT DTR kits are T-Off only. "
             "Guarding/extension is part of the structure kit (With ext / No ext). "
             "Guarding add-ons are for GI wire etc. by guarded run length (per km)."

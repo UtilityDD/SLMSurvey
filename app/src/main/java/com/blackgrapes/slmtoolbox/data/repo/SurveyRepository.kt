@@ -24,10 +24,11 @@ class SurveyRepository(private val dao: SurveyDao) {
         dao.getSurveyWithDetails(surveyId)?.toDomain()
 
     suspend fun getOrCreateDraft(title: String = "Field Survey"): Survey {
-        val latest = dao.getLatestSurvey()
-        if (latest != null) {
-            return dao.getSurveyWithDetails(latest.id)?.toDomain()
-                ?: latest.toDomain()
+        // Prefer an unsaved draft so opening the app does not "steal" a My Maps entry.
+        val latestDraft = dao.getLatestDraftSurvey()
+        if (latestDraft != null) {
+            return dao.getSurveyWithDetails(latestDraft.id)?.toDomain()
+                ?: latestDraft.toDomain()
         }
         val id = dao.insertSurvey(
             SurveyEntity(title = title, updatedAt = System.currentTimeMillis())
@@ -50,14 +51,12 @@ class SurveyRepository(private val dao: SurveyDao) {
         linemanName: String,
         linemanMobile: String
     ) {
-        val current = dao.getSurveyWithDetails(surveyId)?.survey ?: return
-        dao.updateSurvey(
-            current.copy(
-                title = title,
-                linemanName = linemanName,
-                linemanMobile = linemanMobile,
-                updatedAt = System.currentTimeMillis()
-            )
+        dao.updateSurveyMetaFields(
+            surveyId = surveyId,
+            title = title,
+            linemanName = linemanName,
+            linemanMobile = linemanMobile,
+            updatedAt = System.currentTimeMillis()
         )
     }
 
@@ -107,17 +106,28 @@ class SurveyRepository(private val dao: SurveyDao) {
     suspend fun getSeriesMetaForSurvey(surveyId: Long): List<SeriesMetaEntity> =
         dao.getSeriesMetaForSurvey(surveyId)
 
-    suspend fun saveWorkspace(surveyId: Long, name: String) {
-        val current = dao.getSurveyWithDetails(surveyId)?.survey ?: return
+    /**
+     * Persist name + surveyor and mark as My Maps in one UPDATE.
+     * @return false if the survey row was missing.
+     */
+    suspend fun saveWorkspace(
+        surveyId: Long,
+        name: String,
+        linemanName: String = "",
+        linemanMobile: String = ""
+    ): Boolean {
+        val current = dao.getSurveyWithDetails(surveyId)?.survey ?: return false
         val now = System.currentTimeMillis()
-        dao.updateSurvey(
-            current.copy(
-                title = name.trim().ifBlank { current.title },
-                isSavedWorkspace = true,
-                savedAt = now,
-                updatedAt = now
-            )
+        val title = name.trim().ifBlank { current.title }
+        val updated = dao.markWorkspaceSaved(
+            surveyId = surveyId,
+            title = title,
+            linemanName = linemanName.ifBlank { current.linemanName },
+            linemanMobile = linemanMobile.ifBlank { current.linemanMobile },
+            savedAt = now,
+            updatedAt = now
         )
+        return updated > 0
     }
 
     suspend fun deleteWorkspace(surveyId: Long) {
