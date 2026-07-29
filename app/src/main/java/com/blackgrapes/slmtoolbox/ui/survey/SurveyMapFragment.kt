@@ -254,6 +254,9 @@ class SurveyMapFragment : Fragment() {
         binding.btnPresetSettings.setOnClickListener {
             findNavController().navigate(R.id.action_survey_to_preset_settings)
         }
+        binding.btnLicenseAdmin.setOnClickListener {
+            findNavController().navigate(R.id.action_survey_to_license_admin)
+        }
         binding.satelliteChip.setOnClickListener {
             dismissSatWarmPopup()
             showSatelliteSheet()
@@ -274,9 +277,20 @@ class SurveyMapFragment : Fragment() {
         }
         binding.tvLicenseBadge.setOnClickListener { showLicenseInfoDialog() }
         updateLicenseBadge()
+        updateLicenseAdminButton()
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    // Refresh can_approve from server when survey screen resumes
+                    if (LicenseConfig.enabled) {
+                        LicenseApi.refreshIfNeeded(requireContext())
+                        if (_binding != null) {
+                            updateLicenseBadge()
+                            updateLicenseAdminButton()
+                        }
+                    }
+                }
                 launch {
                     viewModel.survey.collect { survey ->
                         if (survey == null) return@collect
@@ -1371,6 +1385,17 @@ class SurveyMapFragment : Fragment() {
         }
     }
 
+    private fun updateLicenseAdminButton() {
+        if (_binding == null) return
+        val show = LicenseConfig.enabled &&
+            LicensePreferences.read(requireContext()).canApprove &&
+            when (LicensePreferences.evaluateAccess(requireContext())) {
+                is LicenseAccess.Allowed, is LicenseAccess.Grace -> true
+                else -> false
+            }
+        binding.btnLicenseAdmin.isVisible = show
+    }
+
     private fun updateLicenseBadge() {
         if (_binding == null) return
         if (!LicenseConfig.enabled) {
@@ -1414,11 +1439,16 @@ class SurveyMapFragment : Fragment() {
                 days
             )
         }
-        MaterialAlertDialogBuilder(requireContext())
+        val builder = MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.license_info_title)
             .setMessage(body)
             .setPositiveButton(R.string.license_ok, null)
-            .show()
+        if (snap.canApprove) {
+            builder.setNeutralButton(R.string.license_admin_open) { _, _ ->
+                findNavController().navigate(R.id.action_survey_to_license_admin)
+            }
+        }
+        builder.show()
     }
 
     override fun onPause() {
