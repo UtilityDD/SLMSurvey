@@ -244,9 +244,9 @@
     <string name="bubble_kit_location_hint">Tangent · Angular · Dead-end · T-Off</string>
     <string name="bubble_kit_arrangement">Arrangement</string>
     <string name="bubble_kit_extension">Pole extension?</string>
-    <string name="bubble_kit_extension_hint">With extension only — then we ask about guarding</string>
+    <string name="bubble_kit_extension_hint">H-Pole, Rail, and 9m PCC can use With ext on HT</string>
     <string name="bubble_guarding">Guarding on this pole?</string>
-    <string name="bubble_guarding_hint">Yes draws the next span with ×× marks. Only asked when With ext.</string>
+    <string name="bubble_guarding_hint">Yes draws the next span with ×× marks. Allowed with With ext, or without ext on Rail / H-Pole.</string>
     <string name="bubble_dtr_branch_voltage">Network from DTR</string>
     <string name="bubble_dtr_branch_voltage_hint">From a DTR you may start 11kV or LT</string>
     <string name="bubble_dtr_mount">DTR mount</string>

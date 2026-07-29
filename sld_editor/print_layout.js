@@ -30,12 +30,27 @@
 
     const STRUCTURE_COLOR = '#1565c0';
 
+    /** Overlap between adjacent atlas sheets (keeps edge poles readable). */
+    const SHEET_OVERLAP = 0.08;
+    /** Max ground width (m) across the map hole before Auto/Multi splits pages. */
+    const MAX_CLEAR_MAP_WIDTH_M = 850;
+    /** Padding around network bounds when planning sheets (m). */
+    const NETWORK_BOUNDS_PAD_M = 45;
+
     let printEnabled = false;
     let frameLeft = 0;
     let frameTop = 0;
     let frameWidth = 520;
     let frameHeight = 368;
     let dragState = null;
+
+    /** @type {{bounds: any, row: number, col: number, rows: number, cols: number, index: number}[]} */
+    let sheetPlan = [];
+    let currentSheetIndex = 0;
+    let lastCrowdingToastKey = '';
+    let exportCancelRequested = false;
+    let exportInProgress = false;
+    let mapAnimBackup = null;
 
     function $(id) {
         return document.getElementById(id);
@@ -112,6 +127,7 @@
         frame.style.top = `${frameTop}px`;
         frame.style.width = `${frameWidth}px`;
         frame.style.height = `${frameHeight}px`;
+        requestAnimationFrame(() => fitLegendPanelInFrame());
     }
 
     function formatDistanceLocal(meters) {
@@ -243,6 +259,35 @@
         };
     }
 
+    /** Scale live legend so the full table fits inside the print frame (no scroll/clip). */
+    function fitLegendPanelInFrame() {
+        const el = $('printFrameLegend');
+        const frame = $('printFrame');
+        if (!el || !frame) return;
+
+        el.style.transform = 'none';
+        el.style.zoom = '';
+        el.style.maxHeight = 'none';
+        el.style.overflow = 'visible';
+
+        const frameH = frame.getBoundingClientRect().height;
+        const header = $('printFrameHeader');
+        const footer = $('printFrameFooter');
+        const headerH = header ? header.getBoundingClientRect().height : frameH * HEADER_FRAC;
+        const footerH = footer ? footer.getBoundingClientRect().height : frameH * FOOTER_FRAC;
+        const avail = Math.max(80, frameH - headerH - footerH - 16);
+
+        const natural = el.scrollHeight || el.getBoundingClientRect().height;
+        if (natural <= avail + 1) {
+            el.style.maxHeight = `${avail}px`;
+            return;
+        }
+        // zoom shrinks layout + paint (avoids parent overflow clipping a CSS transform)
+        const z = Math.max(0.55, Math.min(1, avail / natural));
+        el.style.zoom = String(Number(z.toFixed(4)));
+        el.style.maxHeight = 'none';
+    }
+
     async function captureLegendPanel(captureScale) {
         const el = $('printFrameLegend');
         if (!el || typeof html2canvas !== 'function') return null;
@@ -250,8 +295,13 @@
         refreshFrameChrome();
         const prevMaxH = el.style.maxHeight;
         const prevOverflow = el.style.overflow;
+        const prevTransform = el.style.transform;
+        const prevZoom = el.style.zoom;
+        // Capture at full size (unscaled) so export can draw the complete panel
         el.style.maxHeight = 'none';
         el.style.overflow = 'visible';
+        el.style.transform = 'none';
+        el.style.zoom = '';
 
         try {
             await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -260,7 +310,9 @@
                 scale: Math.max(2, captureScale),
                 logging: false,
                 useCORS: true,
-                allowTaint: false
+                allowTaint: false,
+                height: el.scrollHeight,
+                windowHeight: el.scrollHeight + 40
             });
             return shot;
         } catch (err) {
@@ -269,23 +321,34 @@
         } finally {
             el.style.maxHeight = prevMaxH;
             el.style.overflow = prevOverflow;
+            el.style.transform = prevTransform;
+            el.style.zoom = prevZoom;
         }
     }
 
+    /**
+     * Fit the full legend image into the map area (bottom-right) without cropping.
+     * Preserves aspect ratio so every legend row stays readable.
+     */
     function legendExportRect(mapX, mapY, mapW, mapH, legendImg) {
-        const layout = getLegendLayoutInMapHole();
-        const margin = 10;
-        if (layout && layout.relWidth > 0 && layout.relHeight > 0) {
-            return {
-                x: mapX + layout.relLeft * mapW,
-                y: mapY + layout.relTop * mapH,
-                w: layout.relWidth * mapW,
-                h: layout.relHeight * mapH
-            };
-        }
-        const w = mapW * LEGEND_W_FRAC;
+        const margin = Math.max(10, mapW * 0.012);
         const aspect = legendImg.height / Math.max(1, legendImg.width);
-        const h = Math.min(mapH * 0.55, w * aspect);
+        let w = Math.min(mapW * 0.38, mapW * 0.46);
+        let h = w * aspect;
+        const maxH = mapH - margin * 2;
+        const maxW = mapW * 0.48;
+        if (h > maxH) {
+            h = maxH;
+            w = h / aspect;
+        }
+        if (w > maxW) {
+            w = maxW;
+            h = w * aspect;
+            if (h > maxH) {
+                h = maxH;
+                w = h / aspect;
+            }
+        }
         return {
             x: mapX + mapW - w - margin,
             y: mapY + mapH - h - margin,
@@ -432,11 +495,28 @@
         set('pfScale', meta.scale);
         set('pfDate', meta.date);
         set('pfSurveyor', meta.mobile ? `${meta.surveyor} · ${meta.mobile}` : meta.surveyor);
-        set('pfStats', `${(nodes || []).length} poles · ${(edges || []).length} spans`);
-        set('pfRoute', formatDistanceLocal(totalRouteM()));
+
+        if (!sheetPlan.length && nodes && nodes.length) {
+            buildSheetPlan(false);
+        }
+        const total = Math.max(1, sheetPlan.length || 1);
+        const idx = Math.min(currentSheetIndex, total - 1);
+        const sheet = sheetPlan[idx];
+        set('pfSheet', `${idx + 1} of ${total}`);
+
+        const stats = sheet
+            ? sheetStatsForBounds(sheet.bounds)
+            : { poles: (nodes || []).length, spans: (edges || []).length, routeM: totalRouteM() };
+        const scope = total > 1 ? ' · this sheet' : '';
+        set('pfStats', `${stats.poles} poles · ${stats.spans} spans${scope}`);
+        set('pfRoute', formatDistanceLocal(stats.routeM));
 
         const legendBody = $('pfLegendBody');
         if (legendBody) legendBody.innerHTML = buildLegendHtml();
+        updateSheetNavUI();
+        refreshLiveKeyPlan();
+        // Defer fit until layout paints full table height
+        requestAnimationFrame(() => fitLegendPanelInFrame());
     }
 
     function setPrintEnabled(on) {
@@ -455,40 +535,275 @@
             }
             syncMetaFromSurvey();
             centerFrame();
+            buildSheetPlan(false);
+            maybeCrowdingToast();
+            updateSheetNavUI();
             refreshFrameChrome();
+            const sheet = currentSheet();
+            if (sheet && map && nodes && nodes.length) {
+                // Defer until frame/hole layout settles
+                setTimeout(() => fitBoundsToMapHole(sheet.bounds, true), 60);
+            }
             if (typeof hideMapSymbolEditModal === 'function') hideMapSymbolEditModal();
         }
     }
 
-    function fitNetworkInFrame() {
+    function getPrintMode() {
+        const el = $('printPageMode');
+        const v = el && el.value;
+        return (v === 'single' || v === 'multi') ? v : 'auto';
+    }
+
+    function mapHoleAspect() {
+        const hole = getMapHoleRectInViewport();
+        if (hole && hole.w > 40 && hole.h > 40) return hole.w / hole.h;
+        const page = getPageMm();
+        const mapHFrac = 1 - HEADER_FRAC - FOOTER_FRAC;
+        return page.w / (page.h * mapHFrac);
+    }
+
+    function metersPerDeg(lat) {
+        const mLat = 111320;
+        const mLng = 111320 * Math.cos((lat * Math.PI) / 180);
+        return { mLat, mLng: Math.max(1e-6, mLng) };
+    }
+
+    function padLatLngBounds(bounds, padM) {
+        if (!bounds || !bounds.isValid()) return bounds;
+        const c = bounds.getCenter();
+        const { mLat, mLng } = metersPerDeg(c.lat);
+        const dLat = padM / mLat;
+        const dLng = padM / mLng;
+        return L.latLngBounds(
+            [bounds.getSouth() - dLat, bounds.getWest() - dLng],
+            [bounds.getNorth() + dLat, bounds.getEast() + dLng]
+        );
+    }
+
+    function getNetworkBounds() {
+        if (!nodes || !nodes.length) return null;
+        const latLngs = nodes.map((n) => [n.assetRef.latitude, n.assetRef.longitude]);
+        const bounds = L.latLngBounds(latLngs);
+        if (!bounds.isValid()) return null;
+        return padLatLngBounds(bounds, NETWORK_BOUNDS_PAD_M);
+    }
+
+    function boundsSizeMeters(bounds) {
+        const c = bounds.getCenter();
+        const { mLat, mLng } = metersPerDeg(c.lat);
+        return {
+            w: Math.max(1, (bounds.getEast() - bounds.getWest()) * mLng),
+            h: Math.max(1, (bounds.getNorth() - bounds.getSouth()) * mLat),
+            midLat: c.lat
+        };
+    }
+
+    function pointInBounds(lat, lng, bounds) {
+        return bounds.contains(L.latLng(lat, lng));
+    }
+
+    function sheetStatsForBounds(bounds) {
+        if (!bounds || !bounds.isValid()) {
+            return { poles: 0, spans: 0, routeM: 0 };
+        }
+        const inView = (nodes || []).filter((n) =>
+            pointInBounds(n.assetRef.latitude, n.assetRef.longitude, bounds)
+        );
+        const ids = new Set(inView.map((n) => n.id));
+        let spans = 0;
+        let routeM = 0;
+        (edges || []).forEach((e) => {
+            const a = ids.has(e.from);
+            const b = ids.has(e.to);
+            if (a || b) {
+                spans += 1;
+                routeM += parseFloat(e.spanLengthM) || 0;
+            }
+        });
+        return { poles: inView.length, spans, routeM };
+    }
+
+    function neighborSheetIndex(sheet, dir) {
+        if (!sheet || !sheetPlan.length) return null;
+        let r = sheet.row;
+        let c = sheet.col;
+        if (dir === 'n') r -= 1;
+        if (dir === 's') r += 1;
+        if (dir === 'w') c -= 1;
+        if (dir === 'e') c += 1;
+        const hit = sheetPlan.find((s) => s.row === r && s.col === c);
+        return hit ? hit.index : null;
+    }
+
+    /**
+     * Build atlas tiles at a readable ground scale. Returns one sheet when the
+     * network fits, or a left→right / top→bottom grid with overlap.
+     */
+    function buildSheetPlan(forceMulti) {
+        const net = getNetworkBounds();
+        if (!net) {
+            sheetPlan = [];
+            currentSheetIndex = 0;
+            return sheetPlan;
+        }
+
+        const aspect = mapHoleAspect();
+        const size = boundsSizeMeters(net);
+        const mode = getPrintMode();
+        const maxW = MAX_CLEAR_MAP_WIDTH_M;
+        const maxH = maxW / aspect;
+        const fits =
+            size.w <= maxW * 1.02 &&
+            size.h <= maxH * 1.02;
+
+        const wantMulti = mode === 'multi' || (mode === 'auto' && !fits) || (forceMulti && !fits);
+        if (mode === 'single' || !wantMulti || (mode === 'auto' && fits)) {
+            sheetPlan = [{
+                bounds: net,
+                row: 0,
+                col: 0,
+                rows: 1,
+                cols: 1,
+                index: 0
+            }];
+            currentSheetIndex = 0;
+            return sheetPlan;
+        }
+
+        const tileW = maxW;
+        const tileH = maxH;
+        const stepW = tileW * (1 - SHEET_OVERLAP);
+        const stepH = tileH * (1 - SHEET_OVERLAP);
+        const cols = Math.max(1, Math.ceil(size.w / stepW));
+        const rows = Math.max(1, Math.ceil(size.h / stepH));
+
+        const { mLat, mLng } = metersPerDeg(size.midLat);
+        const west0 = net.getWest();
+        const north0 = net.getNorth();
+
+        const tiles = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const west = west0 + (c * stepW) / mLng;
+                const east = west + tileW / mLng;
+                const north = north0 - (r * stepH) / mLat;
+                const south = north - tileH / mLat;
+                tiles.push({
+                    bounds: L.latLngBounds([south, west], [north, east]),
+                    row: r,
+                    col: c,
+                    rows,
+                    cols,
+                    index: tiles.length
+                });
+            }
+        }
+
+        // Drop empty edge tiles (no poles) but keep at least one.
+        const nonempty = tiles.filter((t) => sheetStatsForBounds(t.bounds).poles > 0);
+        sheetPlan = (nonempty.length ? nonempty : tiles).map((t, i) => ({ ...t, index: i }));
+        // Re-index neighbors still use row/col from original grid — good.
+
+        if (currentSheetIndex >= sheetPlan.length) currentSheetIndex = 0;
+        return sheetPlan;
+    }
+
+    function currentSheet() {
+        return sheetPlan[currentSheetIndex] || null;
+    }
+
+    function fitBoundsToMapHole(bounds, animate) {
+        if (!map || !bounds || !bounds.isValid()) return;
+        const hole = getMapHoleRectInViewport();
+        if (!hole || hole.w < 40 || hole.h < 40) {
+            map.fitBounds(bounds, { padding: [36, 36], animate: !!animate, maxZoom: 19 });
+            return;
+        }
+        const pad = 22;
+        map.invalidateSize();
+        map.fitBounds(bounds, {
+            paddingTopLeft: [hole.left + pad, hole.top + pad],
+            paddingBottomRight: [
+                Math.max(0, viewportRect().w - (hole.left + hole.w) + pad),
+                Math.max(0, viewportRect().h - (hole.top + hole.h) + pad)
+            ],
+            animate: !!animate,
+            maxZoom: 19
+        });
+    }
+
+    function maybeCrowdingToast() {
+        if (getPrintMode() !== 'auto') return;
+        if (sheetPlan.length <= 1) return;
+        const key = `${(surveyData && surveyData.surveyId) || 'x'}:${sheetPlan.length}`;
+        if (key === lastCrowdingToastKey) return;
+        lastCrowdingToastKey = key;
+        showToast(`Network is large — using ${sheetPlan.length} sheets for clarity.`);
+    }
+
+    function updateSheetNavUI() {
+        const nav = $('printSheetNav');
+        const strip = $('printSheetStrip');
+        const prev = $('btnPrintSheetPrev');
+        const next = $('btnPrintSheetNext');
+        const multi = sheetPlan.length > 1;
+        if (nav) nav.classList.toggle('is-hidden', !multi);
+        if (!strip) return;
+        strip.innerHTML = '';
+        sheetPlan.forEach((s, i) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'print-sheet-chip' + (i === currentSheetIndex ? ' is-active' : '');
+            btn.textContent = String(i + 1);
+            btn.title = `Sheet ${i + 1} of ${sheetPlan.length}` +
+                (s.rows > 1 || s.cols > 1 ? ` (R${s.row + 1}·C${s.col + 1})` : '');
+            btn.addEventListener('click', () => goToSheet(i, true));
+            strip.appendChild(btn);
+        });
+        if (prev) prev.disabled = !multi || currentSheetIndex <= 0;
+        if (next) next.disabled = !multi || currentSheetIndex >= sheetPlan.length - 1;
+    }
+
+    function goToSheet(index, animate) {
+        if (!sheetPlan.length) buildSheetPlan(false);
+        if (!sheetPlan.length) return;
+        currentSheetIndex = Math.max(0, Math.min(index, sheetPlan.length - 1));
+        const sheet = currentSheet();
+        if (sheet) fitBoundsToMapHole(sheet.bounds, animate !== false);
+        refreshFrameChrome();
+        updateSheetNavUI();
+    }
+
+    function rebuildSheetsAndShow(opts) {
+        const options = opts || {};
+        buildSheetPlan(!!options.forceMulti);
+        maybeCrowdingToast();
+        updateSheetNavUI();
+        const sheet = currentSheet();
+        if (sheet) fitBoundsToMapHole(sheet.bounds, options.animate !== false);
+        refreshFrameChrome();
+    }
+
+    function fitNetworkInFrame(ev) {
         if (!map || !nodes || nodes.length === 0) {
             showToast('Load a survey with poles first.');
             return;
         }
         if (!printEnabled) setPrintEnabled(true);
-
         const hole = getMapHoleRectInViewport();
         if (!hole || hole.w < 40 || hole.h < 40) {
             showToast('Print frame is too small.');
             return;
         }
-
-        const latLngs = nodes.map((n) => [n.assetRef.latitude, n.assetRef.longitude]);
-        const bounds = L.latLngBounds(latLngs);
-        if (!bounds.isValid()) return;
-
-        // Fit geographic bounds into the map-hole size (not full viewport)
-        const pad = 28;
-        map.invalidateSize();
-        map.fitBounds(bounds, {
-            paddingTopLeft: [hole.left - 0 + pad, hole.top - 0 + pad],
-            paddingBottomRight: [
-                Math.max(0, viewportRect().w - (hole.left + hole.w) + pad),
-                Math.max(0, viewportRect().h - (hole.top + hole.h) + pad)
-            ],
-            animate: true,
-            maxZoom: 19
-        });
+        const shift = ev && ev.shiftKey;
+        if (shift || !sheetPlan.length || getPrintMode() !== 'single') {
+            rebuildSheetsAndShow({ animate: true, forceMulti: shift && getPrintMode() === 'multi' });
+            return;
+        }
+        // Single mode: fit whole network
+        const net = getNetworkBounds();
+        if (net) fitBoundsToMapHole(net, true);
+        refreshFrameChrome();
     }
 
     function getMapHoleRectInViewport() {
@@ -568,7 +883,17 @@
         frameHeight = frameWidth / aspect;
         clampFrame();
         applyFrameStyle();
-        refreshFrameChrome();
+        if (printEnabled && nodes && nodes.length) {
+            rebuildSheetsAndShow({ animate: false });
+        } else {
+            refreshFrameChrome();
+        }
+    }
+
+    function onPrintModeChanged() {
+        lastCrowdingToastKey = '';
+        if (!printEnabled) setPrintEnabled(true);
+        else rebuildSheetsAndShow({ animate: true });
     }
 
     /* ── High-res export ── */
@@ -671,10 +996,17 @@
         drawLegendTableOnCanvas(ctx, x, y, w, h, scale);
     }
 
-    function drawHeaderFooter(ctx, pageW, pageH, scale) {
+    function drawHeaderFooter(ctx, pageW, pageH, scale, sheetCtx) {
         const meta = printMeta();
         const headerH = pageH * HEADER_FRAC;
         const footerH = pageH * FOOTER_FRAC;
+        const total = (sheetCtx && sheetCtx.total) || Math.max(1, sheetPlan.length || 1);
+        const num = (sheetCtx && sheetCtx.number) || (currentSheetIndex + 1);
+        const stats = (sheetCtx && sheetCtx.stats) || {
+            poles: (nodes || []).length,
+            spans: (edges || []).length,
+            routeM: totalRouteM()
+        };
 
         // Header band
         ctx.fillStyle = '#ffffff';
@@ -697,7 +1029,10 @@
 
         ctx.fillStyle = '#64748b';
         ctx.font = `${10 * scale}px Inter, Arial, sans-serif`;
-        ctx.fillText('Electrical Network · Single Line Diagram (GIS Sheet)', pad, pad + 48 * scale);
+        const subtitle = total > 1
+            ? `Electrical Network · Single Line Diagram (GIS Sheet) · Atlas ${num}/${total}`
+            : 'Electrical Network · Single Line Diagram (GIS Sheet)';
+        ctx.fillText(subtitle, pad, pad + 48 * scale);
 
         // Meta block right
         const metaX = pageW * 0.62;
@@ -705,7 +1040,7 @@
             ['Drg No.', meta.drawingNo],
             ['Scale', meta.scale],
             ['Date', meta.date],
-            ['Sheet', '1 of 1']
+            ['Sheet', `${num} of ${total}`]
         ];
         rows.forEach((row, i) => {
             const y = pad + 12 * scale + i * 16 * scale;
@@ -734,10 +1069,12 @@
         ctx.lineTo(pageW, fy);
         ctx.stroke();
 
+        const poleLabel = total > 1 ? 'Poles / Spans (sheet)' : 'Poles / Spans';
+        const routeLabel = total > 1 ? 'Route (sheet)' : 'Route Length';
         const cols = [
             { label: 'Surveyor', value: meta.mobile ? `${meta.surveyor} · ${meta.mobile}` : meta.surveyor },
-            { label: 'Poles / Spans', value: `${(nodes || []).length} / ${(edges || []).length}` },
-            { label: 'Route Length', value: formatDistanceLocal(totalRouteM()) },
+            { label: poleLabel, value: `${stats.poles} / ${stats.spans}` },
+            { label: routeLabel, value: formatDistanceLocal(stats.routeM) },
             { label: 'Signature', value: '' }
         ];
         const colW = pageW / cols.length;
@@ -773,9 +1110,317 @@
         ctx.strokeRect(1, 1, pageW - 2, pageH - 2);
     }
 
+    function drawMatchLines(ctx, mapX, mapY, mapW, mapH, scale, sheet) {
+        if (!sheet || sheetPlan.length <= 1) return;
+        const tick = 14 * scale;
+        const dirs = [
+            { dir: 'n', x1: mapX + mapW * 0.35, y1: mapY, x2: mapX + mapW * 0.65, y2: mapY, tx: mapX + mapW / 2, ty: mapY + 16 * scale },
+            { dir: 's', x1: mapX + mapW * 0.35, y1: mapY + mapH, x2: mapX + mapW * 0.65, y2: mapY + mapH, tx: mapX + mapW / 2, ty: mapY + mapH - 8 * scale },
+            { dir: 'w', x1: mapX, y1: mapY + mapH * 0.35, x2: mapX, y2: mapY + mapH * 0.65, tx: mapX + 8 * scale, ty: mapY + mapH / 2 },
+            { dir: 'e', x1: mapX + mapW, y1: mapY + mapH * 0.35, x2: mapX + mapW, y2: mapY + mapH * 0.65, tx: mapX + mapW - 8 * scale, ty: mapY + mapH / 2 }
+        ];
+        dirs.forEach((d) => {
+            const ni = neighborSheetIndex(sheet, d.dir);
+            if (ni == null) return;
+            ctx.save();
+            ctx.strokeStyle = '#0f172a';
+            ctx.setLineDash([5 * scale, 4 * scale]);
+            ctx.lineWidth = Math.max(1.5, 1.8 * scale);
+            ctx.beginPath();
+            ctx.moveTo(d.x1, d.y1);
+            ctx.lineTo(d.x2, d.y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            // Corner ticks
+            ctx.beginPath();
+            if (d.dir === 'n' || d.dir === 's') {
+                ctx.moveTo(d.x1, d.y1 - (d.dir === 'n' ? 0 : tick));
+                ctx.lineTo(d.x1, d.y1 + (d.dir === 'n' ? tick : 0));
+                ctx.moveTo(d.x2, d.y2 - (d.dir === 'n' ? 0 : tick));
+                ctx.lineTo(d.x2, d.y2 + (d.dir === 'n' ? tick : 0));
+            } else {
+                ctx.moveTo(d.x1 - (d.dir === 'w' ? 0 : tick), d.y1);
+                ctx.lineTo(d.x1 + (d.dir === 'w' ? tick : 0), d.y1);
+                ctx.moveTo(d.x2 - (d.dir === 'w' ? 0 : tick), d.y2);
+                ctx.lineTo(d.x2 + (d.dir === 'w' ? tick : 0), d.y2);
+            }
+            ctx.stroke();
+            ctx.fillStyle = '#0f172a';
+            ctx.font = `bold ${9 * scale}px Inter, Arial, sans-serif`;
+            ctx.textAlign = d.dir === 'e' ? 'right' : d.dir === 'w' ? 'left' : 'center';
+            ctx.textBaseline = d.dir === 'n' ? 'top' : d.dir === 's' ? 'bottom' : 'middle';
+            ctx.fillText(`→ Sheet ${ni + 1}`, d.tx, d.ty);
+            ctx.restore();
+        });
+    }
+
+    function keyPlanProjectors(net, ix, iy, iw, ih) {
+        const south = net.getSouth();
+        const west = net.getWest();
+        const nSpan = Math.max(1e-9, net.getNorth() - south);
+        const eSpan = Math.max(1e-9, net.getEast() - west);
+        const toXY = (lat, lng) => ({
+            x: ix + ((lng - west) / eSpan) * iw,
+            y: iy + ((net.getNorth() - lat) / nSpan) * ih
+        });
+        const clampRect = (x, y, w, h) => {
+            let x1 = Math.max(ix, Math.min(ix + iw, x));
+            let y1 = Math.max(iy, Math.min(iy + ih, y));
+            let x2 = Math.max(ix, Math.min(ix + iw, x + w));
+            let y2 = Math.max(iy, Math.min(iy + ih, y + h));
+            return {
+                x: Math.min(x1, x2),
+                y: Math.min(y1, y2),
+                w: Math.max(0, Math.abs(x2 - x1)),
+                h: Math.max(0, Math.abs(y2 - y1))
+            };
+        };
+        return { toXY, clampRect };
+    }
+
+    function drawKeyPlanNetworkLines(ctx, toXY, scale) {
+        if (!nodes || !nodes.length || !edges || !edges.length) return;
+        const byId = {};
+        nodes.forEach((n) => { byId[n.id] = n; });
+        // Draw by voltage so HT sits above LT visually when overlapping
+        const order = ['LT', '11kV', '33kV'];
+        order.forEach((volt) => {
+            edges.forEach((e) => {
+                if (normalizeVoltage(e.voltage) !== volt) return;
+                const a = byId[e.from];
+                const b = byId[e.to];
+                if (!a || !b) return;
+                const p1 = toXY(a.assetRef.latitude, a.assetRef.longitude);
+                const p2 = toXY(b.assetRef.latitude, b.assetRef.longitude);
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = VOLTAGE_COLORS[volt] || '#334155';
+                ctx.lineWidth = Math.max(1.6, (volt === '33kV' ? 2.4 : volt === '11kV' ? 2.0 : 1.7) * scale);
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.setLineDash([]);
+                ctx.stroke();
+            });
+        });
+    }
+
+    function drawKeyPlanPoleDots(ctx, toXY, scale) {
+        if (!nodes || !nodes.length) return;
+        const r = Math.max(1.8, 2.4 * scale);
+        nodes.forEach((n) => {
+            const p = toXY(n.assetRef.latitude, n.assetRef.longitude);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = '#0f172a';
+            ctx.fill();
+        });
+    }
+
+    function drawKeyPlan(ctx, mapX, mapY, mapW, mapH, scale, sheet) {
+        if (!sheet || sheetPlan.length <= 1) return;
+        const net = getNetworkBounds();
+        if (!net) return;
+
+        const boxW = Math.min(Math.max(mapW * 0.26, 190 * scale), mapW * 0.36);
+        const boxH = Math.min(Math.max(mapH * 0.28, 160 * scale), mapH * 0.38);
+        const margin = 14 * scale;
+        const bx = mapX + margin;
+        const by = mapY + margin;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.28)';
+        ctx.shadowBlur = 8 * scale;
+        ctx.shadowOffsetY = 2 * scale;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(bx, by, boxW, boxH);
+        ctx.shadowColor = 'transparent';
+
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = Math.max(2, 2.4 * scale);
+        ctx.strokeRect(bx, by, boxW, boxH);
+
+        const titleH = 20 * scale;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(bx, by, boxW, titleH);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${10 * scale}px Inter, Arial, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('KEY PLAN', bx + 8 * scale, by + titleH / 2);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${sheet.index + 1} / ${sheetPlan.length}`, bx + boxW - 8 * scale, by + titleH / 2);
+
+        const pad = 8 * scale;
+        const noteH = 16 * scale;
+        const ix = bx + pad;
+        const iy = by + titleH + pad;
+        const iw = boxW - pad * 2;
+        const ih = boxH - titleH - pad * 2 - noteH;
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(ix, iy, iw, ih);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = Math.max(1, 1.2 * scale);
+        ctx.strokeRect(ix, iy, iw, ih);
+
+        // Clip drawing to plot so sheet frames never spill out
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ix, iy, iw, ih);
+        ctx.clip();
+
+        const { toXY, clampRect } = keyPlanProjectors(net, ix, iy, iw, ih);
+
+        // Sheet frames under lines (outline only, clipped)
+        sheetPlan.forEach((t) => {
+            const a = toXY(t.bounds.getNorth(), t.bounds.getWest());
+            const b = toXY(t.bounds.getSouth(), t.bounds.getEast());
+            const raw = {
+                x: Math.min(a.x, b.x),
+                y: Math.min(a.y, b.y),
+                w: Math.abs(b.x - a.x),
+                h: Math.abs(b.y - a.y)
+            };
+            const r = clampRect(raw.x, raw.y, raw.w, raw.h);
+            if (r.w < 1 || r.h < 1) return;
+            const active = t.index === sheet.index;
+            ctx.strokeStyle = active ? '#1565c0' : '#94a3b8';
+            ctx.lineWidth = active ? Math.max(2, 2.2 * scale) : Math.max(1, 1.1 * scale);
+            ctx.setLineDash(active ? [] : [4 * scale, 3 * scale]);
+            ctx.strokeRect(r.x + 0.5, r.y + 0.5, Math.max(0, r.w - 1), Math.max(0, r.h - 1));
+            ctx.setLineDash([]);
+            if (active) {
+                ctx.fillStyle = 'rgba(21, 101, 192, 0.08)';
+                ctx.fillRect(r.x, r.y, r.w, r.h);
+            }
+        });
+
+        // Clean network lines + simple pole dots (no labels / structure text)
+        drawKeyPlanNetworkLines(ctx, toXY, scale);
+        drawKeyPlanPoleDots(ctx, toXY, scale);
+
+        ctx.restore(); // end clip
+
+        ctx.fillStyle = '#475569';
+        ctx.font = `${8.5 * scale}px Inter, Arial, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Blue frame = this sheet · lines + poles', bx + pad, by + boxH - noteH / 2);
+        ctx.restore();
+    }
+
+    function refreshLiveKeyPlan() {
+        const panel = $('printFrameKeyPlan');
+        const body = $('pfKeyPlanBody');
+        const note = $('pfKeyPlanNote');
+        if (!panel || !body) return;
+
+        const multi = sheetPlan.length > 1;
+        panel.classList.toggle('is-hidden', !multi);
+        if (!multi) {
+            body.innerHTML = '';
+            return;
+        }
+
+        const net = getNetworkBounds();
+        const sheet = currentSheet();
+        if (!net || !sheet) {
+            panel.classList.add('is-hidden');
+            return;
+        }
+
+        const vbW = 200;
+        const vbH = 140;
+        const { toXY, clampRect } = keyPlanProjectors(net, 0, 0, vbW, vbH);
+        const byId = {};
+        (nodes || []).forEach((n) => { byId[n.id] = n; });
+
+        const frameParts = sheetPlan.map((t) => {
+            const a = toXY(t.bounds.getNorth(), t.bounds.getWest());
+            const b = toXY(t.bounds.getSouth(), t.bounds.getEast());
+            const r = clampRect(
+                Math.min(a.x, b.x),
+                Math.min(a.y, b.y),
+                Math.abs(b.x - a.x),
+                Math.abs(b.y - a.y)
+            );
+            if (r.w < 1 || r.h < 1) return '';
+            const active = t.index === sheet.index;
+            return `<rect x="${r.x.toFixed(1)}" y="${r.y.toFixed(1)}" width="${r.w.toFixed(1)}" height="${r.h.toFixed(1)}"
+                fill="${active ? 'rgba(21,101,192,0.08)' : 'none'}"
+                stroke="${active ? '#1565c0' : '#94a3b8'}"
+                stroke-width="${active ? 2.2 : 1}"
+                stroke-dasharray="${active ? 'none' : '4 3'}"
+                data-sheet="${t.index}"
+                style="cursor:pointer" />`;
+        }).join('');
+
+        const lineOrder = ['LT', '11kV', '33kV'];
+        const lineParts = [];
+        lineOrder.forEach((volt) => {
+            (edges || []).forEach((e) => {
+                if (normalizeVoltage(e.voltage) !== volt) return;
+                const a = byId[e.from];
+                const b = byId[e.to];
+                if (!a || !b) return;
+                const p1 = toXY(a.assetRef.latitude, a.assetRef.longitude);
+                const p2 = toXY(b.assetRef.latitude, b.assetRef.longitude);
+                const sw = volt === '33kV' ? 2.4 : volt === '11kV' ? 2.0 : 1.7;
+                lineParts.push(
+                    `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}"
+                        stroke="${VOLTAGE_COLORS[volt]}" stroke-width="${sw}" stroke-linecap="round" />`
+                );
+            });
+        });
+
+        const dotParts = (nodes || []).map((n) => {
+            const p = toXY(n.assetRef.latitude, n.assetRef.longitude);
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" fill="#0f172a" />`;
+        }).join('');
+
+        // Invisible hit targets for sheet navigation (clipped)
+        const hitParts = sheetPlan.map((t) => {
+            const a = toXY(t.bounds.getNorth(), t.bounds.getWest());
+            const b = toXY(t.bounds.getSouth(), t.bounds.getEast());
+            const r = clampRect(
+                Math.min(a.x, b.x),
+                Math.min(a.y, b.y),
+                Math.abs(b.x - a.x),
+                Math.abs(b.y - a.y)
+            );
+            if (r.w < 1 || r.h < 1) return '';
+            return `<rect class="pf-keyplan-hit" data-sheet="${t.index}"
+                x="${r.x.toFixed(1)}" y="${r.y.toFixed(1)}" width="${r.w.toFixed(1)}" height="${r.h.toFixed(1)}"
+                fill="transparent" style="cursor:pointer" />`;
+        }).join('');
+
+        body.innerHTML = `
+            <svg class="pf-keyplan-svg" viewBox="0 0 ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet" aria-label="Key plan">
+                <rect x="0" y="0" width="${vbW}" height="${vbH}" fill="#ffffff"/>
+                ${frameParts}
+                ${lineParts.join('')}
+                ${dotParts}
+                ${hitParts}
+            </svg>`;
+
+        body.querySelectorAll('[data-sheet]').forEach((el) => {
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const i = parseInt(el.getAttribute('data-sheet'), 10);
+                if (Number.isFinite(i)) goToSheet(i, true);
+            });
+        });
+
+        if (note) {
+            note.textContent = `Sheet ${sheet.index + 1} of ${sheetPlan.length} · blue frame = here`;
+        }
+    }
+
     /**
      * Project current map view into the print map rectangle and draw crisp network vectors.
-     * Works even when tile capture fails (CORS).
+     * Pole numbers + span lengths use collision-aware placement so they do not overlap.
      */
     function drawNetworkIntoMapArea(ctx, mapX, mapY, mapW, mapH) {
         if (!map || !nodes || nodes.length === 0) return;
@@ -801,16 +1446,107 @@
         };
 
         const scale = Math.max(mapW, mapH) / 900;
+        const pad = 4 * scale;
         const nodesById = {};
         nodes.forEach((n) => { nodesById[n.id] = n; });
 
-        // Edges
-        (edges || []).forEach((edge) => {
+        const inMap = (x, y, margin) => {
+            const m = margin == null ? 0 : margin;
+            return x >= mapX - m && x <= mapX + mapW + m && y >= mapY - m && y <= mapY + mapH + m;
+        };
+
+        const occupied = []; // axis-aligned boxes already taken
+
+        const overlaps = (box, list, gap) => {
+            const g = gap == null ? 2 * scale : gap;
+            for (let i = 0; i < list.length; i++) {
+                const o = list[i];
+                if (box.x < o.x + o.w + g && box.x + box.w + g > o.x &&
+                    box.y < o.y + o.h + g && box.y + box.h + g > o.y) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const clampBox = (box) => {
+            let x = box.x;
+            let y = box.y;
+            let w = box.w;
+            let h = box.h;
+            if (x < mapX + pad) x = mapX + pad;
+            if (y < mapY + pad) y = mapY + pad;
+            if (x + w > mapX + mapW - pad) x = mapX + mapW - pad - w;
+            if (y + h > mapY + mapH - pad) y = mapY + mapH - pad - h;
+            return { x, y, w, h };
+        };
+
+        const placeBox = (candidates, hardObstacles) => {
+            for (let i = 0; i < candidates.length; i++) {
+                const c = clampBox(candidates[i]);
+                if (c.w < 2 || c.h < 2) continue;
+                if (overlaps(c, hardObstacles) || overlaps(c, occupied)) continue;
+                occupied.push(c);
+                return c;
+            }
+            // Last resort: first candidate even if tight, but still avoid hard obstacles if possible
+            for (let i = 0; i < candidates.length; i++) {
+                const c = clampBox(candidates[i]);
+                if (!overlaps(c, hardObstacles, scale)) {
+                    occupied.push(c);
+                    return c;
+                }
+            }
+            return null;
+        };
+
+        const drawLabelBox = (box, text, opts) => {
+            if (!box) return;
+            const o = opts || {};
+            ctx.save();
+            ctx.font = o.font || `${9 * scale}px Inter, Arial, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const cx = box.x + box.w / 2;
+            const cy = box.y + box.h / 2 + 0.5 * scale;
+            // Soft halo for readability on map tiles — no solid white pill
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.strokeStyle = o.halo || 'rgba(255,255,255,0.92)';
+            ctx.lineWidth = Math.max(2.5, 3.2 * scale);
+            ctx.strokeText(text, cx, cy);
+            ctx.fillStyle = o.color || '#0f172a';
+            ctx.fillText(text, cx, cy);
+            ctx.restore();
+        };
+
+        // --- Geometry pass ---
+        const polePts = [];
+        nodes.forEach((node) => {
+            const p = toPage(node.assetRef.latitude, node.assetRef.longitude);
+            const r = Math.max(7, 9 * scale);
+            polePts.push({ node, p, r });
+            // Reserve marker area as hard obstacle
+            occupied.push({
+                x: p.x - r - 0.5 * scale,
+                y: p.y - r - 0.5 * scale,
+                w: r * 2 + 1 * scale,
+                h: r * 2 + 1 * scale,
+                hard: true
+            });
+        });
+        const hardObstacles = occupied.slice();
+
+        // --- Draw edges (lines only first) ---
+        const spanJobs = [];
+        (edges || []).forEach((edge, edgeIdx) => {
             const from = nodesById[edge.from];
             const to = nodesById[edge.to];
             if (!from || !to) return;
             const p1 = toPage(from.assetRef.latitude, from.assetRef.longitude);
             const p2 = toPage(to.assetRef.latitude, to.assetRef.longitude);
+            if (!inMap(p1.x, p1.y, 40 * scale) && !inMap(p2.x, p2.y, 40 * scale)) return;
+
             const color = VOLTAGE_COLORS[normalizeVoltage(edge.voltage)] || '#22c55e';
             ctx.save();
             ctx.strokeStyle = color;
@@ -823,28 +1559,39 @@
             ctx.lineTo(p2.x, p2.y);
             ctx.stroke();
             ctx.setLineDash([]);
+            ctx.restore();
 
             const span = parseFloat(edge.spanLengthM) || 0;
-            if (span > 0) {
-                const mx = (p1.x + p2.x) / 2;
-                const my = (p1.y + p2.y) / 2;
-                ctx.fillStyle = 'rgba(255,255,255,0.85)';
-                const label = formatDistanceLocal(span);
-                ctx.font = `${9 * scale}px Inter, Arial, sans-serif`;
-                const tw = ctx.measureText(label).width;
-                ctx.fillRect(mx - tw / 2 - 3 * scale, my - 12 * scale, tw + 6 * scale, 12 * scale);
-                ctx.fillStyle = '#334155';
-                ctx.textAlign = 'center';
-                ctx.fillText(label, mx, my - 3 * scale);
-                ctx.textAlign = 'left';
-            }
-            ctx.restore();
+            if (span <= 0) return;
+
+            const dx = p2.x - p1.x;
+            const dy = p2.y - p1.y;
+            const len = Math.hypot(dx, dy) || 1;
+            // Skip labels on extremely short on-page segments (unreadable anyway)
+            if (len < 28 * scale) return;
+
+            const mx = (p1.x + p2.x) / 2;
+            const my = (p1.y + p2.y) / 2;
+            if (!inMap(mx, my, 8 * scale)) return;
+
+            const nx = -dy / len;
+            const ny = dx / len;
+            const side = (edgeIdx % 2 === 0) ? 1 : -1;
+            spanJobs.push({
+                label: formatDistanceLocal(span),
+                mx,
+                my,
+                nx,
+                ny,
+                side,
+                ux: dx / len,
+                uy: dy / len
+            });
         });
 
-        // Poles
-        nodes.forEach((node) => {
-            const p = toPage(node.assetRef.latitude, node.assetRef.longitude);
-            const r = Math.max(7, 9 * scale);
+        // --- Draw pole markers (structure glyph only; number placed later) ---
+        polePts.forEach(({ node, p, r }) => {
+            if (!inMap(p.x, p.y, r)) return;
             ctx.save();
             ctx.fillStyle = STRUCTURE_COLOR;
             ctx.beginPath();
@@ -858,12 +1605,68 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(node.structure || '1P', p.x, p.y + 0.5);
-            ctx.fillStyle = '#0f172a';
-            ctx.font = `bold ${Math.max(8, 9 * scale)}px Inter, Arial, sans-serif`;
-            ctx.textBaseline = 'top';
-            const poleNo = node.label || `P-${String(node.sequence).padStart(2, '0')}`;
-            ctx.fillText(poleNo, p.x, p.y + r + 2 * scale);
             ctx.restore();
+        });
+
+        // --- Place pole numbers first (higher priority than spans) ---
+        const poleFont = `bold ${Math.max(8, 9 * scale)}px Inter, Arial, sans-serif`;
+        ctx.font = poleFont;
+        polePts.forEach(({ node, p, r }) => {
+            if (!inMap(p.x, p.y, r * 2)) return;
+            const poleNo = node.label || `P-${String(node.sequence).padStart(2, '0')}`;
+            const tw = ctx.measureText(poleNo).width;
+            const th = Math.max(10, 9.5 * scale);
+            const bw = tw + 2 * scale;
+            const bh = th;
+            // Keep numbers snug to the marker; only step out if crowded
+            const gaps = [r + 1 * scale, r + 3 * scale, r + 6 * scale, r + 10 * scale];
+            const candidates = [];
+            gaps.forEach((gap) => {
+                candidates.push(
+                    { x: p.x - bw / 2, y: p.y + gap, w: bw, h: bh },                 // below
+                    { x: p.x - bw / 2, y: p.y - gap - bh, w: bw, h: bh },             // above
+                    { x: p.x + gap, y: p.y - bh / 2, w: bw, h: bh },                  // right
+                    { x: p.x - gap - bw, y: p.y - bh / 2, w: bw, h: bh },             // left
+                    { x: p.x + gap * 0.65, y: p.y + gap * 0.65, w: bw, h: bh },       // SE
+                    { x: p.x - gap * 0.65 - bw, y: p.y + gap * 0.65, w: bw, h: bh },  // SW
+                    { x: p.x + gap * 0.65, y: p.y - gap * 0.65 - bh, w: bw, h: bh },  // NE
+                    { x: p.x - gap * 0.65 - bw, y: p.y - gap * 0.65 - bh, w: bw, h: bh } // NW
+                );
+            });
+            const box = placeBox(candidates, hardObstacles);
+            drawLabelBox(box, poleNo, {
+                font: poleFont,
+                color: '#0f172a'
+            });
+        });
+
+        // --- Place span lengths (perpendicular offset, then along-line shifts) ---
+        const spanFont = `${Math.max(8, 9 * scale)}px Inter, Arial, sans-serif`;
+        ctx.font = spanFont;
+        spanJobs.forEach((job) => {
+            const tw = ctx.measureText(job.label).width;
+            const th = Math.max(11, 10 * scale);
+            const bw = tw + 8 * scale;
+            const bh = th + 3 * scale;
+            const offsets = [12, 18, 26, 34, 44].map((d) => d * scale);
+            const along = [0, 0.18, -0.18, 0.32, -0.32];
+            const candidates = [];
+            [job.side, -job.side].forEach((side) => {
+                offsets.forEach((off) => {
+                    along.forEach((a) => {
+                        // Approximate mid-point shift along edge using unit vector stored earlier
+                        // Recompute from mx/my + along * half-length estimate via off scale
+                        const cx = job.mx + job.ux * (a * 40 * scale) + job.nx * side * off;
+                        const cy = job.my + job.uy * (a * 40 * scale) + job.ny * side * off;
+                        candidates.push({ x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh });
+                    });
+                });
+            });
+            const box = placeBox(candidates, hardObstacles);
+            drawLabelBox(box, job.label, {
+                font: spanFont,
+                color: '#334155'
+            });
         });
     }
 
@@ -919,11 +1722,18 @@
         }
     }
 
-    async function composePrintCanvas() {
+    async function composePrintCanvas(sheetOverride) {
         const pageMm = getPageMm();
         const dpi = getDpi();
         const px = pagePixels(pageMm, dpi);
         const scale = dpi / 96;
+        const sheet = sheetOverride || currentSheet();
+        const total = Math.max(1, sheetPlan.length || 1);
+        const number = sheet ? (sheet.index + 1) : 1;
+        const stats = sheet
+            ? sheetStatsForBounds(sheet.bounds)
+            : { poles: (nodes || []).length, spans: (edges || []).length, routeM: totalRouteM() };
+        const sheetCtx = { number, total, stats, sheet };
 
         const canvas = document.createElement('canvas');
         canvas.width = px.w;
@@ -1002,6 +1812,7 @@
         }
 
         drawNetworkIntoMapArea(ctx, mapX, mapY, mapW, mapH);
+        drawMatchLines(ctx, mapX, mapY, mapW, mapH, scale, sheet);
 
         if (legendShot) {
             drawLegendImage(ctx, legendShot, mapX, mapY, mapW, mapH);
@@ -1013,9 +1824,113 @@
             drawLegendTableOnCanvas(ctx, legendX, legendY, legendW, legendH, scale);
         }
 
-        drawHeaderFooter(ctx, px.w, px.h, scale);
+        // Draw last so key plan stays clearly readable above map + legend
+        drawKeyPlan(ctx, mapX, mapY, mapW, mapH, scale, sheet);
 
-        return { canvas, pageMm, dpi, px };
+        drawHeaderFooter(ctx, px.w, px.h, scale, sheetCtx);
+
+        return { canvas, pageMm, dpi, px, sheetCtx };
+    }
+
+    function waitForMapSettle(ms) {
+        return new Promise((resolve) => {
+            if (!map) {
+                setTimeout(resolve, ms || 200);
+                return;
+            }
+            let done = false;
+            const finish = () => {
+                if (done) return;
+                done = true;
+                map.off('moveend', onEnd);
+                setTimeout(resolve, ms || 180);
+            };
+            const onEnd = () => finish();
+            map.once('moveend', onEnd);
+            setTimeout(finish, 700);
+        });
+    }
+
+    function setMapAnimationsEnabled(on) {
+        if (!map) return;
+        if (!on) {
+            mapAnimBackup = {
+                zoomAnimation: map.options.zoomAnimation,
+                fadeAnimation: map.options.fadeAnimation,
+                markerZoomAnimation: map.options.markerZoomAnimation,
+                animate: map.options.animate
+            };
+            map.options.zoomAnimation = false;
+            map.options.fadeAnimation = false;
+            map.options.markerZoomAnimation = false;
+            if (map._fadeAnimated != null) map._fadeAnimated = false;
+            if (map._zoomAnimated != null) map._zoomAnimated = false;
+        } else if (mapAnimBackup) {
+            map.options.zoomAnimation = mapAnimBackup.zoomAnimation;
+            map.options.fadeAnimation = mapAnimBackup.fadeAnimation;
+            map.options.markerZoomAnimation = mapAnimBackup.markerZoomAnimation;
+            mapAnimBackup = null;
+        }
+    }
+
+    function showExportProgress(title, subtitle) {
+        const el = $('printExportProgress');
+        const vp = document.querySelector('.viewer-viewport');
+        const bar = $('printToolbar');
+        if (!el) return;
+        el.classList.remove('hidden', 'is-leaving');
+        el.setAttribute('aria-busy', 'true');
+        if (vp) vp.classList.add('is-print-exporting');
+        if (bar) bar.classList.add('is-print-exporting');
+        updateExportProgress(0, title || 'Preparing print…', subtitle || 'Please wait');
+    }
+
+    function updateExportProgress(pct, title, subtitle) {
+        const t = $('printExportTitle');
+        const s = $('printExportSubtitle');
+        const fill = $('printExportBarFill');
+        const p = $('printExportPct');
+        const value = Math.max(0, Math.min(100, Math.round(pct)));
+        if (t && title) t.textContent = title;
+        if (s && subtitle != null) s.textContent = subtitle;
+        if (fill) fill.style.width = `${value}%`;
+        if (p) p.textContent = `${value}%`;
+    }
+
+    async function hideExportProgress(delayMs) {
+        const el = $('printExportProgress');
+        const vp = document.querySelector('.viewer-viewport');
+        const bar = $('printToolbar');
+        if (!el) return;
+        el.classList.add('is-leaving');
+        await new Promise((r) => setTimeout(r, delayMs != null ? delayMs : 280));
+        el.classList.add('hidden');
+        el.classList.remove('is-leaving');
+        el.setAttribute('aria-busy', 'false');
+        if (vp) vp.classList.remove('is-print-exporting');
+        if (bar) bar.classList.remove('is-print-exporting');
+        const fill = $('printExportBarFill');
+        if (fill) fill.style.width = '0%';
+    }
+
+    async function prepareSheetForExport(sheet, opts) {
+        if (!sheet) return;
+        const options = opts || {};
+        currentSheetIndex = sheet.index;
+        // Avoid sheet-nav / chrome thrash while covered by progress UI
+        if (!options.quiet) {
+            refreshFrameChrome();
+        } else {
+            // Still keep legend/stats coherent for capture without rebuilding nav strip
+            const legendBody = $('pfLegendBody');
+            if (legendBody && !legendBody.innerHTML) legendBody.innerHTML = buildLegendHtml();
+        }
+        fitBoundsToMapHole(sheet.bounds, false);
+        if (map) {
+            try { map.invalidateSize(false); } catch (e) { /* ignore */ }
+        }
+        await waitForMapSettle(options.settleMs != null ? options.settleMs : 200);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
 
     function downloadBlob(blob, filename) {
@@ -1030,15 +1945,31 @@
     }
 
     async function exportPng() {
+        if (exportInProgress) return;
         if (!surveyData) {
             showToast('Load a workspace before exporting.');
             return;
         }
         if (!printEnabled) setPrintEnabled(true);
-        showToast('Rendering high-resolution PNG…');
+        if (!sheetPlan.length) buildSheetPlan(false);
+        const sheet = currentSheet();
+        const total = Math.max(1, sheetPlan.length);
+        const prevCenter = map ? map.getCenter() : null;
+        const prevZoom = map ? map.getZoom() : null;
+        exportInProgress = true;
+        setMapAnimationsEnabled(false);
+        showExportProgress(
+            'Exporting PNG',
+            total > 1 ? `Sheet ${currentSheetIndex + 1} of ${total}` : 'Rendering high-resolution sheet…'
+        );
         try {
-            const { canvas, dpi } = await composePrintCanvas();
-            const name = `SLD_${(surveyData && surveyData.surveyId) || 'sheet'}_${dpi}dpi.png`;
+            updateExportProgress(12, 'Exporting PNG', 'Framing map…');
+            if (sheet) await prepareSheetForExport(sheet, { quiet: true, settleMs: 220 });
+            updateExportProgress(45, 'Exporting PNG', 'Composing sheet…');
+            const { canvas, dpi } = await composePrintCanvas(sheet);
+            updateExportProgress(82, 'Exporting PNG', 'Encoding image…');
+            const suffix = total > 1 ? `_p${currentSheetIndex + 1}of${total}` : '';
+            const name = `SLD_${(surveyData && surveyData.surveyId) || 'sheet'}${suffix}_${dpi}dpi.png`;
             await new Promise((resolve, reject) => {
                 canvas.toBlob((blob) => {
                     if (!blob) {
@@ -1049,14 +1980,27 @@
                     resolve();
                 }, 'image/png');
             });
-            showToast(`Exported ${name}`);
+            updateExportProgress(100, 'Export complete', name);
+            await new Promise((r) => setTimeout(r, 320));
+            showToast(total > 1
+                ? `Exported ${name} (use PDF for all sheets)`
+                : `Exported ${name}`);
         } catch (err) {
             console.error(err);
             showToast('PNG export failed: ' + (err.message || err));
+        } finally {
+            if (map && prevCenter != null && prevZoom != null) {
+                map.setView(prevCenter, prevZoom, { animate: false });
+            }
+            setMapAnimationsEnabled(true);
+            exportInProgress = false;
+            await hideExportProgress(300);
+            refreshFrameChrome();
         }
     }
 
     async function exportPdf() {
+        if (exportInProgress) return;
         if (!surveyData) {
             showToast('Load a workspace before exporting.');
             return;
@@ -1067,24 +2011,88 @@
             showToast('PDF library not loaded.');
             return;
         }
-        showToast('Rendering print-ready PDF…');
+        buildSheetPlan(false);
+        maybeCrowdingToast();
+        updateSheetNavUI();
+        if (!sheetPlan.length) {
+            showToast('Nothing to print — load poles first.');
+            return;
+        }
+
+        const { jsPDF } = jsPdfNs;
+        const pageMm = getPageMm();
+        const dpi = getDpi();
+        const pdf = new jsPDF({
+            orientation: pageMm.w >= pageMm.h ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: [pageMm.w, pageMm.h],
+            compress: true
+        });
+
+        const prevIndex = currentSheetIndex;
+        const prevCenter = map ? map.getCenter() : null;
+        const prevZoom = map ? map.getZoom() : null;
+        const total = sheetPlan.length;
+        exportCancelRequested = false;
+        exportInProgress = true;
+        setMapAnimationsEnabled(false);
+        showExportProgress(
+            'Preparing PDF',
+            total > 1 ? `Rendering ${total} sheets…` : 'Rendering sheet…'
+        );
+
         try {
-            const { canvas, pageMm, dpi } = await composePrintCanvas();
-            const img = canvas.toDataURL('image/png');
-            const { jsPDF } = jsPdfNs;
-            const pdf = new jsPDF({
-                orientation: pageMm.w >= pageMm.h ? 'landscape' : 'portrait',
-                unit: 'mm',
-                format: [pageMm.w, pageMm.h],
-                compress: true
-            });
-            pdf.addImage(img, 'PNG', 0, 0, pageMm.w, pageMm.h, undefined, 'FAST');
-            const name = `SLD_${(surveyData && surveyData.surveyId) || 'sheet'}_${dpi}dpi.pdf`;
+            for (let i = 0; i < total; i++) {
+                if (exportCancelRequested) throw new Error('Export cancelled');
+                const sheet = sheetPlan[i];
+                const base = (i / total) * 90;
+                updateExportProgress(
+                    base + 2,
+                    total > 1 ? `Rendering sheet ${i + 1} of ${total}` : 'Rendering sheet',
+                    'Framing map…'
+                );
+                await prepareSheetForExport(sheet, { quiet: true, settleMs: 200 });
+                updateExportProgress(
+                    base + (90 / total) * 0.45,
+                    total > 1 ? `Rendering sheet ${i + 1} of ${total}` : 'Rendering sheet',
+                    'Composing CAD sheet…'
+                );
+                const { canvas } = await composePrintCanvas(sheet);
+                updateExportProgress(
+                    base + (90 / total) * 0.85,
+                    total > 1 ? `Rendering sheet ${i + 1} of ${total}` : 'Rendering sheet',
+                    'Adding to PDF…'
+                );
+                const img = canvas.toDataURL('image/png');
+                if (i > 0) pdf.addPage([pageMm.w, pageMm.h], pageMm.w >= pageMm.h ? 'landscape' : 'portrait');
+                pdf.addImage(img, 'PNG', 0, 0, pageMm.w, pageMm.h, undefined, 'FAST');
+                updateExportProgress(
+                    ((i + 1) / total) * 90,
+                    total > 1 ? `Sheet ${i + 1} of ${total} ready` : 'Sheet ready',
+                    'Continuing…'
+                );
+                // Let the progress bar animate smoothly between sheets
+                await new Promise((r) => setTimeout(r, 40));
+            }
+            updateExportProgress(95, 'Finalizing PDF', 'Saving file…');
+            const name = `SLD_${(surveyData && surveyData.surveyId) || 'sheet'}_${total}p_${dpi}dpi.pdf`;
             pdf.save(name);
-            showToast(`Exported ${name}`);
+            updateExportProgress(100, 'Export complete', `${total} sheet${total > 1 ? 's' : ''} · ${name}`);
+            await new Promise((r) => setTimeout(r, 380));
+            showToast(`Exported ${name} (${total} sheet${total > 1 ? 's' : ''})`);
         } catch (err) {
             console.error(err);
             showToast('PDF export failed: ' + (err.message || err));
+        } finally {
+            currentSheetIndex = Math.min(prevIndex, Math.max(0, sheetPlan.length - 1));
+            if (map && prevCenter != null && prevZoom != null) {
+                map.setView(prevCenter, prevZoom, { animate: false });
+            }
+            setMapAnimationsEnabled(true);
+            exportInProgress = false;
+            await hideExportProgress(320);
+            refreshFrameChrome();
+            updateSheetNavUI();
         }
     }
 
@@ -1105,7 +2113,10 @@
     }
 
     function onWorkspaceLoaded() {
+        lastCrowdingToastKey = '';
         syncMetaFromSurvey();
+        buildSheetPlan(false);
+        updateSheetNavUI();
         refreshFrameChrome();
     }
 
@@ -1138,6 +2149,8 @@
             const el = $(id);
             if (el) el.addEventListener('change', onPageSettingsChanged);
         });
+        const modeEl = $('printPageMode');
+        if (modeEl) modeEl.addEventListener('change', onPrintModeChanged);
         ['printDrawingTitle', 'printSurveyor', 'printCompany', 'printDrawingNo', 'printScale'].forEach((id) => {
             const el = $(id);
             if (el) {
@@ -1152,6 +2165,14 @@
             if (!printEnabled) setPrintEnabled(true);
             else centerFrame();
         });
+        const prevBtn = $('btnPrintSheetPrev');
+        const nextBtn = $('btnPrintSheetNext');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => goToSheet(currentSheetIndex - 1, true));
+        }
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => goToSheet(currentSheetIndex + 1, true));
+        }
         const pngBtn = $('btnExportPrintPng');
         if (pngBtn) pngBtn.addEventListener('click', exportPng);
         const pdfBtn = $('btnExportPrintPdf');
@@ -1188,7 +2209,10 @@
         syncToolbarVisibility,
         exportPdf,
         exportPng,
-        isEnabled: () => printEnabled
+        isEnabled: () => printEnabled,
+        rebuildSheets: () => rebuildSheetsAndShow({ animate: true }),
+        goToSheet: (i) => goToSheet(i, true),
+        sheetCount: () => sheetPlan.length
     };
 
     window.addEventListener('DOMContentLoaded', () => {

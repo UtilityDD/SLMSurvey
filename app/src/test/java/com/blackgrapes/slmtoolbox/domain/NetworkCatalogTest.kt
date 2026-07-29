@@ -74,6 +74,55 @@ class NetworkCatalogTest {
     }
 
     @Test
+    fun ltAbcForces3Phase() {
+        assertEquals(listOf(PoleStructure.P3), NetworkCatalog.ltPhasesForConductor("ABC"))
+        assertEquals(PoleStructure.P3, NetworkCatalog.ltForcedStructure("ABC"))
+        assertEquals(PoleStructure.P1, NetworkCatalog.ltForcedStructure("PVC"))
+        assertEquals(null, NetworkCatalog.ltForcedStructure("50"))
+    }
+
+    @Test
+    fun htExtensionAndGuardingRules() {
+        assertTrue(NetworkCatalog.allowsPoleExtension(VoltageLevel.KV_33, PoleMaterial.H_POLE))
+        assertTrue(NetworkCatalog.allowsPoleExtension(VoltageLevel.KV_11, PoleMaterial.RAIL))
+        assertTrue(NetworkCatalog.allowsPoleExtension(VoltageLevel.KV_11, PoleMaterial.PCC_9M))
+        assertFalse(NetworkCatalog.allowsPoleExtension(VoltageLevel.KV_11, PoleMaterial.PCC_8M))
+        assertFalse(NetworkCatalog.allowsPoleExtension(VoltageLevel.LT, PoleMaterial.PCC_8M))
+        assertEquals(
+            listOf(
+                com.blackgrapes.slmtoolbox.domain.model.KitExtension.NO_EXT,
+                com.blackgrapes.slmtoolbox.domain.model.KitExtension.WITH_EXT
+            ),
+            NetworkCatalog.kitExtensionsFor(VoltageLevel.KV_33, PoleMaterial.PCC_9M)
+        )
+        assertEquals(
+            listOf(com.blackgrapes.slmtoolbox.domain.model.KitExtension.NO_EXT),
+            NetworkCatalog.kitExtensionsFor(VoltageLevel.KV_11, PoleMaterial.PCC_8M)
+        )
+        assertTrue(NetworkCatalog.allowsGuardingWithoutExtension(PoleMaterial.H_POLE))
+        assertTrue(NetworkCatalog.allowsGuardingWithoutExtension(PoleMaterial.RAIL))
+        assertFalse(NetworkCatalog.allowsGuardingWithoutExtension(PoleMaterial.PCC_9M))
+        assertTrue(
+            NetworkCatalog.allowsGuardingChoice(
+                PoleMaterial.RAIL,
+                com.blackgrapes.slmtoolbox.domain.model.KitExtension.NO_EXT
+            )
+        )
+        assertFalse(
+            NetworkCatalog.allowsGuardingChoice(
+                PoleMaterial.PCC_9M,
+                com.blackgrapes.slmtoolbox.domain.model.KitExtension.NO_EXT
+            )
+        )
+        assertTrue(
+            NetworkCatalog.allowsGuardingChoice(
+                PoleMaterial.PCC_9M,
+                com.blackgrapes.slmtoolbox.domain.model.KitExtension.WITH_EXT
+            )
+        )
+    }
+
+    @Test
     fun ltPvcForces1PPhase() {
         assertEquals(listOf(PoleStructure.P1), NetworkCatalog.ltPhasesForConductor("PVC"))
         assertTrue(NetworkCatalog.isPvcConductor("PVC"))
@@ -126,11 +175,11 @@ class NetworkCatalogTest {
             listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
             NetworkCatalog.ltPhasesForConductor("50")
         )
-        assertEquals(listOf(PoleStructure.P1), NetworkCatalog.ltPhasesForConductor("ABC"))
+        assertEquals(listOf(PoleStructure.P3), NetworkCatalog.ltPhasesForConductor("ABC"))
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "ABC", PoleStructure.P3))
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "30", PoleStructure.P3))
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "50", PoleStructure.P2))
-        assertEquals("ABC", NetworkCatalog.ltLineTag(VoltageLevel.LT, "ABC", PoleStructure.P1))
+        assertEquals("ABC", NetworkCatalog.ltLineTag(VoltageLevel.LT, "ABC", PoleStructure.P3))
         assertEquals("3Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "30", PoleStructure.P3))
         assertEquals("2Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "50", PoleStructure.P2))
         assertEquals("1Ph", NetworkCatalog.ltLineTag(VoltageLevel.LT, "30", PoleStructure.P1))

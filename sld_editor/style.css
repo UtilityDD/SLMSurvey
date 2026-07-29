@@ -912,6 +912,79 @@ html {
     margin-left: 4px;
 }
 
+.print-sheet-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    padding: 2px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: #fff;
+}
+
+.print-sheet-nav.is-hidden {
+    display: none !important;
+}
+
+.print-sheet-nav-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.print-sheet-nav-btn:hover:not(:disabled) {
+    background: var(--bg-primary);
+    color: var(--primary-color);
+}
+
+.print-sheet-nav-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.print-sheet-strip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: min(280px, 36vw);
+    overflow-x: auto;
+    padding: 0 2px;
+}
+
+.print-sheet-chip {
+    min-width: 26px;
+    height: 26px;
+    padding: 0 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-body);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.print-sheet-chip:hover {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.print-sheet-chip.is-active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: #fff;
+}
+
 .print-zoom-stepper {
     display: inline-flex;
     align-items: center;
@@ -1036,6 +1109,60 @@ html {
     pointer-events: none;
     min-height: 80px;
     background: transparent;
+    position: relative;
+}
+
+.print-frame-keyplan {
+    position: absolute;
+    left: 10px;
+    top: 10px;
+    width: min(220px, 40%);
+    border: 2px solid #0f172a;
+    border-radius: 2px;
+    padding: 0;
+    background: #ffffff;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.28);
+    cursor: move;
+    z-index: 3;
+    pointer-events: auto;
+    overflow: hidden;
+}
+
+.print-frame-keyplan.is-hidden {
+    display: none !important;
+}
+
+.pf-keyplan-title {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #ffffff;
+    background: #0f172a;
+    padding: 5px 8px;
+}
+
+.pf-keyplan-body {
+    position: relative;
+    height: 140px;
+    margin: 8px;
+    border: 1px solid #64748b;
+    background: #ffffff;
+    overflow: hidden;
+}
+
+.pf-keyplan-svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.pf-keyplan-note {
+    font-size: 9px;
+    font-weight: 700;
+    color: #1565c0;
+    padding: 0 8px 7px;
+    letter-spacing: 0.02em;
 }
 
 .print-frame-legend {
@@ -1043,8 +1170,8 @@ html {
     right: 10px;
     bottom: 42px;
     width: min(300px, 46%);
-    max-height: 48%;
-    overflow-y: auto;
+    max-height: calc(100% - 100px);
+    overflow: visible;
     border: 1.5px solid #0f172a;
     border-radius: 2px;
     padding: 8px 10px;
@@ -1216,6 +1343,116 @@ html {
 }
 .print-overlay.is-exporting .print-frame-handle {
     display: none;
+}
+
+/* Multipage export progress — hides map sheet-fitting jerks */
+.print-export-progress {
+    position: absolute;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(ellipse at 30% 20%, rgba(21, 101, 192, 0.18), transparent 55%),
+        rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 1;
+    transition: opacity 0.35s ease;
+    pointer-events: auto;
+}
+
+.print-export-progress.hidden {
+    display: none !important;
+}
+
+.print-export-progress.is-leaving {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.print-export-card {
+    width: min(360px, calc(100% - 40px));
+    padding: 28px 28px 22px;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+    text-align: center;
+    animation: print-export-card-in 0.35s ease;
+}
+
+@keyframes print-export-card-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.print-export-spinner {
+    width: 42px;
+    height: 42px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    border: 3px solid #e2e8f0;
+    border-top-color: #1565c0;
+    animation: print-export-spin 0.85s linear infinite;
+}
+
+@keyframes print-export-spin {
+    to { transform: rotate(360deg); }
+}
+
+.print-export-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+
+.print-export-subtitle {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #64748b;
+    line-height: 1.4;
+    min-height: 1.4em;
+}
+
+.print-export-bar {
+    margin-top: 18px;
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.print-export-bar-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1565c0, #42a5f5);
+    transition: width 0.35s ease;
+}
+
+.print-export-pct {
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #1565c0;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-viewport.is-print-exporting {
+    cursor: wait;
+}
+
+.print-toolbar.is-print-exporting {
+    pointer-events: none;
+    opacity: 0.72;
 }
 
 /* Viewport View Panes */
@@ -1462,7 +1699,7 @@ html {
 
     .print-frame-legend {
         width: min(260px, 55%);
-        max-height: 52%;
+        max-height: calc(100% - 96px);
     }
 
     .print-frame-footer {
@@ -1587,7 +1824,7 @@ html {
         right: 6px;
         bottom: 38px;
         padding: 6px 8px;
-        max-height: 56%;
+        max-height: calc(100% - 90px);
     }
 
     .pf-legend-table {
@@ -1663,7 +1900,7 @@ html {
         width: calc(100% - 12px);
         left: 6px;
         right: 6px;
-        max-height: 42%;
+        max-height: calc(100% - 88px);
     }
 }
 
@@ -1680,7 +1917,7 @@ html {
         width: 100vw !important;
         height: auto !important;
     }
-    .sidebar, .workspace-header, .canvas-actions-bar, .print-toolbar, .print-overlay {
+    .sidebar, .workspace-header, .canvas-actions-bar, .print-toolbar, .print-overlay, .print-export-progress {
         display: none !important;
     }
     .main-content {

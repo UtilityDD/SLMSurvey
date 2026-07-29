@@ -210,9 +210,9 @@
     <string name="bubble_kit_location_hint">Tangent · Angular · Dead-end · T-Off</string>
     <string name="bubble_kit_arrangement">Arrangement</string>
     <string name="bubble_kit_extension">পোল extension?</string>
-    <string name="bubble_kit_extension_hint">শুধু With extension-এ guarding জিজ্ঞাসা হবে</string>
+    <string name="bubble_kit_extension_hint">HT-এ H-Pole, Rail ও 9m PCC-এ With ext ব্যবহার করা যায়</string>
     <string name="bubble_guarding">এই পোলে Guarding?</string>
-    <string name="bubble_guarding_hint">হ্যাঁ = পরের span ×× চিহ্নসহ। শুধু With ext-এ।</string>
+    <string name="bubble_guarding_hint">হ্যাঁ = পরের span ×× চিহ্নসহ। With ext-এ, অথবা Rail / H-Pole-এ No ext-এও।</string>
     <string name="bubble_dtr_branch_voltage">DTR থেকে নেটওয়ার্ক</string>
     <string name="bubble_dtr_branch_voltage_hint">DTR থেকে 11kV বা LT শুরু করতে পারেন</string>
     <string name="bubble_dtr_mount">DTR mount</string>

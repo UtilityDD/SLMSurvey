@@ -241,7 +241,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     material = m
                     conductor = preset.continueAfterDtrConductor()
                     if (NetworkCatalog.isAbcConductor(conductor)) {
-                        structure = PoleStructure.P1
+                        structure = PoleStructure.P3
                         advanceToKitOrPlace()
                     } else {
                         structure = null
@@ -254,7 +254,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     conductor = series.conductor
                     if (series.voltage == VoltageLevel.LT) {
                         if (NetworkCatalog.isAbcConductor(series.conductor)) {
-                            structure = PoleStructure.P1
+                            structure = PoleStructure.P3
                             advanceToKitOrPlace()
                         } else {
                             // LT phase chosen on pole review
@@ -524,14 +524,11 @@ class SurveyBubbleWizard : DialogFragment() {
             Step.KIT_EXTENSION -> {
                 binding.bubbleTitle.text = getString(R.string.bubble_field_extension)
                 binding.bubbleSubtitle.text = getString(R.string.bubble_kit_extension_hint)
-                NetworkCatalog.kitExtensions().forEach { option ->
+                val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+                NetworkCatalog.kitExtensionsFor(v, material).forEach { option ->
                     addChoice(option.label, highlighted = option == kitExtension) {
                         kitExtension = option
-                        if (option != KitExtension.WITH_EXT) {
-                            guarding = false
-                        } else if (guarding == null) {
-                            guarding = false
-                        }
+                        syncGuardingAfterExtensionChange()
                         returnToPoleReview()
                     }
                 }
@@ -903,7 +900,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     kitLocation, kitArrangement, kitExtension, dtrMount, dtCapacityKva
                 )
             )
-            if (kitExtension == KitExtension.WITH_EXT && guarding == true) {
+            if (NetworkCatalog.allowsGuardingChoice(material, kitExtension) && guarding == true) {
                 append(" · Guarding")
             }
         }
@@ -938,9 +935,9 @@ class SurveyBubbleWizard : DialogFragment() {
             val options = structureOptionsForCurrent()
             structure = when {
                 tip != null && tip in options -> tip
-                v == VoltageLevel.LT &&
-                    (NetworkCatalog.isAbcConductor(conductor) ||
-                        NetworkCatalog.isPvcConductor(conductor)) -> PoleStructure.P1
+                v == VoltageLevel.LT ->
+                    NetworkCatalog.ltForcedStructure(conductor)
+                        ?: NetworkCatalog.defaultStructure(v).takeIf { it in options }
                 else -> NetworkCatalog.defaultStructure(v).takeIf { it in options }
             }
         }
@@ -962,6 +959,8 @@ class SurveyBubbleWizard : DialogFragment() {
         if (kitExtension == null) {
             kitExtension = tipKitExtension ?: KitExtension.NO_EXT
         }
+        normalizeExtensionForMaterial()
+        syncGuardingAfterExtensionChange()
         if (structure == PoleStructure.DTR && dtrMount == null) {
             dtrMount = tipDtrMount
         }
@@ -1143,10 +1142,14 @@ class SurveyBubbleWizard : DialogFragment() {
         val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
         normalizeArrangementForReview()
         if (kitExtension == null) {
+            kitExtension = tipKitExtension ?: KitExtension.NO_EXT
+        }
+        normalizeExtensionForMaterial()
+        if (kitExtension == null) {
             kitExtension = KitExtension.NO_EXT
         }
         val arrEnabled = kitLocation != null && kitLocation != KitLocation.DEAD_END
-        val guardEnabled = kitExtension == KitExtension.WITH_EXT
+        val guardEnabled = NetworkCatalog.allowsGuardingChoice(material, kitExtension)
 
         addReviewSectionHeader(getString(R.string.bubble_section_pole))
 
@@ -1157,6 +1160,8 @@ class SurveyBubbleWizard : DialogFragment() {
             rowTag = "material"
         ) { key ->
             material = NetworkCatalog.materialsFor(v).firstOrNull { it.name == key }
+            normalizeExtensionForMaterial()
+            syncGuardingAfterExtensionChange()
             refreshPoleReview()
         }
 
@@ -1175,13 +1180,8 @@ class SurveyBubbleWizard : DialogFragment() {
         ) { key ->
             conductor = key
             if (v == VoltageLevel.LT) {
-                if (NetworkCatalog.isAbcConductor(key) || NetworkCatalog.isPvcConductor(key)) {
-                    structure = PoleStructure.P1
-                } else {
-                    structure = structure?.takeIf {
-                        it in NetworkCatalog.ltPhasesForConductor(key)
-                    }
-                }
+                structure = NetworkCatalog.ltForcedStructure(key)
+                    ?: structure?.takeIf { it in NetworkCatalog.ltPhasesForConductor(key) }
             }
             refreshPoleReview()
         }
@@ -1244,19 +1244,15 @@ class SurveyBubbleWizard : DialogFragment() {
 
         addCompactOptionRow(
             getString(R.string.bubble_field_extension_short),
-            NetworkCatalog.kitExtensions().map {
+            NetworkCatalog.kitExtensionsFor(v, material).map {
                 CompactOpt(it.name, shortExtension(it))
             },
             selectedKey = kitExtension?.name,
             rowTag = "extension"
         ) { key ->
-            val option = NetworkCatalog.kitExtensions().firstOrNull { it.name == key }
+            val option = NetworkCatalog.kitExtensionsFor(v, material).firstOrNull { it.name == key }
             kitExtension = option
-            if (option != KitExtension.WITH_EXT) {
-                guarding = false
-            } else if (guarding == null) {
-                guarding = false
-            }
+            syncGuardingAfterExtensionChange()
             refreshPoleReview()
         }
 
@@ -1277,6 +1273,22 @@ class SurveyBubbleWizard : DialogFragment() {
         ) { key ->
             guarding = key == "YES"
             refreshPoleReview()
+        }
+    }
+
+    private fun normalizeExtensionForMaterial() {
+        val v = voltage ?: lockedSeries?.voltage ?: return
+        val allowed = NetworkCatalog.kitExtensionsFor(v, material)
+        if (kitExtension != null && kitExtension !in allowed) {
+            kitExtension = KitExtension.NO_EXT
+        }
+    }
+
+    private fun syncGuardingAfterExtensionChange() {
+        if (!NetworkCatalog.allowsGuardingChoice(material, kitExtension)) {
+            guarding = false
+        } else if (guarding == null) {
+            guarding = false
         }
     }
 
@@ -1329,7 +1341,7 @@ class SurveyBubbleWizard : DialogFragment() {
             kitExtension == null -> {
                 showProceedError(getString(R.string.bubble_need_extension), "extension")
             }
-            kitExtension == KitExtension.WITH_EXT && guarding == null -> {
+            NetworkCatalog.allowsGuardingChoice(material, kitExtension) && guarding == null -> {
                 showProceedError(getString(R.string.bubble_need_guarding), "guarding")
             }
             else -> {
@@ -1514,12 +1526,8 @@ class SurveyBubbleWizard : DialogFragment() {
         if (kitLocation == KitLocation.DEAD_END) {
             pendingPlaceRole = PoleRole.END
         }
-        if (kitExtension == KitExtension.WITH_EXT && guarding == null) {
-            guarding = false
-        }
-        if (kitExtension != KitExtension.WITH_EXT) {
-            guarding = false
-        }
+        normalizeExtensionForMaterial()
+        syncGuardingAfterExtensionChange()
         if (structure == PoleStructure.DTR && dtrMount == null) {
             push(Step.DTR_MOUNT)
             return
@@ -1547,7 +1555,8 @@ class SurveyBubbleWizard : DialogFragment() {
         val st = structure ?: asset.poleStructure ?: PoleStructure.P1
         val c = conductor ?: asset.conductor
         val ext = kitExtension
-        val guard = if (ext == KitExtension.WITH_EXT) (guarding == true) else false
+        val guard = NetworkCatalog.allowsGuardingChoice(material ?: asset.material, ext) &&
+            guarding == true
         onEdit?.invoke(
             asset.copy(
                 kitLocation = kitLocation?.label,
@@ -1636,7 +1645,7 @@ class SurveyBubbleWizard : DialogFragment() {
         if (v == VoltageLevel.LT &&
             (NetworkCatalog.isAbcConductor(conductor) || NetworkCatalog.isPvcConductor(conductor))
         ) {
-            structure = PoleStructure.P1
+            structure = NetworkCatalog.ltForcedStructure(conductor) ?: PoleStructure.P1
         }
         if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
         if (sourceSubstation.isNullOrBlank()) {
@@ -1651,9 +1660,10 @@ class SurveyBubbleWizard : DialogFragment() {
         val c = conductor ?: lockedSeries?.conductor ?: NetworkCatalog.conductorsFor(v).first()
         val st = when {
             structure == PoleStructure.P1N -> PoleStructure.P1N
-            v == VoltageLevel.LT &&
-                (NetworkCatalog.isAbcConductor(c) || NetworkCatalog.isPvcConductor(c)) ->
-                structure ?: PoleStructure.P1
+            v == VoltageLevel.LT ->
+                NetworkCatalog.ltForcedStructure(c)
+                    ?: structure
+                    ?: NetworkCatalog.defaultStructure(v)
             else -> structure ?: NetworkCatalog.defaultStructure(v)
         }
         // Ending a run: Dead-end unless user already chose T-Off / Dead-end.
@@ -1681,7 +1691,7 @@ class SurveyBubbleWizard : DialogFragment() {
         } else {
             null
         }
-        val guard = ext == KitExtension.WITH_EXT && guarding == true
+        val guard = NetworkCatalog.allowsGuardingChoice(m, ext) && guarding == true
         // Dead-end always ends the run.
         val placeRole = if (loc == KitLocation.DEAD_END) PoleRole.END else role
         if (editing != null) {
@@ -1793,7 +1803,7 @@ class SurveyBubbleWizard : DialogFragment() {
         feederName = preset.feederName.takeIf { it.isNotBlank() }
         sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
         if (voltage == VoltageLevel.LT && NetworkCatalog.isAbcConductor(conductor)) {
-            structure = PoleStructure.P1
+            structure = PoleStructure.P3
         }
     }
 

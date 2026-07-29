@@ -331,7 +331,7 @@ object SurveyMapRenderer {
     }
 
     /**
-     * Draws repeated × marks along a guarded span (extension + guarding = Yes).
+     * Draws repeated × marks along a guarded span (guarding Yes on either end pole).
      */
     private fun addGuardedCrossMarks(
         map: MapLibreMap,

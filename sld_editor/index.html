@@ -257,6 +257,12 @@
                         <option value="200" selected>200</option>
                         <option value="300">300</option>
                     </select>
+                    <label class="print-field-label" for="printPageMode">Pages</label>
+                    <select id="printPageMode" class="print-select" title="Auto splits large networks across clear sheets">
+                        <option value="auto" selected>Auto</option>
+                        <option value="single">Single</option>
+                        <option value="multi">Multi</option>
+                    </select>
                     <button type="button" class="btn print-toolbar-btn print-layout-toggle" id="btnTogglePrintLayout" title="Show printable page frame on map">
                         <span>▦</span> Print Layout
                     </button>
@@ -274,11 +280,16 @@
                     <input type="text" id="printScale" class="print-input print-input-xs" placeholder="Scale" value="NTS" title="Scale">
                 </div>
                 <div class="print-toolbar-divider"></div>
+                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Flip print sheets">
+                    <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetPrev" title="Previous sheet">‹</button>
+                    <div class="print-sheet-strip" id="printSheetStrip"></div>
+                    <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetNext" title="Next sheet">›</button>
+                </div>
                 <div class="print-toolbar-group print-toolbar-actions">
-                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit network into print frame">Fit</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit current sheet (Shift+click: rebuild all pages)">Fit</button>
                     <button type="button" class="btn print-toolbar-btn" id="btnCenterPrintFrame" title="Center print frame">Center</button>
-                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnExportPrintPng" title="Export high-resolution PNG">PNG</button>
-                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Export print-ready PDF">PDF</button>
+                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
+                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Export print-ready PDF (all sheets)">PDF</button>
                 </div>
             </div>
 
@@ -286,6 +297,19 @@
             <div class="viewer-viewport">
                 <!-- Leaflet Map View -->
                 <div id="mapView" class="view-pane active"></div>
+
+                <!-- Export progress (covers map thrashing during multipage render) -->
+                <div id="printExportProgress" class="print-export-progress hidden" aria-live="polite" aria-busy="false">
+                    <div class="print-export-card">
+                        <div class="print-export-spinner" aria-hidden="true"></div>
+                        <div class="print-export-title" id="printExportTitle">Preparing print…</div>
+                        <div class="print-export-subtitle" id="printExportSubtitle">Please wait</div>
+                        <div class="print-export-bar" aria-hidden="true">
+                            <div class="print-export-bar-fill" id="printExportBarFill"></div>
+                        </div>
+                        <div class="print-export-pct" id="printExportPct">0%</div>
+                    </div>
+                </div>
 
                 <!-- Printable page frame overlay (GIS map) -->
                 <div id="printOverlay" class="print-overlay hidden" aria-hidden="true">
@@ -300,10 +324,16 @@
                                 <div class="pf-meta-row"><span>Drg No.</span><strong id="pfDrgNo">—</strong></div>
                                 <div class="pf-meta-row"><span>Scale</span><strong id="pfScale">NTS</strong></div>
                                 <div class="pf-meta-row"><span>Date</span><strong id="pfDate">—</strong></div>
-                                <div class="pf-meta-row"><span>Sheet</span><strong>1 of 1</strong></div>
+                                <div class="pf-meta-row"><span>Sheet</span><strong id="pfSheet">1 of 1</strong></div>
                             </div>
                         </div>
-                        <div class="print-frame-map-hole" id="printMapHole"></div>
+                        <div class="print-frame-map-hole" id="printMapHole">
+                            <div class="print-frame-chrome print-frame-keyplan is-hidden" id="printFrameKeyPlan" title="Key plan — sheet overview">
+                                <div class="pf-keyplan-title">Key plan</div>
+                                <div class="pf-keyplan-body" id="pfKeyPlanBody"></div>
+                                <div class="pf-keyplan-note" id="pfKeyPlanNote">Blue frame = this sheet</div>
+                            </div>
+                        </div>
                         <div class="print-frame-chrome print-frame-legend" id="printFrameLegend">
                             <div class="pf-legend-title">Legend</div>
                             <div class="pf-legend-body" id="pfLegendBody"></div>

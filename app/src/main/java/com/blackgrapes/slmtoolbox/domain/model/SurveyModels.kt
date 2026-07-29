@@ -186,7 +186,7 @@ data class SurveyAsset(
     val kitArrangement: String? = null,
     /** Kit extension: NoExt / WithExt. */
     val kitExtension: String? = null,
-    /** Guarding on this pole — only when With-ext. Drives guarded span style. */
+    /** Guarding on this pole (With-ext, or No-ext on Rail / H-Pole). Drives guarded span style. */
     val guarding: Boolean = false,
     /** DTR mount: 2P / 4P. */
     val dtrMount: String? = null,

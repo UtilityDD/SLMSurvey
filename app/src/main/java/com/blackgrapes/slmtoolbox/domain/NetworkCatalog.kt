@@ -135,13 +135,19 @@ object NetworkCatalog {
     fun isPvcConductor(conductor: String?): Boolean =
         conductor?.equals("PVC", ignoreCase = true) == true
 
-    /** LT phase options after conductor: ABC/PVC have no phase choice; bare allows 1P/2P/3P. */
-    fun ltPhasesForConductor(conductor: String?): List<PoleStructure> =
-        if (isAbcConductor(conductor) || isPvcConductor(conductor)) {
-            listOf(PoleStructure.P1)
-        } else {
-            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
-        }
+    /** LT phase options after conductor: ABC is always 3-phase; PVC has no phase choice; bare allows 1P/2P/3P. */
+    fun ltPhasesForConductor(conductor: String?): List<PoleStructure> = when {
+        isAbcConductor(conductor) -> listOf(PoleStructure.P3)
+        isPvcConductor(conductor) -> listOf(PoleStructure.P1)
+        else -> listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
+    }
+
+    /** Forced phase/structure when conductor locks the choice (ABC → 3Ph, PVC → 1Ph). */
+    fun ltForcedStructure(conductor: String?): PoleStructure? = when {
+        isAbcConductor(conductor) -> PoleStructure.P3
+        isPvcConductor(conductor) -> PoleStructure.P1
+        else -> null
+    }
 
     fun defaultMaterial(voltage: VoltageLevel): PoleMaterial = materialsFor(voltage).first()
 
@@ -163,6 +169,40 @@ object NetworkCatalog {
     fun kitArrangements(): List<KitArrangement> = KitArrangement.entries.toList()
 
     fun kitExtensions(): List<KitExtension> = KitExtension.entries.toList()
+
+    /**
+     * HT (33/11kV): With-ext allowed on H-Pole, Rail, and 9m PCC.
+     * 8m PCC and LT: No-ext only (field practice).
+     */
+    fun allowsPoleExtension(voltage: VoltageLevel, material: PoleMaterial?): Boolean {
+        if (material == null) return false
+        return when (voltage) {
+            VoltageLevel.KV_33, VoltageLevel.KV_11 -> material in listOf(
+                PoleMaterial.H_POLE,
+                PoleMaterial.RAIL,
+                PoleMaterial.PCC_9M
+            )
+            VoltageLevel.LT -> false
+        }
+    }
+
+    fun kitExtensionsFor(voltage: VoltageLevel, material: PoleMaterial?): List<KitExtension> =
+        if (allowsPoleExtension(voltage, material)) {
+            KitExtension.entries.toList()
+        } else {
+            listOf(KitExtension.NO_EXT)
+        }
+
+    /**
+     * Guarding Yes/No is offered when With-ext, or on Rail / H-Pole even with No-ext.
+     */
+    fun allowsGuardingWithoutExtension(material: PoleMaterial?): Boolean =
+        material == PoleMaterial.H_POLE || material == PoleMaterial.RAIL
+
+    fun allowsGuardingChoice(material: PoleMaterial?, extension: KitExtension?): Boolean {
+        if (extension == KitExtension.WITH_EXT) return true
+        return extension == KitExtension.NO_EXT && allowsGuardingWithoutExtension(material)
+    }
 
     fun dtrMounts(): List<DtrMount> = DtrMount.entries.toList()
 
