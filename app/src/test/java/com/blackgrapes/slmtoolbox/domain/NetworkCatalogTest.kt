@@ -77,7 +77,7 @@ class NetworkCatalogTest {
     fun ltAbcForces3Phase() {
         assertEquals(listOf(PoleStructure.P3), NetworkCatalog.ltPhasesForConductor("ABC"))
         assertEquals(PoleStructure.P3, NetworkCatalog.ltForcedStructure("ABC"))
-        assertEquals(PoleStructure.P1, NetworkCatalog.ltForcedStructure("PVC"))
+        assertEquals(null, NetworkCatalog.ltForcedStructure("PVC"))
         assertEquals(null, NetworkCatalog.ltForcedStructure("50"))
     }
 
@@ -123,9 +123,13 @@ class NetworkCatalogTest {
     }
 
     @Test
-    fun ltPvcForces1PPhase() {
-        assertEquals(listOf(PoleStructure.P1), NetworkCatalog.ltPhasesForConductor("PVC"))
+    fun ltPvcAllows1Or3Phase() {
+        assertEquals(
+            listOf(PoleStructure.P1, PoleStructure.P3),
+            NetworkCatalog.ltPhasesForConductor("PVC")
+        )
         assertTrue(NetworkCatalog.isPvcConductor("PVC"))
+        assertEquals(null, NetworkCatalog.ltForcedStructure("PVC"))
     }
 
     @Test

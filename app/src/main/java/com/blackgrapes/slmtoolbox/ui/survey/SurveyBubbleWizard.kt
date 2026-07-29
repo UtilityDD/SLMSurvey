@@ -1642,10 +1642,14 @@ class SurveyBubbleWizard : DialogFragment() {
         material = preset.material.takeIf { it in materials } ?: NetworkCatalog.defaultMaterial(v)
         structure = preset.structure.takeIf { it in structures } ?: NetworkCatalog.defaultStructure(v)
         conductor = preset.conductor.takeIf { it in conductors } ?: conductors.first()
-        if (v == VoltageLevel.LT &&
-            (NetworkCatalog.isAbcConductor(conductor) || NetworkCatalog.isPvcConductor(conductor))
-        ) {
-            structure = NetworkCatalog.ltForcedStructure(conductor) ?: PoleStructure.P1
+        if (v == VoltageLevel.LT) {
+            NetworkCatalog.ltForcedStructure(conductor)?.let { structure = it }
+                ?: run {
+                    val phases = NetworkCatalog.ltPhasesForConductor(conductor)
+                    if (structure !in phases) {
+                        structure = phases.firstOrNull() ?: PoleStructure.P1
+                    }
+                }
         }
         if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
         if (sourceSubstation.isNullOrBlank()) {

@@ -135,17 +135,16 @@ object NetworkCatalog {
     fun isPvcConductor(conductor: String?): Boolean =
         conductor?.equals("PVC", ignoreCase = true) == true
 
-    /** LT phase options after conductor: ABC is always 3-phase; PVC has no phase choice; bare allows 1P/2P/3P. */
+    /** LT phase options after conductor: ABC is always 3-phase; PVC allows 1P or 3P; bare allows 1P/2P/3P. */
     fun ltPhasesForConductor(conductor: String?): List<PoleStructure> = when {
         isAbcConductor(conductor) -> listOf(PoleStructure.P3)
-        isPvcConductor(conductor) -> listOf(PoleStructure.P1)
+        isPvcConductor(conductor) -> listOf(PoleStructure.P1, PoleStructure.P3)
         else -> listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
     }
 
-    /** Forced phase/structure when conductor locks the choice (ABC → 3Ph, PVC → 1Ph). */
+    /** Forced phase/structure when conductor locks the choice (ABC → 3Ph only). */
     fun ltForcedStructure(conductor: String?): PoleStructure? = when {
         isAbcConductor(conductor) -> PoleStructure.P3
-        isPvcConductor(conductor) -> PoleStructure.P1
         else -> null
     }
 
