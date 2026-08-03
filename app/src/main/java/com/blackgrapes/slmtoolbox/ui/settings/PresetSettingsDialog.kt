@@ -18,6 +18,8 @@ import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.PresetData
 import com.blackgrapes.slmtoolbox.domain.PresetPattern
 import com.blackgrapes.slmtoolbox.domain.PresetPreferences
+import com.blackgrapes.slmtoolbox.domain.SurveyPresetCatalog
+import com.blackgrapes.slmtoolbox.domain.SurveyPresetCategory
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
 import com.blackgrapes.slmtoolbox.domain.model.VoltageLevel
@@ -329,21 +331,27 @@ class PresetSettingsDialog : DialogFragment() {
         binding.tilFeederName.error = null
         binding.tilSourceSs.error = null
 
-        val data = PresetData(
+        val match = when {
+            selectedPattern == PresetPattern.DTR_LT ->
+                SurveyPresetCatalog.byId("pre_dtr_lt")
+            else ->
+                SurveyPresetCatalog.preExecution.firstOrNull {
+                    it.voltage == voltage &&
+                        it.structure == structure &&
+                        it.conductor.equals(cond, ignoreCase = true)
+                } ?: SurveyPresetCatalog.preExecution.first()
+        }
+
+        PresetPreferences.save(
+            context = context,
             enabled = true,
-            pattern = selectedPattern,
-            voltage = voltage,
-            status = selectedStatus,
-            material = material,
-            structure = structure,
-            conductor = cond,
+            selectedId = match!!.id,
+            category = SurveyPresetCategory.PRE_EXECUTION,
             feederName = feeder,
             sourceSubstation = ss,
             displayUnit = displayUnit,
             displayDecimals = displayDecimals
         )
-
-        PresetPreferences.save(context, data)
         Toast.makeText(context, R.string.preset_saved_toast, Toast.LENGTH_SHORT).show()
         dismiss()
     }

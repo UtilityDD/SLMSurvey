@@ -18,22 +18,29 @@
     const FOOTER_FRAC = 0.075;
     const LEGEND_W_FRAC = 0.34;
     const LEGEND_H_FRAC = 0.52;
+    /** Fallback keep-out size (fraction of map hole) when live panels are not measurable. */
+    const LEGEND_KEEPOUT_W_FRAC = 0.42;
+    const LEGEND_KEEPOUT_H_FRAC = 0.46;
+    const KEYPLAN_KEEPOUT_W_FRAC = 0.30;
+    const KEYPLAN_KEEPOUT_H_FRAC = 0.34;
+    /** Extra clear gap around overlay panels so poles/labels are not flush against them. */
+    const KEEPOUT_GUTTER_FRAC = 0.014;
 
     const VOLTAGE_COLORS = {
-        '33kV': '#ef4444',
-        KV_33: '#ef4444',
-        '11kV': '#f59e0b',
-        KV_11: '#f59e0b',
-        LT: '#22c55e',
-        'LT': '#22c55e'
+        '33kV': '#d32f2f',
+        KV_33: '#d32f2f',
+        '11kV': '#f9a825',
+        KV_11: '#f9a825',
+        LT: '#388e3c',
+        'LT': '#388e3c'
     };
 
     const STRUCTURE_COLOR = '#1565c0';
 
+    /** Max ground width (m) across the printed map hole before Auto/Multi splits pages. */
+    const MAX_CLEAR_MAP_WIDTH_M = 700;
     /** Overlap between adjacent atlas sheets (keeps edge poles readable). */
-    const SHEET_OVERLAP = 0.08;
-    /** Max ground width (m) across the map hole before Auto/Multi splits pages. */
-    const MAX_CLEAR_MAP_WIDTH_M = 850;
+    const SHEET_OVERLAP = 0.06;
     /** Padding around network bounds when planning sheets (m). */
     const NETWORK_BOUNDS_PAD_M = 45;
 
@@ -51,6 +58,9 @@
     let exportCancelRequested = false;
     let exportInProgress = false;
     let mapAnimBackup = null;
+    /** User-framed page 1 atlas (zoom/pan), used for review + PDF. */
+    let manualAtlasLocked = false;
+    let pageOneBounds = null;
 
     function $(id) {
         return document.getElementById(id);
@@ -248,6 +258,7 @@
         const vp = document.querySelector('.viewer-viewport');
         if (!hole || !legendEl || !vp) return null;
         const lr = legendEl.getBoundingClientRect();
+        if (lr.width < 8 || lr.height < 8) return null;
         const vr = vp.getBoundingClientRect();
         const legendLeft = lr.left - vr.left;
         const legendTop = lr.top - vr.top;
@@ -257,6 +268,130 @@
             relWidth: lr.width / hole.w,
             relHeight: lr.height / hole.h
         };
+    }
+
+    function getKeyPlanLayoutInMapHole() {
+        const hole = getMapHoleRectInViewport();
+        const el = $('printFrameKeyPlan');
+        const vp = document.querySelector('.viewer-viewport');
+        if (!hole || !el || !vp || el.classList.contains('is-hidden')) return null;
+        const kr = el.getBoundingClientRect();
+        if (kr.width < 8 || kr.height < 8) return null;
+        const vr = vp.getBoundingClientRect();
+        const left = kr.left - vr.left;
+        const top = kr.top - vr.top;
+        return {
+            relLeft: (left - hole.left) / hole.w,
+            relTop: (top - hole.top) / hole.h,
+            relWidth: kr.width / hole.w,
+            relHeight: kr.height / hole.h
+        };
+    }
+
+    /**
+     * Pixel insets inside the map hole that must stay clear of network framing.
+     * Legend = bottom-right; key plan = top-left (multi-sheet only).
+     * @param {{includeKeyPlan?: boolean}} [opts]
+     */
+    function getHoleKeepOutPads(hole, opts) {
+        if (!hole || hole.w < 40 || hole.h < 40) {
+            return { left: 0, top: 0, right: 0, bottom: 0 };
+        }
+        const gutter = Math.max(8, Math.min(hole.w, hole.h) * KEEPOUT_GUTTER_FRAC);
+        const includeKeyPlan = opts && opts.includeKeyPlan != null
+            ? !!opts.includeKeyPlan
+            : sheetPlan.length > 1;
+
+        let right = hole.w * LEGEND_KEEPOUT_W_FRAC + gutter;
+        let bottom = hole.h * LEGEND_KEEPOUT_H_FRAC + gutter;
+        const liveLeg = getLegendLayoutInMapHole();
+        if (liveLeg && liveLeg.relWidth > 0.05 && liveLeg.relHeight > 0.05) {
+            // Reserve from legend's left/top edges out to the BR corner of the hole
+            right = Math.max(0, (1 - liveLeg.relLeft) * hole.w) + gutter;
+            bottom = Math.max(0, (1 - liveLeg.relTop) * hole.h) + gutter;
+        }
+
+        let left = 0;
+        let top = 0;
+        if (includeKeyPlan) {
+            left = hole.w * KEYPLAN_KEEPOUT_W_FRAC + gutter;
+            top = hole.h * KEYPLAN_KEEPOUT_H_FRAC + gutter;
+            const liveKp = getKeyPlanLayoutInMapHole();
+            if (liveKp && liveKp.relWidth > 0.05 && liveKp.relHeight > 0.05) {
+                left = Math.max(0, (liveKp.relLeft + liveKp.relWidth) * hole.w) + gutter;
+                top = Math.max(0, (liveKp.relTop + liveKp.relHeight) * hole.h) + gutter;
+            }
+        }
+
+        // Keep a large clear rectangle so framing stays readable (map not under overlays).
+        // Clear area must stay ≥ ~48% of the hole on each axis.
+        const maxSide = (frac) => Math.floor(hole.w * frac);
+        const maxVert = (frac) => Math.floor(hole.h * frac);
+        right = Math.min(right, maxSide(0.38));
+        bottom = Math.min(bottom, maxVert(0.42));
+        left = Math.min(left, maxSide(0.28));
+        top = Math.min(top, maxVert(0.30));
+        if (left + right > hole.w * 0.52) {
+            const scale = (hole.w * 0.52) / Math.max(1, left + right);
+            left *= scale;
+            right *= scale;
+        }
+        if (top + bottom > hole.h * 0.52) {
+            const scale = (hole.h * 0.52) / Math.max(1, top + bottom);
+            top *= scale;
+            bottom *= scale;
+        }
+        return { left, top, right, bottom };
+    }
+
+    /** Export-page AABB for the key plan box (matches drawKeyPlan). */
+    function keyPlanExportRect(mapX, mapY, mapW, mapH, scale) {
+        const boxW = Math.min(Math.max(mapW * 0.26, 190 * scale), mapW * 0.36);
+        const boxH = Math.min(Math.max(mapH * 0.28, 160 * scale), mapH * 0.38);
+        const margin = 14 * scale;
+        return {
+            x: mapX + margin,
+            y: mapY + margin,
+            w: boxW,
+            h: boxH
+        };
+    }
+
+    /**
+     * Overlay panels to treat as hard obstacles for labels / framing helpers.
+     * @param {HTMLCanvasElement|HTMLImageElement|null} [legendImg]
+     */
+    function mapOverlayKeepOutBoxes(mapX, mapY, mapW, mapH, scale, legendImg) {
+        const gutter = Math.max(8, mapW * 0.01);
+        const boxes = [];
+        if (legendImg && legendImg.width && legendImg.height) {
+            const lr = legendExportRect(mapX, mapY, mapW, mapH, legendImg);
+            boxes.push({
+                x: lr.x - gutter,
+                y: lr.y - gutter,
+                w: lr.w + gutter * 2,
+                h: lr.h + gutter * 2
+            });
+        } else {
+            const legendW = Math.min(mapW * LEGEND_KEEPOUT_W_FRAC, mapW * 0.48);
+            const legendH = Math.min(mapH * LEGEND_KEEPOUT_H_FRAC, mapH * 0.55);
+            boxes.push({
+                x: mapX + mapW - legendW - gutter,
+                y: mapY + mapH - legendH - gutter,
+                w: legendW + gutter,
+                h: legendH + gutter
+            });
+        }
+        if (sheetPlan.length > 1) {
+            const kp = keyPlanExportRect(mapX, mapY, mapW, mapH, scale);
+            boxes.push({
+                x: kp.x - gutter,
+                y: kp.y - gutter,
+                w: kp.w + gutter * 2,
+                h: kp.h + gutter * 2
+            });
+        }
+        return boxes;
     }
 
     /** Scale live legend so the full table fits inside the print frame (no scroll/clip). */
@@ -515,19 +650,35 @@
         if (legendBody) legendBody.innerHTML = buildLegendHtml();
         updateSheetNavUI();
         refreshLiveKeyPlan();
-        // Defer fit until layout paints full table height
-        requestAnimationFrame(() => fitLegendPanelInFrame());
+        // Defer fit until layout paints full table height, then re-frame
+        // network into the clear area (legend / key plan reserved).
+        requestAnimationFrame(() => {
+            fitLegendPanelInFrame();
+            if (!printEnabled) return;
+            const s = currentSheet();
+            if (s && map && nodes && nodes.length) {
+                fitBoundsToMapHole(s.bounds, false);
+            }
+        });
     }
 
     function setPrintEnabled(on) {
         printEnabled = !!on;
         const overlay = $('printOverlay');
         const btn = $('btnTogglePrintLayout');
+        const headerBtn = $('btnHeaderPrint');
+        const bar = $('printToolbar');
         if (overlay) {
             overlay.classList.toggle('hidden', !printEnabled);
             overlay.setAttribute('aria-hidden', printEnabled ? 'false' : 'true');
         }
         if (btn) btn.classList.toggle('is-active', printEnabled);
+        if (headerBtn) {
+            headerBtn.classList.toggle('active', printEnabled);
+            headerBtn.classList.toggle('is-active', printEnabled);
+        }
+        if (bar) bar.classList.toggle('is-print-active', printEnabled);
+        syncToolbarVisibility();
         if (printEnabled) {
             if (typeof activeView !== 'undefined' && activeView !== 'map') {
                 const mapBtn = $('btnViewMap');
@@ -535,16 +686,26 @@
             }
             syncMetaFromSurvey();
             centerFrame();
-            buildSheetPlan(false);
+            if (manualAtlasLocked && pageOneBounds) {
+                buildSheetPlanFromPageOne(pageOneBounds);
+            } else {
+                buildSheetPlan(false);
+            }
             maybeCrowdingToast();
             updateSheetNavUI();
             refreshFrameChrome();
+            syncReviewModeUi();
             const sheet = currentSheet();
             if (sheet && map && nodes && nodes.length) {
                 // Defer until frame/hole layout settles
                 setTimeout(() => fitBoundsToMapHole(sheet.bounds, true), 60);
             }
             if (typeof hideMapSymbolEditModal === 'function') hideMapSymbolEditModal();
+            if (!manualAtlasLocked) {
+                showToast('Zoom & drag to frame page 1, then click Set page 1.');
+            }
+        } else {
+            syncReviewModeUi();
         }
     }
 
@@ -554,12 +715,24 @@
         return (v === 'single' || v === 'multi') ? v : 'auto';
     }
 
-    function mapHoleAspect() {
+    function mapHoleAspect(includeKeyPlan) {
         const hole = getMapHoleRectInViewport();
-        if (hole && hole.w > 40 && hole.h > 40) return hole.w / hole.h;
+        if (hole && hole.w > 40 && hole.h > 40) {
+            const ko = getHoleKeepOutPads(hole, { includeKeyPlan: !!includeKeyPlan });
+            const clearW = Math.max(48, hole.w - ko.left - ko.right);
+            const clearH = Math.max(48, hole.h - ko.top - ko.bottom);
+            return clearW / clearH;
+        }
         const page = getPageMm();
         const mapHFrac = 1 - HEADER_FRAC - FOOTER_FRAC;
-        return page.w / (page.h * mapHFrac);
+        // Approximate clear aspect when hole is not ready (legend BR + optional key plan TL)
+        const legW = LEGEND_KEEPOUT_W_FRAC;
+        const legH = LEGEND_KEEPOUT_H_FRAC;
+        const kpW = includeKeyPlan ? KEYPLAN_KEEPOUT_W_FRAC : 0;
+        const kpH = includeKeyPlan ? KEYPLAN_KEEPOUT_H_FRAC : 0;
+        const clearW = Math.max(0.35, 1 - legW - kpW);
+        const clearH = Math.max(0.35, 1 - legH - kpH);
+        return (page.w * clearW) / (page.h * mapHFrac * clearH);
     }
 
     function metersPerDeg(lat) {
@@ -647,11 +820,21 @@
             return sheetPlan;
         }
 
-        const aspect = mapHoleAspect();
-        const size = boundsSizeMeters(net);
         const mode = getPrintMode();
+        // Tile aspect matches the clear framing area (legend / key plan reserved).
+        const multiLikely = mode === 'multi' || forceMulti;
+        let aspect = mapHoleAspect(multiLikely);
+        if (!(aspect > 0.2 && aspect < 8)) {
+            aspect = mapHoleAspect(false);
+        }
+        if (!(aspect > 0.2 && aspect < 8)) {
+            const page = getPageMm();
+            const mapHFrac = 1 - HEADER_FRAC - FOOTER_FRAC;
+            aspect = page.w / (page.h * mapHFrac);
+        }
+        const size = boundsSizeMeters(net);
         const maxW = MAX_CLEAR_MAP_WIDTH_M;
-        const maxH = maxW / aspect;
+        let maxH = maxW / aspect;
         const fits =
             size.w <= maxW * 1.02 &&
             size.h <= maxH * 1.02;
@@ -670,12 +853,33 @@
             return sheetPlan;
         }
 
-        const tileW = maxW;
-        const tileH = maxH;
-        const stepW = tileW * (1 - SHEET_OVERLAP);
-        const stepH = tileH * (1 - SHEET_OVERLAP);
-        const cols = Math.max(1, Math.ceil(size.w / stepW));
-        const rows = Math.max(1, Math.ceil(size.h / stepH));
+        maxH = maxW / aspect;
+        let tileW = maxW;
+        let tileH = maxH;
+        let stepW = tileW * (1 - SHEET_OVERLAP);
+        let stepH = tileH * (1 - SHEET_OVERLAP);
+        let cols = Math.max(1, Math.ceil(size.w / stepW));
+        let rows = Math.max(1, Math.ceil(size.h / stepH));
+
+        // Explicit Multi with a network that still fits one tile: split on the
+        // long axis so pages are not identical copies of the whole map.
+        if ((mode === 'multi' || forceMulti) && cols === 1 && rows === 1 && (nodes || []).length > 2) {
+            if (size.w >= size.h) {
+                cols = 2;
+                tileW = size.w / (2 - SHEET_OVERLAP);
+                stepW = tileW * (1 - SHEET_OVERLAP);
+                tileH = tileW / aspect;
+                stepH = tileH * (1 - SHEET_OVERLAP);
+                rows = Math.max(1, Math.ceil(size.h / stepH));
+            } else {
+                rows = 2;
+                tileH = size.h / (2 - SHEET_OVERLAP);
+                stepH = tileH * (1 - SHEET_OVERLAP);
+                tileW = tileH * aspect;
+                stepW = tileW * (1 - SHEET_OVERLAP);
+                cols = Math.max(1, Math.ceil(size.w / stepW));
+            }
+        }
 
         const { mLat, mLng } = metersPerDeg(size.midLat);
         const west0 = net.getWest();
@@ -702,7 +906,6 @@
         // Drop empty edge tiles (no poles) but keep at least one.
         const nonempty = tiles.filter((t) => sheetStatsForBounds(t.bounds).poles > 0);
         sheetPlan = (nonempty.length ? nonempty : tiles).map((t, i) => ({ ...t, index: i }));
-        // Re-index neighbors still use row/col from original grid — good.
 
         if (currentSheetIndex >= sheetPlan.length) currentSheetIndex = 0;
         return sheetPlan;
@@ -712,6 +915,203 @@
         return sheetPlan[currentSheetIndex] || null;
     }
 
+    /** Geographic bounds currently visible in the clear map-hole area (not under legend). */
+    function getClearMapLatLngBounds() {
+        if (!map || typeof L === 'undefined') return null;
+        const hole = getMapHoleRectInViewport();
+        if (!hole || hole.w < 40 || hole.h < 40) return null;
+        const ko = getHoleKeepOutPads(hole, {
+            includeKeyPlan: sheetPlan.length > 1 || manualAtlasLocked
+        });
+        const edgePad = 12;
+        let left = hole.left + edgePad + ko.left;
+        let top = hole.top + edgePad + ko.top;
+        let right = hole.left + hole.w - edgePad - ko.right;
+        let bottom = hole.top + hole.h - edgePad - ko.bottom;
+        if (right - left < 48 || bottom - top < 48) {
+            left = hole.left + edgePad;
+            top = hole.top + edgePad;
+            right = hole.left + hole.w - edgePad;
+            bottom = hole.top + hole.h - edgePad;
+        }
+
+        const mapEl = map.getContainer();
+        const vp = document.querySelector('.viewer-viewport');
+        if (!mapEl || !vp) return null;
+        const mr = mapEl.getBoundingClientRect();
+        const vr = vp.getBoundingClientRect();
+        const ox = vr.left - mr.left;
+        const oy = vr.top - mr.top;
+
+        const nw = map.containerPointToLatLng(L.point(left + ox, top + oy));
+        const se = map.containerPointToLatLng(L.point(right + ox, bottom + oy));
+        const bounds = L.latLngBounds(nw, se);
+        return bounds.isValid() ? bounds : null;
+    }
+
+    function offsetBoundsMeters(bounds, eastM, southM) {
+        const c = bounds.getCenter();
+        const { mLat, mLng } = metersPerDeg(c.lat);
+        const dLat = -southM / mLat;
+        const dLng = eastM / mLng;
+        return L.latLngBounds(
+            [bounds.getSouth() + dLat, bounds.getWest() + dLng],
+            [bounds.getNorth() + dLat, bounds.getEast() + dLng]
+        );
+    }
+
+    /**
+     * Build atlas from the user's framed page 1: same ground size/zoom, tiled
+     * across the network. Page 1 stays exactly as framed.
+     */
+    function buildSheetPlanFromPageOne(pageOne) {
+        if (!pageOne || !pageOne.isValid()) {
+            sheetPlan = [];
+            return sheetPlan;
+        }
+        const net = getNetworkBounds();
+        const tileSize = boundsSizeMeters(pageOne);
+        const tileW = Math.max(40, tileSize.w);
+        const tileH = Math.max(40, tileSize.h);
+        const stepW = tileW * (1 - SHEET_OVERLAP);
+        const stepH = tileH * (1 - SHEET_OVERLAP);
+        const { mLat, mLng } = metersPerDeg(tileSize.midLat);
+
+        const tilesByKey = Object.create(null);
+        const addTile = (bounds, row, col) => {
+            if (!bounds || !bounds.isValid()) return;
+            if (sheetStatsForBounds(bounds).poles <= 0 && !(row === 0 && col === 0)) return;
+            const key = `${row}:${col}`;
+            if (tilesByKey[key]) return;
+            tilesByKey[key] = {
+                bounds,
+                row,
+                col,
+                rows: 0,
+                cols: 0,
+                index: 0
+            };
+        };
+
+        addTile(pageOne, 0, 0);
+
+        if (net && net.isValid()) {
+            const westNeed = Math.max(0, (pageOne.getWest() - net.getWest()) * mLng);
+            const eastNeed = Math.max(0, (net.getEast() - pageOne.getEast()) * mLng);
+            const northNeed = Math.max(0, (net.getNorth() - pageOne.getNorth()) * mLat);
+            const southNeed = Math.max(0, (pageOne.getSouth() - net.getSouth()) * mLat);
+            const colsWest = Math.ceil(westNeed / stepW);
+            const colsEast = Math.ceil(eastNeed / stepW);
+            const rowsNorth = Math.ceil(northNeed / stepH);
+            const rowsSouth = Math.ceil(southNeed / stepH);
+
+            for (let r = -rowsNorth; r <= rowsSouth; r++) {
+                for (let c = -colsWest; c <= colsEast; c++) {
+                    if (r === 0 && c === 0) continue;
+                    const b = offsetBoundsMeters(pageOne, c * stepW, r * stepH);
+                    addTile(b, r, c);
+                }
+            }
+        }
+
+        const tiles = Object.keys(tilesByKey).map((k) => tilesByKey[k]);
+        tiles.sort((a, b) => {
+            if (a.row === 0 && a.col === 0) return -1;
+            if (b.row === 0 && b.col === 0) return 1;
+            if (a.row !== b.row) return a.row - b.row;
+            return a.col - b.col;
+        });
+
+        const rowMin = tiles.reduce((m, t) => Math.min(m, t.row), 0);
+        const colMin = tiles.reduce((m, t) => Math.min(m, t.col), 0);
+        const rowMax = tiles.reduce((m, t) => Math.max(m, t.row), 0);
+        const colMax = tiles.reduce((m, t) => Math.max(m, t.col), 0);
+        sheetPlan = tiles.map((t, i) => ({
+            ...t,
+            row: t.row - rowMin,
+            col: t.col - colMin,
+            rows: rowMax - rowMin + 1,
+            cols: colMax - colMin + 1,
+            index: i
+        }));
+        currentSheetIndex = 0;
+        return sheetPlan;
+    }
+
+    function syncReviewModeUi() {
+        const overlay = $('printOverlay');
+        if (overlay) {
+            overlay.classList.toggle('is-sheet-review', !!manualAtlasLocked && sheetPlan.length > 1);
+        }
+        const hint = $('printWorkflowHint');
+        if (hint) {
+            if (!printEnabled) {
+                hint.textContent = '1) Zoom & drag to frame page 1 · 2) Set page 1 · 3) Swipe ← → to review · 4) Print PDF';
+            } else if (!manualAtlasLocked) {
+                hint.textContent = 'Zoom & drag the map to frame page 1 (clear of legend), then click Set page 1.';
+            } else if (sheetPlan.length > 1) {
+                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length} — swipe ← → or use arrows to review, then Print PDF.`;
+            } else {
+                hint.textContent = 'Page 1 set — adjust title/settings if needed, then Print PDF.';
+            }
+        }
+        const setBtn = $('btnSetPrintPageOne');
+        if (setBtn) {
+            setBtn.textContent = manualAtlasLocked ? 'Reset page 1' : 'Set page 1';
+            setBtn.classList.toggle('is-active', !!manualAtlasLocked);
+        }
+    }
+
+    function setPageOneFromView() {
+        if (!printEnabled) setPrintEnabled(true);
+        if (!map || !nodes || !nodes.length) {
+            showToast('Load a survey with poles first.');
+            return;
+        }
+        fitLegendPanelInFrame();
+        const bounds = getClearMapLatLngBounds();
+        if (!bounds || !bounds.isValid()) {
+            showToast('Could not read the print frame — try Center, then frame again.');
+            return;
+        }
+        if (sheetStatsForBounds(bounds).poles <= 0) {
+            showToast('No poles in the frame — zoom/pan so poles sit in the clear map area.');
+            return;
+        }
+
+        pageOneBounds = bounds;
+        manualAtlasLocked = true;
+        // Force multi page mode so key plan shows when useful
+        const modeEl = $('printPageMode');
+        if (modeEl && modeEl.value === 'single') modeEl.value = 'auto';
+
+        buildSheetPlanFromPageOne(pageOneBounds);
+        updateSheetNavUI();
+        syncReviewModeUi();
+        refreshFrameChrome();
+        fitBoundsToMapHole(pageOneBounds, true);
+
+        const total = sheetPlan.length;
+        showToast(
+            total > 1
+                ? `Page 1 locked · ${total} sheets built — reviewing page 2…`
+                : 'Page 1 locked · network fits on one sheet'
+        );
+
+        if (total > 1) {
+            setTimeout(() => {
+                goToSheet(1, true);
+                syncReviewModeUi();
+            }, 500);
+        }
+    }
+
+    function clearManualAtlas() {
+        manualAtlasLocked = false;
+        pageOneBounds = null;
+        syncReviewModeUi();
+    }
+
     function fitBoundsToMapHole(bounds, animate) {
         if (!map || !bounds || !bounds.isValid()) return;
         const hole = getMapHoleRectInViewport();
@@ -719,13 +1119,41 @@
             map.fitBounds(bounds, { padding: [36, 36], animate: !!animate, maxZoom: 19 });
             return;
         }
-        const pad = 22;
+        // Frame the network into the CLEAR part of the map hole only — never under
+        // the legend (BR) or key plan (TL). Keep-outs are capped so the clear
+        // rect stays large enough for multipage tiles to stay distinct.
+        const edgePad = 12;
+        const ko = getHoleKeepOutPads(hole, { includeKeyPlan: sheetPlan.length > 1 });
+        let clearLeft = hole.left + edgePad + ko.left;
+        let clearTop = hole.top + edgePad + ko.top;
+        let clearRight = hole.left + hole.w - edgePad - ko.right;
+        let clearBottom = hole.top + hole.h - edgePad - ko.bottom;
+
+        const minClearW = Math.max(120, hole.w * 0.48);
+        const minClearH = Math.max(100, hole.h * 0.48);
+        if (clearRight - clearLeft < minClearW) {
+            const mid = (clearLeft + clearRight) / 2;
+            clearLeft = mid - minClearW / 2;
+            clearRight = mid + minClearW / 2;
+        }
+        if (clearBottom - clearTop < minClearH) {
+            const mid = (clearTop + clearBottom) / 2;
+            clearTop = mid - minClearH / 2;
+            clearBottom = mid + minClearH / 2;
+        }
+        // Clamp back inside the hole
+        clearLeft = Math.max(hole.left + edgePad, clearLeft);
+        clearTop = Math.max(hole.top + edgePad, clearTop);
+        clearRight = Math.min(hole.left + hole.w - edgePad, clearRight);
+        clearBottom = Math.min(hole.top + hole.h - edgePad, clearBottom);
+
+        const vp = viewportRect();
         map.invalidateSize();
         map.fitBounds(bounds, {
-            paddingTopLeft: [hole.left + pad, hole.top + pad],
+            paddingTopLeft: [Math.max(0, clearLeft), Math.max(0, clearTop)],
             paddingBottomRight: [
-                Math.max(0, viewportRect().w - (hole.left + hole.w) + pad),
-                Math.max(0, viewportRect().h - (hole.top + hole.h) + pad)
+                Math.max(0, vp.w - clearRight),
+                Math.max(0, vp.h - clearBottom)
             ],
             animate: !!animate,
             maxZoom: 19
@@ -762,26 +1190,33 @@
         });
         if (prev) prev.disabled = !multi || currentSheetIndex <= 0;
         if (next) next.disabled = !multi || currentSheetIndex >= sheetPlan.length - 1;
+        syncReviewModeUi();
     }
 
     function goToSheet(index, animate) {
-        if (!sheetPlan.length) buildSheetPlan(false);
+        if (!sheetPlan.length) {
+            if (manualAtlasLocked && pageOneBounds) buildSheetPlanFromPageOne(pageOneBounds);
+            else buildSheetPlan(false);
+        }
         if (!sheetPlan.length) return;
         currentSheetIndex = Math.max(0, Math.min(index, sheetPlan.length - 1));
         const sheet = currentSheet();
         if (sheet) fitBoundsToMapHole(sheet.bounds, animate !== false);
         refreshFrameChrome();
         updateSheetNavUI();
+        syncReviewModeUi();
     }
 
     function rebuildSheetsAndShow(opts) {
         const options = opts || {};
+        clearManualAtlas();
         buildSheetPlan(!!options.forceMulti);
         maybeCrowdingToast();
         updateSheetNavUI();
         const sheet = currentSheet();
         if (sheet) fitBoundsToMapHole(sheet.bounds, options.animate !== false);
         refreshFrameChrome();
+        syncReviewModeUi();
     }
 
     function fitNetworkInFrame(ev) {
@@ -834,7 +1269,7 @@
         else console.log(msg);
     }
 
-    /* ── Drag frame ── */
+    /* ── Drag frame / swipe sheets ── */
     function initFrameDrag() {
         const frame = $('printFrame');
         if (!frame) return;
@@ -847,31 +1282,74 @@
             if (!target.closest('.print-frame-chrome')) return;
             e.preventDefault();
             e.stopPropagation();
+            const reviewSwipe = manualAtlasLocked && sheetPlan.length > 1;
             dragState = {
                 startX: e.clientX,
                 startY: e.clientY,
                 origLeft: frameLeft,
-                origTop: frameTop
+                origTop: frameTop,
+                reviewSwipe,
+                moved: false
             };
+            if (reviewSwipe) frame.classList.add('is-swiping');
             document.addEventListener('mousemove', onDragMove);
             document.addEventListener('mouseup', onDragEnd);
         };
 
         frame.addEventListener('mousedown', startDrag);
+
+        // Touch swipe for sheet review
+        let touchState = null;
+        frame.addEventListener('touchstart', (e) => {
+            if (!printEnabled || !manualAtlasLocked || sheetPlan.length <= 1) return;
+            if (!e.target.closest('.print-frame-chrome')) return;
+            const t = e.touches[0];
+            if (!t) return;
+            touchState = { x: t.clientX, y: t.clientY };
+            frame.classList.add('is-swiping');
+        }, { passive: true });
+        frame.addEventListener('touchend', (e) => {
+            frame.classList.remove('is-swiping');
+            if (!touchState) return;
+            const t = e.changedTouches[0];
+            const dx = t ? t.clientX - touchState.x : 0;
+            const dy = t ? t.clientY - touchState.y : 0;
+            touchState = null;
+            if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.15) return;
+            if (dx < 0) goToSheet(currentSheetIndex + 1, true);
+            else goToSheet(currentSheetIndex - 1, true);
+        }, { passive: true });
     }
 
     function onDragMove(e) {
         if (!dragState) return;
-        frameLeft = dragState.origLeft + (e.clientX - dragState.startX);
-        frameTop = dragState.origTop + (e.clientY - dragState.startY);
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragState.moved = true;
+        // In review mode, horizontal drag is a page swipe — don't move the frame.
+        if (dragState.reviewSwipe) return;
+        frameLeft = dragState.origLeft + dx;
+        frameTop = dragState.origTop + dy;
         clampFrame();
         applyFrameStyle();
     }
 
-    function onDragEnd() {
+    function onDragEnd(e) {
+        const frame = $('printFrame');
+        if (frame) frame.classList.remove('is-swiping');
+        const state = dragState;
         dragState = null;
         document.removeEventListener('mousemove', onDragMove);
         document.removeEventListener('mouseup', onDragEnd);
+        if (!state) return;
+        if (state.reviewSwipe && state.moved) {
+            const dx = (e && e.clientX != null ? e.clientX : state.startX) - state.startX;
+            const dy = (e && e.clientY != null ? e.clientY : state.startY) - state.startY;
+            if (Math.abs(dx) >= 56 && Math.abs(dx) >= Math.abs(dy) * 1.15) {
+                if (dx < 0) goToSheet(currentSheetIndex + 1, true);
+                else goToSheet(currentSheetIndex - 1, true);
+            }
+        }
     }
 
     function onPageSettingsChanged() {
@@ -884,7 +1362,16 @@
         clampFrame();
         applyFrameStyle();
         if (printEnabled && nodes && nodes.length) {
-            rebuildSheetsAndShow({ animate: false });
+            if (manualAtlasLocked && pageOneBounds) {
+                buildSheetPlanFromPageOne(pageOneBounds);
+                updateSheetNavUI();
+                const sheet = currentSheet();
+                if (sheet) fitBoundsToMapHole(sheet.bounds, false);
+                refreshFrameChrome();
+                syncReviewModeUi();
+            } else {
+                rebuildSheetsAndShow({ animate: false });
+            }
         } else {
             refreshFrameChrome();
         }
@@ -893,7 +1380,43 @@
     function onPrintModeChanged() {
         lastCrowdingToastKey = '';
         if (!printEnabled) setPrintEnabled(true);
-        else rebuildSheetsAndShow({ animate: true });
+        else if (manualAtlasLocked && pageOneBounds) {
+            buildSheetPlanFromPageOne(pageOneBounds);
+            updateSheetNavUI();
+            goToSheet(0, true);
+            syncReviewModeUi();
+        } else {
+            rebuildSheetsAndShow({ animate: true });
+        }
+    }
+
+    function onSetPageOneClick() {
+        if (manualAtlasLocked) {
+            clearManualAtlas();
+            buildSheetPlan(false);
+            updateSheetNavUI();
+            const sheet = currentSheet();
+            if (sheet) fitBoundsToMapHole(sheet.bounds, true);
+            refreshFrameChrome();
+            showToast('Page 1 cleared — zoom & drag, then Set page 1 again.');
+            return;
+        }
+        setPageOneFromView();
+    }
+
+    function initSheetKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            if (!printEnabled || !manualAtlasLocked || sheetPlan.length <= 1) return;
+            const tag = (e.target && e.target.tagName) || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                goToSheet(currentSheetIndex - 1, true);
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                goToSheet(currentSheetIndex + 1, true);
+            }
+        });
     }
 
     /* ── High-res export ── */
@@ -1222,11 +1745,7 @@
         const net = getNetworkBounds();
         if (!net) return;
 
-        const boxW = Math.min(Math.max(mapW * 0.26, 190 * scale), mapW * 0.36);
-        const boxH = Math.min(Math.max(mapH * 0.28, 160 * scale), mapH * 0.38);
-        const margin = 14 * scale;
-        const bx = mapX + margin;
-        const by = mapY + margin;
+        const { x: bx, y: by, w: boxW, h: boxH } = keyPlanExportRect(mapX, mapY, mapW, mapH, scale);
 
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.28)';
@@ -1421,8 +1940,9 @@
     /**
      * Project current map view into the print map rectangle and draw crisp network vectors.
      * Pole numbers + span lengths use collision-aware placement so they do not overlap.
+     * When sheetBounds is set (multipage), only draw poles/spans that belong on that sheet.
      */
-    function drawNetworkIntoMapArea(ctx, mapX, mapY, mapW, mapH) {
+    function drawNetworkIntoMapArea(ctx, mapX, mapY, mapW, mapH, keepOutBoxes, sheetBounds) {
         if (!map || !nodes || nodes.length === 0) return;
 
         const hole = $('printMapHole');
@@ -1450,12 +1970,35 @@
         const nodesById = {};
         nodes.forEach((n) => { nodesById[n.id] = n; });
 
+        const poleOnSheet = (node) => {
+            if (!sheetBounds || !sheetBounds.isValid()) return true;
+            return pointInBounds(node.assetRef.latitude, node.assetRef.longitude, sheetBounds);
+        };
+        const edgeOnSheet = (from, to) => {
+            if (!sheetBounds || !sheetBounds.isValid()) return true;
+            return poleOnSheet(from) || poleOnSheet(to);
+        };
+
         const inMap = (x, y, margin) => {
             const m = margin == null ? 0 : margin;
             return x >= mapX - m && x <= mapX + mapW + m && y >= mapY - m && y <= mapY + mapH + m;
         };
 
         const occupied = []; // axis-aligned boxes already taken
+        const overlayKeepOuts = (keepOutBoxes && keepOutBoxes.length)
+            ? keepOutBoxes
+            : mapOverlayKeepOutBoxes(mapX, mapY, mapW, mapH, scale, null);
+        overlayKeepOuts.forEach((b) => occupied.push({
+            x: b.x, y: b.y, w: b.w, h: b.h, hard: true
+        }));
+
+        const inKeepOut = (x, y) => {
+            for (let i = 0; i < overlayKeepOuts.length; i++) {
+                const b = overlayKeepOuts[i];
+                if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return true;
+            }
+            return false;
+        };
 
         const overlaps = (box, list, gap) => {
             const g = gap == null ? 2 * scale : gap;
@@ -1523,7 +2066,11 @@
         // --- Geometry pass ---
         const polePts = [];
         nodes.forEach((node) => {
+            if (!poleOnSheet(node)) return;
             const p = toPage(node.assetRef.latitude, node.assetRef.longitude);
+            // Never draw poles under legend / key plan
+            if (inKeepOut(p.x, p.y)) return;
+            if (!inMap(p.x, p.y, 6 * scale)) return;
             const r = Math.max(7, 9 * scale);
             polePts.push({ node, p, r });
             // Reserve marker area as hard obstacle
@@ -1543,8 +2090,11 @@
             const from = nodesById[edge.from];
             const to = nodesById[edge.to];
             if (!from || !to) return;
+            if (!edgeOnSheet(from, to)) return;
             const p1 = toPage(from.assetRef.latitude, from.assetRef.longitude);
             const p2 = toPage(to.assetRef.latitude, to.assetRef.longitude);
+            // Skip segments wholly under overlays
+            if (inKeepOut(p1.x, p1.y) && inKeepOut(p2.x, p2.y)) return;
             if (!inMap(p1.x, p1.y, 40 * scale) && !inMap(p2.x, p2.y, 40 * scale)) return;
 
             const color = VOLTAGE_COLORS[normalizeVoltage(edge.voltage)] || '#22c55e';
@@ -1811,7 +2361,15 @@
             ctx.fillRect(mapX, mapY, mapW, mapH);
         }
 
-        drawNetworkIntoMapArea(ctx, mapX, mapY, mapW, mapH);
+        drawNetworkIntoMapArea(
+            ctx,
+            mapX,
+            mapY,
+            mapW,
+            mapH,
+            mapOverlayKeepOutBoxes(mapX, mapY, mapW, mapH, scale, legendShot),
+            sheet && sheet.bounds
+        );
         drawMatchLines(ctx, mapX, mapY, mapW, mapH, scale, sheet);
 
         if (legendShot) {
@@ -1843,12 +2401,34 @@
                 if (done) return;
                 done = true;
                 map.off('moveend', onEnd);
+                map.off('zoomend', onEnd);
                 setTimeout(resolve, ms || 180);
             };
             const onEnd = () => finish();
             map.once('moveend', onEnd);
-            setTimeout(finish, 700);
+            map.once('zoomend', onEnd);
+            // If fitBounds was a no-op (same view), moveend may not fire.
+            setTimeout(finish, 900);
         });
+    }
+
+    /**
+     * Apply sheet framing and wait until the map has actually moved.
+     * Registers settle listeners BEFORE fitBounds so we never miss moveend.
+     */
+    async function frameSheetBounds(bounds, opts) {
+        if (!map || !bounds || !bounds.isValid()) return;
+        const options = opts || {};
+        const settleMs = options.settleMs != null ? options.settleMs : 220;
+        const settlePromise = waitForMapSettle(settleMs);
+        try { map.invalidateSize(false); } catch (e) { /* ignore */ }
+        fitBoundsToMapHole(bounds, false);
+        await settlePromise;
+        // Second pass after layout/legend settle — multipage export can race the frame.
+        try { map.invalidateSize(false); } catch (e) { /* ignore */ }
+        fitBoundsToMapHole(bounds, false);
+        await waitForMapSettle(Math.min(160, settleMs));
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
 
     function setMapAnimationsEnabled(on) {
@@ -1924,13 +2504,13 @@
             // Still keep legend/stats coherent for capture without rebuilding nav strip
             const legendBody = $('pfLegendBody');
             if (legendBody && !legendBody.innerHTML) legendBody.innerHTML = buildLegendHtml();
+            refreshLiveKeyPlan();
         }
-        fitBoundsToMapHole(sheet.bounds, false);
-        if (map) {
-            try { map.invalidateSize(false); } catch (e) { /* ignore */ }
-        }
-        await waitForMapSettle(options.settleMs != null ? options.settleMs : 200);
+        fitLegendPanelInFrame();
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await frameSheetBounds(sheet.bounds, {
+            settleMs: options.settleMs != null ? options.settleMs : 240
+        });
     }
 
     function downloadBlob(blob, filename) {
@@ -1951,7 +2531,11 @@
             return;
         }
         if (!printEnabled) setPrintEnabled(true);
-        if (!sheetPlan.length) buildSheetPlan(false);
+        if (manualAtlasLocked && pageOneBounds) {
+            buildSheetPlanFromPageOne(pageOneBounds);
+        } else if (!sheetPlan.length) {
+            buildSheetPlan(false);
+        }
         const sheet = currentSheet();
         const total = Math.max(1, sheetPlan.length);
         const prevCenter = map ? map.getCenter() : null;
@@ -2011,12 +2595,21 @@
             showToast('PDF library not loaded.');
             return;
         }
-        buildSheetPlan(false);
+        if (manualAtlasLocked && pageOneBounds) {
+            buildSheetPlanFromPageOne(pageOneBounds);
+        } else if (!sheetPlan.length) {
+            buildSheetPlan(false);
+        }
         maybeCrowdingToast();
         updateSheetNavUI();
         if (!sheetPlan.length) {
-            showToast('Nothing to print — load poles first.');
+            showToast(manualAtlasLocked
+                ? 'Set page 1 first (zoom/pan, then Set page 1).'
+                : 'Nothing to print — load poles first.');
             return;
+        }
+        if (!manualAtlasLocked && sheetPlan.length > 1) {
+            showToast('Tip: Set page 1 by zoom/pan for better multipage framing.');
         }
 
         const { jsPDF } = jsPdfNs;
@@ -2093,6 +2686,7 @@
             await hideExportProgress(320);
             refreshFrameChrome();
             updateSheetNavUI();
+            syncReviewModeUi();
         }
     }
 
@@ -2100,6 +2694,7 @@
         const bar = $('printToolbar');
         if (!bar) return;
         const isMap = typeof activeView === 'undefined' || activeView === 'map';
+        bar.classList.toggle('is-print-active', !!printEnabled);
         bar.classList.toggle('is-sld-hidden', !isMap);
         if (!isMap && printEnabled) {
             // Keep state but hide overlay with map
@@ -2126,6 +2721,10 @@
         const toggle = $('btnTogglePrintLayout');
         if (toggle) {
             toggle.addEventListener('click', () => setPrintEnabled(!printEnabled));
+        }
+        const headerPrint = $('btnHeaderPrint');
+        if (headerPrint) {
+            headerPrint.addEventListener('click', () => setPrintEnabled(!printEnabled));
         }
         const zoomInBtn = $('btnMapZoomIn');
         const zoomOutBtn = $('btnMapZoomOut');
@@ -2160,6 +2759,8 @@
         });
         const fitBtn = $('btnFitPrintFrame');
         if (fitBtn) fitBtn.addEventListener('click', fitNetworkInFrame);
+        const setPageBtn = $('btnSetPrintPageOne');
+        if (setPageBtn) setPageBtn.addEventListener('click', onSetPageOneClick);
         const centerBtn = $('btnCenterPrintFrame');
         if (centerBtn) centerBtn.addEventListener('click', () => {
             if (!printEnabled) setPrintEnabled(true);
@@ -2181,6 +2782,8 @@
         // Sidebar Print CAD PDF is wired in app.js → PrintLayout.exportPdf
 
         initFrameDrag();
+        initSheetKeyboardNav();
+        syncReviewModeUi();
         window.addEventListener('resize', () => {
             if (!printEnabled) return;
             clampFrame();

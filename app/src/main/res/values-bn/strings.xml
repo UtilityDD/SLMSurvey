@@ -201,7 +201,7 @@
     <string name="no">না</string>
     <string name="bubble_voltage">Voltage বেছে নিন</string>
     <string name="bubble_hint_new">Workspace-এ নতুন নেটওয়ার্ক শুরু করুন</string>
-    <string name="bubble_status">%1$s · Existing নাকি Proposed?</string>
+    <string name="bubble_status">Existing নাকি Proposed?</string>
     <string name="bubble_status_hint">এই সিরিজ শেষ না হওয়া পর্যন্ত লক থাকবে</string>
     <string name="bubble_material">পোলের ধরন</string>
     <string name="bubble_structure">Structure</string>
@@ -218,9 +218,9 @@
     <string name="bubble_kit_suggest_hint">ঠিক থাকলে Use চাপুন। শুধু আলাদা পোলে Change করুন।</string>
     <string name="bubble_kit_use">Use: %1$s</string>
     <string name="bubble_kit_change">Kit বিবরণ বদলান</string>
-    <string name="bubble_pole_review_first">প্রথম পোল</string>
+    <string name="bubble_pole_review_first">পোল</string>
     <string name="bubble_pole_review_first_hint">সব অপশন এক স্ক্রিনে — Extension আবশ্যক</string>
-    <string name="bubble_pole_review_next">এই পোল</string>
+    <string name="bubble_pole_review_next">পোল</string>
     <string name="bubble_pole_review_next_hint">সব অপশন এখানে — chip বদলান। Extension আবশ্যক।</string>
     <string name="bubble_pole_use_this">এটি ব্যবহার করুন</string>
     <string name="bubble_field_pole_type">পোল ধরন</string>

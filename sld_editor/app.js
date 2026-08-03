@@ -381,6 +381,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         e.stopPropagation();
         loadDemoWorkspace();
     });
+    initMenubar();
     initViewToggles();
     initToolbarEvents();
     initCanvasEvents();
@@ -390,47 +391,119 @@ window.addEventListener('DOMContentLoaded', async () => {
     initStencilDragListeners();
     initBasemapControls();
     initResponsiveUi();
+
+    // Job desk can hand off the current survey for print CAD (?cad=1).
+    try {
+        const raw = sessionStorage.getItem('slm_job_print_map_v1');
+        if (raw) {
+            sessionStorage.removeItem('slm_job_print_map_v1');
+            const packet = JSON.parse(raw);
+            const data = packet && packet.survey ? packet.survey : packet;
+            const settings = (packet && packet.settings) || {};
+            const exportKind = (packet && packet.exportKind) || new URLSearchParams(location.search).get('export') || '';
+            if (data && Array.isArray(data.assets)) {
+                if (!Array.isArray(data.connections)) data.connections = [];
+                loadWorkspace(data);
+                const params = new URLSearchParams(location.search);
+                const wantPrint = params.get('print') === '1' || !!exportKind;
+                if (wantPrint && window.PrintLayout) {
+                    setTimeout(() => {
+                        const setVal = (id, v) => {
+                            const el = document.getElementById(id);
+                            if (el && v != null && v !== '') el.value = v;
+                        };
+                        setVal('printPageSize', settings.pageSize);
+                        setVal('printOrientation', settings.orientation);
+                        setVal('printDpi', settings.dpi);
+                        setVal('printPageMode', settings.pageMode);
+                        setVal('printDrawingTitle', settings.title);
+                        setVal('printSurveyor', settings.surveyor);
+                        setVal('printCompany', settings.company);
+                        setVal('printDrawingNo', settings.drawingNo);
+                        setVal('printScale', settings.scale);
+                        window.PrintLayout.setEnabled(true);
+                        if (exportKind === 'pdf' && typeof window.PrintLayout.exportPdf === 'function') {
+                            setTimeout(() => window.PrintLayout.exportPdf(), 700);
+                        } else if (exportKind === 'png' && typeof window.PrintLayout.exportPng === 'function') {
+                            setTimeout(() => window.PrintLayout.exportPng(), 700);
+                        }
+                    }, 450);
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('Job print handoff failed', err);
+    }
 });
 
+/** Wire top File / View / Print / Estimate menus (were present in HTML but unbound). */
+function initMenubar() {
+    const closeMenus = () => {
+        document.querySelectorAll('.app-menu-item[open]').forEach((el) => {
+            el.removeAttribute('open');
+        });
+    };
+
+    const clickId = (id) => {
+        const el = document.getElementById(id);
+        if (el) el.click();
+    };
+
+    const bind = (id, fn) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            closeMenus();
+            fn();
+        });
+    };
+
+    bind('btnMenuOpenFile', () => clickId('fileInput'));
+    bind('btnMenuLoadDemo', () => loadDemoWorkspace());
+    bind('btnMenuSaveJson', () => clickId('btnSaveJson'));
+    bind('btnMenuSaveJsonPlain', () => clickId('btnSaveJsonPlain'));
+    bind('btnMenuViewMap', () => clickId('btnViewMap'));
+    bind('btnMenuViewGrid', () => clickId('btnViewGrid'));
+    bind('btnMenuToggleTools', () => clickId('btnSidebarToggle'));
+    bind('btnMenuPrintLayout', () => {
+        if (window.PrintLayout && typeof window.PrintLayout.setEnabled === 'function') {
+            window.PrintLayout.setEnabled(!window.PrintLayout.isEnabled());
+        } else {
+            clickId('btnHeaderPrint');
+        }
+    });
+    bind('btnMenuExportPng', () => {
+        if (!window.PrintLayout) return;
+        if (!window.PrintLayout.isEnabled()) window.PrintLayout.setEnabled(true);
+        window.PrintLayout.exportPng();
+    });
+    bind('btnMenuExportPdf', () => {
+        if (!window.PrintLayout) return;
+        if (!window.PrintLayout.isEnabled()) window.PrintLayout.setEnabled(true);
+        window.PrintLayout.exportPdf();
+    });
+    bind('btnMenuPrintPdfLegacy', () => clickId('btnPrintPdf'));
+    bind('btnMenuGenerateEstimate', () => clickId('btnGenerateEstimate'));
+
+    // Only one menu open at a time
+    document.querySelectorAll('.app-menu-item').forEach((item) => {
+        item.addEventListener('toggle', () => {
+            if (!item.open) return;
+            document.querySelectorAll('.app-menu-item[open]').forEach((other) => {
+                if (other !== item) other.removeAttribute('open');
+            });
+        });
+    });
+}
+
 function initResponsiveUi() {
+    // Left rail stays fixed on every desk — no slide-away drawer.
     const app = document.getElementById('appContainer');
-    const toggle = document.getElementById('btnSidebarToggle');
-    const backdrop = document.getElementById('sidebarBackdrop');
-    const sidebar = document.getElementById('sidebar');
-
-    const closeSidebar = () => {
-        if (app) app.classList.remove('sidebar-open');
-    };
-
-    const openSidebar = () => {
-        if (app) app.classList.add('sidebar-open');
-    };
-
-    if (toggle && app) {
-        toggle.addEventListener('click', () => {
-            app.classList.toggle('sidebar-open');
-        });
-    }
-
-    if (backdrop) {
-        backdrop.addEventListener('click', closeSidebar);
-    }
-
-    if (sidebar) {
-        sidebar.addEventListener('click', (e) => {
-            if (window.innerWidth > 1024) return;
-            const target = e.target;
-            if (target.closest('.btn, .file-label, .stencil-item, input, select, textarea')) {
-                setTimeout(closeSidebar, 120);
-            }
-        });
-    }
+    if (app) app.classList.remove('sidebar-open');
 
     let resizeTimer = null;
     window.addEventListener('resize', () => {
-        if (window.innerWidth > 1024) {
-            closeSidebar();
-        }
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
             if (typeof map !== 'undefined' && map) {
@@ -592,6 +665,10 @@ function loadWorkspace(data) {
     document.getElementById('infoLineman').textContent = data.linemanName || 'N/A';
     document.getElementById('infoMobile').textContent = data.linemanMobile || 'N/A';
     document.getElementById('infoStatus').textContent = data.isLiveAtSite ? 'Live GPS Verified' : 'Standard Drawing';
+    const railDoc = document.getElementById('mapRailDocTitle');
+    if (railDoc) railDoc.textContent = data.title || 'Survey loaded';
+    const menuDoc = document.getElementById('menubarDocTitle');
+    if (menuDoc) menuDoc.textContent = data.title || 'Survey loaded';
 
     // Show sections
     document.getElementById('infoCard').classList.remove('hidden');
@@ -600,8 +677,10 @@ function loadWorkspace(data) {
     const btnEst = document.getElementById('btnGenerateEstimate');
     if (btnEst) {
         btnEst.disabled = false;
-        btnEst.title = 'Generate final BOQ in Assembly Builder';
+        btnEst.title = 'Send survey to Job workspace';
     }
+    const btnMenuEst = document.getElementById('btnMenuGenerateEstimate');
+    if (btnMenuEst) btnMenuEst.disabled = false;
 
     // Parse assets and connections
     nodes = [];
@@ -1080,12 +1159,12 @@ function renderMap() {
         const p1 = [fromNode.assetRef.latitude, fromNode.assetRef.longitude];
         const p2 = [toNode.assetRef.latitude, toNode.assetRef.longitude];
 
-        // Match voltage coloring (Red, Yellow/Orange, Green)
-        let strokeColor = '#22c55e'; // LT: green
+        // Match Android SurveyMapRenderer / colors.xml
+        let strokeColor = '#388e3c'; // LT
         if (edge.voltage === '33kV') {
-            strokeColor = '#ef4444'; // 33kV: red
+            strokeColor = '#d32f2f';
         } else if (edge.voltage === '11kV') {
-            strokeColor = '#f97316'; // 11kV: orange
+            strokeColor = '#f9a825';
         }
 
         const isDashed = edge.status.toLowerCase() === 'proposed';
@@ -1130,9 +1209,16 @@ function renderMap() {
         latLngs.push([lat, lng]);
 
         const poleNo = node.label || `P-${String(node.sequence).padStart(2, '0')}`;
+        const asset = node.assetRef || {};
+        const volt = String(asset.voltage || '');
+        let poleColor = '#388e3c'; // LT — match Android colors.xml
+        if (volt.indexOf('33') >= 0) poleColor = '#d32f2f';
+        else if (volt.indexOf('11') >= 0) poleColor = '#f9a825';
+        const proposed = String(asset.status || '').toLowerCase() === 'proposed';
+        const struct = node.structure || asset.structure || '1P';
         const markerIcon = L.divIcon({
             html: `<div class="map-pole-root">
-                <div class="map-pole-icon ${String(node.structure || '').toLowerCase()}">${node.structure}</div>
+                <div class="map-pole-icon ${proposed ? 'is-proposed' : 'is-existing'}" style="--pole:${poleColor}">${struct}</div>
                 <div class="map-pole-number">${poleNo}</div>
             </div>`,
             className: 'custom-map-icon',
@@ -2122,12 +2208,12 @@ function drawCanvas() {
         const toNode = nodesById[edge.to];
         if (!fromNode || !toNode) return;
 
-        // Match voltage coloring (Red, Yellow/Orange, Green)
-        let strokeColor = '#22c55e'; // LT: green
+        // Match Android SurveyMapRenderer / colors.xml
+        let strokeColor = '#388e3c'; // LT
         if (edge.voltage === '33kV') {
-            strokeColor = '#ef4444'; // 33kV: red
+            strokeColor = '#d32f2f';
         } else if (edge.voltage === '11kV') {
-            strokeColor = '#f97316'; // 11kV: orange
+            strokeColor = '#f9a825';
         }
 
         const isDashed = edge.status.toLowerCase() === 'proposed';
@@ -2433,7 +2519,7 @@ function initExportEvents() {
             }
             return;
         }
-        location.href = './estimate/?tab=boq';
+        location.href = './workspace/';
     });
 
     // Save JSON Button click

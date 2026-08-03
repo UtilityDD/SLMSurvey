@@ -16,7 +16,12 @@
                 !/\.[a-z0-9]+$/i.test(path)
             ) {
                 location.replace(path + '/' + location.search + location.hash);
+                return;
             }
+            /* Primary desk is Job (map + poles + estimate). Keep ?cad=1 for print CAD. */
+            var q = new URLSearchParams(location.search);
+            if (q.get('cad') === '1' || q.get('embed') === '1') return;
+            location.replace('./workspace/#survey');
         })();
     </script>
     <!-- Google Fonts -->
@@ -24,6 +29,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./shell-rail.css">
     <link rel="stylesheet" href="./ui-dialog.css">
 </head>
 <body>
@@ -60,155 +66,171 @@
     </div>
 
     <div class="app-container" id="appContainer">
-        <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
+        <!-- Legacy menubar kept for app.js bindings; UI lives in the left rail -->
+        <header class="app-menubar hidden" id="appMenubar" aria-hidden="true">
+            <nav class="app-menu" aria-hidden="true">
+                <details class="app-menu-item" id="menuFile"><summary>File</summary>
+                    <div class="app-menu-dropdown" role="menu">
+                        <button type="button" class="app-menu-action" id="btnMenuOpenFile" role="menuitem">Open</button>
+                        <button type="button" class="app-menu-action" id="btnMenuLoadDemo" role="menuitem">Demo</button>
+                        <button type="button" class="app-menu-action" id="btnMenuSaveJson" role="menuitem">Save</button>
+                        <button type="button" class="app-menu-action hidden" id="btnMenuSaveJsonPlain" role="menuitem">Save plain</button>
+                    </div>
+                </details>
+                <details class="app-menu-item" id="menuView"><summary>View</summary>
+                    <div class="app-menu-dropdown" role="menu">
+                        <button type="button" class="app-menu-action" id="btnMenuViewMap" role="menuitem">GIS</button>
+                        <button type="button" class="app-menu-action" id="btnMenuViewGrid" role="menuitem">SLD</button>
+                        <button type="button" class="app-menu-action" id="btnMenuToggleTools" role="menuitem">Tools</button>
+                    </div>
+                </details>
+                <details class="app-menu-item" id="menuPrint"><summary>Print</summary>
+                    <div class="app-menu-dropdown" role="menu">
+                        <button type="button" class="app-menu-action" id="btnMenuPrintLayout" role="menuitem">Layout</button>
+                        <button type="button" class="app-menu-action" id="btnMenuExportPng" role="menuitem">PNG</button>
+                        <button type="button" class="app-menu-action" id="btnMenuExportPdf" role="menuitem">PDF</button>
+                        <button type="button" class="app-menu-action" id="btnMenuPrintPdfLegacy" role="menuitem">Legacy PDF</button>
+                    </div>
+                </details>
+                <details class="app-menu-item" id="menuEstimate"><summary>Estimate</summary>
+                    <div class="app-menu-dropdown" role="menu">
+                        <button type="button" class="app-menu-action" id="btnMenuGenerateEstimate" role="menuitem" disabled>Send</button>
+                    </div>
+                </details>
+            </nav>
+            <span class="app-menubar-doc" id="menubarDocTitle">No workspace loaded</span>
+            <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
+            <button type="button" class="app-menubar-iconbtn hidden" id="btnSidebarToggle" tabindex="-1" aria-hidden="true">☰</button>
+        </header>
+
+        <div class="app-body">
         <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
-        <!-- Sidebar Panel -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo-box">
-                    <span class="logo-text">SLM</span>
-                    <span class="logo-badge">CAD v2.0</span>
-                </div>
-                <h1 class="app-title">Survey Desktop Editor</h1>
+
+        <!-- Same fixed rail as Job / Library -->
+        <aside class="slm-rail sidebar" id="sidebar" aria-label="Navigation and map tools">
+            <div class="slm-rail-brand">
+                <span class="slm-rail-logo">SLM</span>
+                <span class="slm-rail-product">Desktop</span>
             </div>
 
-            <!-- File Import Section -->
-            <div class="sidebar-card upload-section">
-                <h3 class="section-title">Workspace Data</h3>
-                <div class="drop-zone" id="dropZone">
-                    <div class="drop-icon">📂</div>
-                    <p class="drop-text">Drag & Drop .json file here</p>
-                    <p class="drop-subtext">or</p>
-                    <label class="btn btn-primary file-label">
-                        Browse File
-                        <input type="file" id="fileInput" accept=".json" style="display: none;">
-                    </label>
+            <nav class="slm-tabs" aria-label="Desks">
+                <a class="slm-tab" href="./workspace/" title="Job — map, poles, estimate">Job</a>
+                <a class="slm-tab" href="./structure/" title="Structure library">Library</a>
+            </nav>
+
+            <div class="slm-rail-scroll">
+                <div>
+                    <p class="slm-rail-block-label">View</p>
+                    <div class="slm-rail-tools map-view-tools">
+                        <div class="map-view-row">
+                            <button type="button" class="slm-rail-tool map-view-btn active" id="btnViewMap">GIS</button>
+                            <button type="button" class="slm-rail-tool map-view-btn" id="btnViewGrid">SLD</button>
+                        </div>
+                    </div>
                 </div>
-                <button type="button" class="btn btn-tonal w-100 mt-2" id="btnLoadDemo" title="Load bundled demo survey (33kV + 11kV DTRs + LT from DTR)">
-                    Load demo survey
-                </button>
-                <p class="drop-subtext mt-1" style="margin-top:8px;font-size:0.75rem;opacity:0.75;">Bundled in <code>demo/</code> — no file pick needed</p>
+
+                <div>
+                    <p class="slm-rail-block-label">Open survey</p>
+                    <div class="sidebar-card upload-section slm-map-card">
+                        <div class="drop-zone" id="dropZone">
+                            <p class="drop-text">Drop .slmmap</p>
+                            <p class="drop-subtext">or plain .json (admin)</p>
+                            <label class="btn btn-primary file-label">
+                                Browse
+                                <input type="file" id="fileInput" accept=".slmmap,.json,application/json,application/octet-stream" style="display: none;">
+                            </label>
+                        </div>
+                        <button type="button" class="slm-rail-tool" id="btnLoadDemo" title="Load bundled demo survey">Load demo</button>
+                    </div>
+                </div>
+
+                <div class="hidden" id="infoCard">
+                    <p class="slm-rail-block-label">Survey</p>
+                    <div class="sidebar-card info-section slm-map-card">
+                        <div class="info-grid">
+                            <div class="info-row"><span class="lbl">Title:</span><span class="val" id="infoTitle">-</span></div>
+                            <div class="info-row"><span class="lbl">Lineman:</span><span class="val" id="infoLineman">-</span></div>
+                            <div class="info-row"><span class="lbl">Mobile:</span><span class="val" id="infoMobile">-</span></div>
+                            <div class="info-row"><span class="lbl">Status:</span><span class="val" id="infoStatus">-</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hidden" id="toolsCard">
+                    <p class="slm-rail-block-label">Symbols</p>
+                    <div class="sidebar-card tools-section slm-map-card">
+                        <div class="select-tool-container">
+                            <button class="btn-tool icon-only active" id="toolSelect" title="Select & Resize">
+                                <span class="icon">🖱️</span>
+                            </button>
+                        </div>
+                        <div class="stencils-grid">
+                            <div class="stencil-item" draggable="true" data-type="road" title="Road"><span class="icon">🛣️</span></div>
+                            <div class="stencil-item" draggable="true" data-type="river" title="River"><span class="icon">〰️</span></div>
+                            <div class="stencil-item" draggable="true" data-type="pond" title="Pond"><span class="icon">💧</span></div>
+                            <div class="stencil-item" draggable="true" data-type="tree" title="Tree"><span class="icon">🌲</span></div>
+                            <div class="stencil-item" draggable="true" data-type="temple" title="Temple"><span class="icon">🛕</span></div>
+                            <div class="stencil-item" draggable="true" data-type="mosque" title="Mosque"><span class="icon">🕌</span></div>
+                            <div class="stencil-item" draggable="true" data-type="school" title="School"><span class="icon">🏫</span></div>
+                            <div class="stencil-item" draggable="true" data-type="house" title="House"><span class="icon">🏠</span></div>
+                            <div class="stencil-item" draggable="true" data-type="text" title="Text Label"><span class="icon">✏️</span></div>
+                        </div>
+                        <div class="annotation-help" id="annotationHelp">Drag or click a symbol to place.</div>
+                    </div>
+                </div>
+
+                <div class="hidden" id="selectionCard">
+                    <p class="slm-rail-block-label">Edit</p>
+                    <div class="sidebar-card selection-section slm-map-card">
+                        <div class="form-group-sm">
+                            <label class="form-lbl-sm" id="selectionTypeLabel">Selected Item</label>
+                            <input type="text" class="form-input" id="selectionLabel" placeholder="Item Name/Label">
+                        </div>
+                        <div class="form-group-sm" style="margin-top: 10px;" id="selectionSizeGroup">
+                            <label class="form-lbl-sm" id="selectionSizeLabel">Size / Width</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="range" style="flex: 1;" id="selectionSizeSlider" min="5" max="150" step="1">
+                                <span id="selectionSizeValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">24m</span>
+                            </div>
+                        </div>
+                        <div class="form-group-sm" style="margin-top: 10px;" id="selectionRotateGroup">
+                            <label class="form-lbl-sm">Rotation Angle</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="range" style="flex: 1;" id="selectionRotateSlider" min="0" max="360" step="5">
+                                <span id="selectionRotateValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">0°</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px; margin-top: 12px;">
+                            <button class="btn btn-danger w-100" style="padding: 6px 12px; font-size: 11px;" id="btnDeleteSelection">Delete</button>
+                            <button class="btn btn-tonal w-100" style="padding: 6px 12px; font-size: 11px; color: var(--text-on-dark);" id="btnDeselect">Close</button>
+                        </div>
+                        <div class="pole-nudge-hint hidden" id="poleNudgeHint">
+                            Poles stay connected. Nudge up to <strong>4 m</strong> for GPS error.
+                        </div>
+                        <div class="selection-info-block hidden" id="selectionInfoBlock"></div>
+                    </div>
+                </div>
+
+                <div class="hidden" id="actionsCard">
+                    <p class="slm-rail-block-label">Save</p>
+                    <div class="slm-rail-tools">
+                        <button type="button" class="slm-rail-tool" id="btnSaveJson">Save sealed map</button>
+                        <button type="button" class="slm-rail-tool slm-rail-tool-quiet hidden" id="btnSaveJsonPlain">Save plain JSON</button>
+                        <button type="button" class="btn btn-success w-100 mt-2 hidden" id="btnPrintPdf" tabindex="-1" aria-hidden="true">Export PDF</button>
+                    </div>
+                </div>
+
+                <div>
+                    <p class="slm-rail-block-label">Job</p>
+                    <div class="slm-rail-tools">
+                        <button type="button" class="slm-rail-tool slm-rail-tool-primary" id="btnGenerateEstimate" disabled title="Load a survey first">Send to Job</button>
+                        <a class="slm-rail-tool" href="./workspace/">Open Job desk</a>
+                    </div>
+                </div>
             </div>
 
-            <!-- Survey Info (Loaded dynamically) -->
-            <div class="sidebar-card info-section hidden" id="infoCard">
-                <h3 class="section-title">Survey Details</h3>
-                <div class="info-grid">
-                    <div class="info-row"><span class="lbl">Title:</span><span class="val" id="infoTitle">-</span></div>
-                    <div class="info-row"><span class="lbl">Lineman:</span><span class="val" id="infoLineman">-</span></div>
-                    <div class="info-row"><span class="lbl">Mobile:</span><span class="val" id="infoMobile">-</span></div>
-                    <div class="info-row"><span class="lbl">Status:</span><span class="val" id="infoStatus">-</span></div>
-                </div>
-            </div>
-
-            <!-- CAD Elements Sidebar Stencils List -->
-            <div class="sidebar-card tools-section hidden" id="toolsCard">
-                <h3 class="section-title">CAD Symbols</h3>
-                
-                <div class="select-tool-container">
-                    <button class="btn-tool icon-only active" id="toolSelect" title="Select & Resize">
-                        <span class="icon">🖱️</span>
-                    </button>
-                </div>
-
-                <div class="stencils-grid">
-                    <div class="stencil-item" draggable="true" data-type="road" title="Road">
-                        <span class="icon">🛣️</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="river" title="River">
-                        <span class="icon">〰️</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="pond" title="Pond">
-                        <span class="icon">💧</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="tree" title="Tree">
-                        <span class="icon">🌲</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="temple" title="Temple">
-                        <span class="icon">🛕</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="mosque" title="Mosque">
-                        <span class="icon">🕌</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="school" title="School">
-                        <span class="icon">🏫</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="house" title="House">
-                        <span class="icon">🏠</span>
-                    </div>
-                    <div class="stencil-item" draggable="true" data-type="text" title="Text Label">
-                        <span class="icon">✏️</span>
-                    </div>
-                </div>
-
-                <div class="annotation-help" id="annotationHelp">
-                    Drag or click a symbol to place. Hover for name.
-                </div>
-            </div>
-
-            <!-- Active Item Selection Card -->
-            <div class="sidebar-card selection-section hidden" id="selectionCard">
-                <h3 class="section-title" style="color: var(--primary-color);">✏️ Edit Selection</h3>
-                <div class="form-group-sm">
-                    <label class="form-lbl-sm" id="selectionTypeLabel">Selected Item</label>
-                    <input type="text" class="form-input" id="selectionLabel" placeholder="Item Name/Label">
-                </div>
-                
-                <!-- Dynamic slider for resizing width, size, radius -->
-                <div class="form-group-sm" style="margin-top: 10px;" id="selectionSizeGroup">
-                    <label class="form-lbl-sm" id="selectionSizeLabel">Size / Width</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="range" style="flex: 1;" id="selectionSizeSlider" min="5" max="150" step="1">
-                        <span id="selectionSizeValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">24m</span>
-                    </div>
-                </div>
-
-                <!-- Rotation slider for elements alignment -->
-                <div class="form-group-sm" style="margin-top: 10px;" id="selectionRotateGroup">
-                    <label class="form-lbl-sm">Rotation Angle</label>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <input type="range" style="flex: 1;" id="selectionRotateSlider" min="0" max="360" step="5">
-                        <span id="selectionRotateValue" style="font-size: 11px; font-weight: bold; min-width: 32px; color: var(--text-on-dark);">0°</span>
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 8px; margin-top: 12px;">
-                    <button class="btn btn-danger w-100" style="padding: 6px 12px; font-size: 11px;" id="btnDeleteSelection">🗑️ Delete</button>
-                    <button class="btn btn-tonal w-100" style="padding: 6px 12px; font-size: 11px; color: var(--text-on-dark);" id="btnDeselect">✕ Close</button>
-                </div>
-
-                <div class="pole-nudge-hint hidden" id="poleNudgeHint">
-                    Poles stay connected. You can nudge a pole up to <strong>4 m</strong> only to compensate GPS / placement error. Connected lines move with it.
-                </div>
-                <div class="selection-info-block hidden" id="selectionInfoBlock"></div>
-            </div>
-
-            <!-- Actions Panel -->
-            <div class="sidebar-card actions-section hidden" id="actionsCard">
-                <h3 class="section-title">Export / Save</h3>
-                <button class="btn btn-tonal w-100" id="btnSaveJson">
-                    <span>💾</span> Save Workspace (.json)
-                </button>
-                <button class="btn btn-success w-100 mt-2" id="btnPrintPdf">
-                    <span>🖨️</span> Export CAD Sheet (PDF)
-                </button>
-            </div>
-            
-            <div class="sidebar-card" style="margin-top: auto;">
-                <h3 class="section-title">Estimate</h3>
-                <a class="btn btn-tonal w-100" href="./estimate/" style="text-decoration:none;display:flex;align-items:center;justify-content:center;gap:8px;">
-                    <span>📐</span> Assembly Builder
-                </a>
-                <button type="button" class="btn btn-success w-100 mt-2" id="btnGenerateEstimate" disabled title="Load a survey workspace first">
-                    <span>📋</span> Generate estimate
-                </button>
-                <p style="margin-top:8px;font-size:11px;color:var(--text-muted-dark);line-height:1.4;">
-                    Build Final kits in Assembly Builder. Generate the BOQ here from the loaded survey (desktop is primary).
-                </p>
-            </div>
-
-            <div class="sidebar-footer">
-                SLM ToolBox Utility CAD Engine
+            <div class="slm-rail-foot">
+                <div class="map-rail-doc" id="mapRailDocTitle">No survey loaded</div>
             </div>
         </aside>
 
@@ -216,13 +238,8 @@
         <main class="main-content">
             <!-- Header Toolbar -->
             <header class="workspace-header">
-                <button type="button" class="btn-sidebar-toggle" id="btnSidebarToggle" title="Toggle tools panel" aria-label="Toggle tools panel">☰</button>
-                <div class="view-toggle-container">
-                    <button class="btn-toggle active" id="btnViewMap" title="Geographical Map (GIS)">GIS</button>
-                    <button class="btn-toggle" id="btnViewGrid" title="Schematic Grid Editor (SLD)">SLD</button>
-                </div>
                 <div class="basemap-controls" id="basemapControls">
-                    <label class="basemap-label" for="basemapSelect">Map</label>
+                    <label class="basemap-label" for="basemapSelect">Basemap</label>
                     <select id="basemapSelect" class="basemap-select" title="Change map background">
                         <option value="osm">OSM</option>
                         <option value="google">Google</option>
@@ -232,6 +249,11 @@
                     <label class="basemap-label" for="basemapOpacity" title="Basemap opacity">Opacity</label>
                     <input type="range" id="basemapOpacity" class="basemap-opacity" min="0" max="100" value="100" step="5" title="Map opacity">
                     <span class="basemap-opacity-value" id="basemapOpacityValue">100%</span>
+                </div>
+                <div class="workspace-header-actions">
+                    <button type="button" class="btn print-toolbar-btn print-layout-toggle" id="btnHeaderPrint" title="Show printable page frame on the map">
+                        <span>▦</span> Print preview
+                    </button>
                 </div>
             </header>
 
@@ -264,7 +286,7 @@
                         <option value="multi">Multi</option>
                     </select>
                     <button type="button" class="btn print-toolbar-btn print-layout-toggle" id="btnTogglePrintLayout" title="Show printable page frame on map">
-                        <span>▦</span> Print Layout
+                        <span>▦</span> Print preview
                     </button>
                     <div class="print-zoom-stepper" id="printZoomStepper" title="Fine map zoom for framing">
                         <button type="button" class="print-zoom-btn" id="btnMapZoomOut" title="Zoom out (fine step)">−</button>
@@ -280,17 +302,21 @@
                     <input type="text" id="printScale" class="print-input print-input-xs" placeholder="Scale" value="NTS" title="Scale">
                 </div>
                 <div class="print-toolbar-divider"></div>
-                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Flip print sheets">
+                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Swipe or use arrows to review sheets">
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetPrev" title="Previous sheet">‹</button>
                     <div class="print-sheet-strip" id="printSheetStrip"></div>
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetNext" title="Next sheet">›</button>
                 </div>
                 <div class="print-toolbar-group print-toolbar-actions">
-                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit current sheet (Shift+click: rebuild all pages)">Fit</button>
-                    <button type="button" class="btn print-toolbar-btn" id="btnCenterPrintFrame" title="Center print frame">Center</button>
-                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
-                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Export print-ready PDF (all sheets)">PDF</button>
+                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnSetPrintPageOne" title="Zoom/pan the map to frame page 1, then click this">Set page 1</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit whole network (auto pages)">Auto fit</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnCenterPrintFrame" title="Center print frame on screen">Center</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
+                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Print PDF from reviewed sheets">Print PDF</button>
                 </div>
+                <p class="print-workflow-hint" id="printWorkflowHint">
+                    1) Zoom &amp; drag to frame page 1 · 2) Set page 1 · 3) Swipe ← → to review · 4) Print PDF
+                </p>
             </div>
 
             <!-- Viewer Containers -->
@@ -313,7 +339,7 @@
 
                 <!-- Printable page frame overlay (GIS map) -->
                 <div id="printOverlay" class="print-overlay hidden" aria-hidden="true">
-                    <div id="printFrame" class="print-frame" title="Drag to position print area">
+                    <div id="printFrame" class="print-frame" title="Drag header to move frame · swipe left/right to change sheet">
                         <div class="print-frame-chrome print-frame-header" id="printFrameHeader">
                             <div class="pf-header-left">
                                 <div class="pf-org" id="pfOrg">SLM Survey</div>
@@ -344,6 +370,7 @@
                             <div class="pf-footer-cell"><span>Route</span><strong id="pfRoute">—</strong></div>
                             <div class="pf-footer-cell pf-sign"><span>Signature</span><div class="pf-sign-line"></div></div>
                         </div>
+                        <div class="print-sheet-swipe-hint" id="printSheetSwipeHint">Swipe ← → to review pages</div>
                         <div class="print-frame-handle nw"></div>
                         <div class="print-frame-handle ne"></div>
                         <div class="print-frame-handle sw"></div>
@@ -401,6 +428,7 @@
                 </div>
             </div>
         </main>
+        </div><!-- /.app-body -->
     </div>
 
     <!-- Edit Attribute Modal Dialog -->
@@ -473,6 +501,7 @@
     <script src="./license-config.js"></script>
     <script src="./ui-dialog.js"></script>
     <script src="./license.js"></script>
+    <script src="./seal.js"></script>
     <script src="./app.js"></script>
     <script src="./print_layout.js"></script>
 </body>

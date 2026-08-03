@@ -4,6 +4,34 @@ Browser CAD + estimate tooling for SLM survey workspaces. Lives under `sld_edito
 
 **Primary BOQ surface:** desktop **Estimate** tab / Assembly Builder — not the phone.
 
+## Current focus
+
+Two desks for day-to-day use:
+
+1. **Workspace** (`workspace/`) — one survey job: import → review → estimate  
+2. **Library** (`structure/`) — browse kits + edit recipes (Builder merged here)
+3. Job workspace for survey → estimate
+
+Phone named presets are parked — do not block desktop cleanup on that work.
+
+### Structure gallery
+
+- Loads `estimate/kit-matrix.json` + demo turnkey SoR (`demo_contract_schedule.json`)
+- Groups by **33kV / 11kV / LT**, then by type (1P, 2P, …)
+- Cards show location · arrangement · conductor + **SoR** chip when linked
+- Status: Final / Suggested (local) / Draft / Empty / Schedule linked
+- Detail drawer → Mark suggested · Edit kit (same Library desk)
+
+### Workspace
+
+- Catalog loader restored: `workspace/ws-catalog.js` (`SlmCatalog`)
+- Nav: Survey → Assemblies → Rates → Contract → Estimate (presets parked)
+
+### CAD chrome cleanup
+
+- Print toolbar hidden until Print Layout is on
+- Top menubar wired; **Send survey** → Workspace
+
 ---
 
 ## What’s in this folder
@@ -11,10 +39,12 @@ Browser CAD + estimate tooling for SLM survey workspaces. Lives under `sld_edito
 | Path | Role |
 |------|------|
 | `index.html` + `app.js` | Main CAD editor (Leaflet map, import survey JSON, SLD tools) |
+| `structure/` | **Library** — browse gallery + edit kits (Builder) |
+| `estimate/` | Kit editor engine (opens inside Library · Edit; `?embed=1`) |
+| `workspace/` | Job hub: survey → assemblies → rates → estimate |
 | `style.css`, `ui-dialog.js`, `ui-dialog.css` | UI + confirm/prompt modals |
 | `license.js`, `license-config.js` | License gate (same codes as Android) |
 | `print_layout.js` | Print layouts |
-| `estimate/` | **Assembly Builder** + Estimate BOQ UI |
 | `estimate/README.md` | Kit matrix / publish details (read next) |
 
 Repo root also has `supabase/` for schema + edge functions used by license + catalog publish.
@@ -25,7 +55,7 @@ Repo root also has `supabase/` for schema + edge functions used by license + cat
 
 1. Serve `sld_editor/` over HTTP (or open via Pages). Relative assets assume the folder URL (GitHub Pages script in `index.html` fixes missing trailing slash).
 2. For license/catalog: configure Supabase URL/anon key the same way as the Android `local.properties` (see `license-config.js` / estimate publish UI).
-3. Assembly Builder: open `sld_editor/estimate/` or use sidebar link **Assembly Builder**.
+3. Library: open `sld_editor/structure/` — use **Browse** / **Edit** on the left (Builder is merged here).
 
 ---
 
@@ -82,7 +112,7 @@ Phone wizard writes labels that matcher keys on:
 - Voltage: 33kV / 11kV / LT  
 - Structure: 1P / 2P / 3P / 4P / DTR  
 - Location: Tangent / Angular / Dead-end / **T-Off**  
-- Arrangement: In-line / Sectional (N/A for Dead-end)  
+- Arrangement: HT 1P = In-line (default) or Sectional; HT 2P/3P/4P/DTR = Sectional only; Dead-end = N/A  
 - Extension: No-ext / With-ext (+ guarding on phone for map ××; BOQ impact optional)  
 - Conductor size / family (see `ConductorTagMap` on Android)
 
@@ -91,6 +121,10 @@ Phone wizard writes labels that matcher keys on:
 - LT: SP or from DTR  
 - 11kV: SP–4P or DTR  
 - 33kV: SP–4P (incl. 1P)
+
+For 33/11kV continuation, a **1P** keeps the previous pole/current-section conductor. A conductor change is
+represented by a sectional **2P/3P/4P** structure. The generated matrix therefore
+contains no HT In-line combinations for 2P/3P/4P/DTR.
 
 Structure kits now carry a short **`code`** (incl. pole token) for search/display; long pipe `id` stays the match key. See [`estimate/README.md`](estimate/README.md).
 

@@ -1,0 +1,49 @@
+{
+  "id": "demo_contract_v1",
+  "name": "Demo Turnkey Contract (sample)",
+  "kind": "contract",
+  "sourceFile": "demo_contract_schedule.json",
+  "note": "Simplified SoR for Contract Lens testing — not a real DISCOM schedule.",
+  "items": [
+    { "code": "CTR-33-TAN-1P", "description": "33kV 1P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 18500, "type": "material" },
+    { "code": "CTR-33-TAN-2P", "description": "33kV 2P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 27500, "type": "material" },
+    { "code": "CTR-33-TAN-3P", "description": "33kV 3P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 36000, "type": "material" },
+    { "code": "CTR-33-TAN-4P", "description": "33kV 4P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 45000, "type": "material" },
+    { "code": "CTR-33-ANG-1P", "description": "33kV 1P Angular structure complete (turnkey)", "unit": "NOS", "rate": 22000, "type": "material" },
+    { "code": "CTR-33-ANG-2P", "description": "33kV 2P Angular structure complete (turnkey)", "unit": "NOS", "rate": 32000, "type": "material" },
+    { "code": "CTR-33-ANG-3P", "description": "33kV 3P Angular structure complete (turnkey)", "unit": "NOS", "rate": 41000, "type": "material" },
+    { "code": "CTR-33-DE-1P", "description": "33kV 1P Dead-end structure complete (turnkey)", "unit": "NOS", "rate": 28000, "type": "material" },
+    { "code": "CTR-33-DE-2P", "description": "33kV 2P Dead-end structure complete (turnkey)", "unit": "NOS", "rate": 38000, "type": "material" },
+    { "code": "CTR-33-TOF-1P", "description": "33kV 1P T-Off structure complete (turnkey)", "unit": "NOS", "rate": 26000, "type": "material" },
+    { "code": "CTR-33-TOF-4P", "description": "33kV 4P T-Off structure complete (turnkey)", "unit": "NOS", "rate": 52000, "type": "material" },
+
+    { "code": "CTR-11-TAN-1P", "description": "11kV 1P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 9800, "type": "material" },
+    { "code": "CTR-11-TAN-2P", "description": "11kV 2P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 14500, "type": "material" },
+    { "code": "CTR-11-TAN-3P", "description": "11kV 3P Tangent structure complete (turnkey)", "unit": "NOS", "rate": 19000, "type": "material" },
+    { "code": "CTR-11-ANG-1P", "description": "11kV 1P Angular structure complete (turnkey)", "unit": "NOS", "rate": 12000, "type": "material" },
+    { "code": "CTR-11-ANG-2P", "description": "11kV 2P Angular structure complete (turnkey)", "unit": "NOS", "rate": 17000, "type": "material" },
+    { "code": "CTR-11-ANG-3P", "description": "11kV 3P Angular structure complete (turnkey)", "unit": "NOS", "rate": 22000, "type": "material" },
+    { "code": "CTR-11-DE-2P", "description": "11kV 2P Dead-end structure complete (turnkey)", "unit": "NOS", "rate": 21000, "type": "material" },
+    { "code": "CTR-11-TOF-1P", "description": "11kV 1P T-Off structure complete (turnkey)", "unit": "NOS", "rate": 15000, "type": "material" },
+    { "code": "CTR-11-DTR", "description": "11kV DTR structure complete (any kVA, turnkey)", "unit": "NOS", "rate": 95000, "type": "material" },
+
+    { "code": "CTR-LT-TAN-1P", "description": "LT 1P Tangent pole complete (turnkey)", "unit": "NOS", "rate": 4200, "type": "material" },
+    { "code": "CTR-LT-ANG-1P", "description": "LT 1P Angular pole complete (turnkey)", "unit": "NOS", "rate": 5100, "type": "material" },
+    { "code": "CTR-LT-DE-1P", "description": "LT 1P Dead-end pole complete (turnkey)", "unit": "NOS", "rate": 6800, "type": "material" },
+    { "code": "CTR-LT-TOF-1P", "description": "LT 1P T-Off pole complete (turnkey)", "unit": "NOS", "rate": 5600, "type": "material" },
+
+    { "code": "CTR-COND-33", "description": "33kV ACSR conductor stringing complete", "unit": "KM", "rate": 185000, "type": "material" },
+    { "code": "CTR-COND-11", "description": "11kV ACSR conductor stringing complete", "unit": "KM", "rate": 125000, "type": "material" },
+    { "code": "CTR-COND-LT-ACSR", "description": "LT ACSR conductor stringing complete", "unit": "KM", "rate": 72000, "type": "material" },
+    { "code": "CTR-COND-LT-ABC", "description": "LT ABC conductor stringing complete", "unit": "KM", "rate": 98000, "type": "material" },
+    { "code": "CTR-COND-LT-PVC", "description": "LT PVC cable stringing complete", "unit": "KM", "rate": 64000, "type": "material" },
+
+    { "code": "CTR-L-33-ERECT", "description": "Erection labour — 33kV structure", "unit": "NOS", "rate": 3200, "type": "labour" },
+    { "code": "CTR-L-11-ERECT", "description": "Erection labour — 11kV structure", "unit": "NOS", "rate": 2100, "type": "labour" },
+    { "code": "CTR-L-LT-ERECT", "description": "Erection labour — LT pole", "unit": "NOS", "rate": 900, "type": "labour" },
+    { "code": "CTR-L-11-DTR", "description": "Erection labour — DTR structure", "unit": "NOS", "rate": 8500, "type": "labour" },
+    { "code": "CTR-L-STRING-33", "description": "Stringing labour — 33kV", "unit": "KM", "rate": 28000, "type": "labour" },
+    { "code": "CTR-L-STRING-11", "description": "Stringing labour — 11kV", "unit": "KM", "rate": 18000, "type": "labour" },
+    { "code": "CTR-L-STRING-LT", "description": "Stringing labour — LT", "unit": "KM", "rate": 12000, "type": "labour" }
+  ]
+}

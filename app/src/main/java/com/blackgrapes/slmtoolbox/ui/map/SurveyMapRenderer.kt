@@ -41,6 +41,21 @@ object SurveyMapRenderer {
         }
     }
 
+    /**
+     * Survey-owned annotations only. Removing this leaves GPS / continue-preview alone
+     * (unlike [MapLibreMap.clear]).
+     */
+    data class RenderHandle(
+        val assetMarkers: Map<Long, Marker>,
+        private val ownedMarkers: List<Marker>,
+        private val ownedPolylines: List<Polyline>
+    ) {
+        fun remove() {
+            ownedMarkers.forEach { it.remove() }
+            ownedPolylines.forEach { it.remove() }
+        }
+    }
+
     private val markerCache = object : LruCache<String, Bitmap>(96) {}
     private val spanLabelCache = object : LruCache<Int, Bitmap>(48) {}
     private val previewLabelCache = object : LruCache<String, Bitmap>(32) {}
@@ -48,8 +63,8 @@ object SurveyMapRenderer {
     private val ghostCache = object : LruCache<Int, Bitmap>(8) {}
 
     /**
-     * Renders the survey onto the map.
-     * Returns a map of Asset ID to Marker for targeted updates.
+     * Renders the survey onto the map without [MapLibreMap.clear].
+     * Caller must [RenderHandle.remove] any previous handle first.
      */
     fun render(
         context: Context,
@@ -58,11 +73,12 @@ object SurveyMapRenderer {
         readOnly: Boolean = false,
         selectedAssetId: Long? = null,
         snappedAssetId: Long? = null
-    ): Map<Long, Marker> {
-        map.clear()
+    ): RenderHandle {
         val assetById = survey.assets.associateBy { it.id }
         val iconFactory = IconFactory.getInstance(context)
         val assetMarkers = mutableMapOf<Long, Marker>()
+        val ownedMarkers = mutableListOf<Marker>()
+        val ownedPolylines = mutableListOf<Polyline>()
 
         survey.connections.forEach { connection ->
             val from = assetById[connection.fromAssetId] ?: return@forEach
@@ -88,9 +104,8 @@ object SurveyMapRenderer {
             val b = LatLng(to.latitude, to.longitude)
             val distM = measuredMetres.toDouble()
             val guarded = from.guarding || to.guarding
-            // All LT (1Ph/2Ph/3Ph/ABC) share the same simple stroke.
             if (connection.status == WorkStatus.PROPOSED) {
-                addDottedLine(
+                ownedPolylines += addDottedLine(
                     map = map,
                     from = a,
                     to = b,
@@ -99,7 +114,7 @@ object SurveyMapRenderer {
                     width = width
                 )
             } else {
-                map.addPolyline(
+                ownedPolylines += map.addPolyline(
                     PolylineOptions()
                         .add(a, b)
                         .color(color)
@@ -107,7 +122,7 @@ object SurveyMapRenderer {
                 )
             }
             if (guarded) {
-                addGuardedCrossMarks(
+                ownedPolylines += addGuardedCrossMarks(
                     map = map,
                     from = a,
                     to = b,
@@ -123,20 +138,19 @@ object SurveyMapRenderer {
                 (from.latitude + to.latitude) / 2.0,
                 (from.longitude + to.longitude) / 2.0
             )
-            map.addMarker(
+            ownedMarkers += map.addMarker(
                 MarkerOptions()
                     .position(midpoint)
                     .title("${spanMetres.toInt()} m")
                     .snippet("Pole ${from.sequence} → ${to.sequence}")
                     .icon(iconFactory.fromBitmap(createSpanLabelBitmap(spanMetres)))
             )
-            // Phase/ABC tag sits on the line (not a chip like span length).
             NetworkCatalog.ltLineTag(
                 connection.voltage,
                 styleAsset.conductor,
                 styleAsset.poleStructure
             )?.let { tag ->
-                map.addMarker(
+                ownedMarkers += map.addMarker(
                     MarkerOptions()
                         .position(interpolate(a, b, 0.32))
                         .title(tag)
@@ -162,9 +176,10 @@ object SurveyMapRenderer {
                     .icon(iconFactory.fromBitmap(icon))
             )
             assetMarkers[asset.id] = marker
+            ownedMarkers += marker
 
             if (SurveyMetrics.shouldShowCoordinates(asset, survey)) {
-                map.addMarker(
+                ownedMarkers += map.addMarker(
                     MarkerOptions()
                         .position(LatLng(asset.latitude, asset.longitude))
                         .title("coords")
@@ -184,7 +199,35 @@ object SurveyMapRenderer {
             map.easeCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80))
         }
 
-        return assetMarkers
+        return RenderHandle(assetMarkers, ownedMarkers, ownedPolylines)
+    }
+
+    /** Update pole icons only (selection / snap) without rebuilding lines. */
+    fun updateSelectionIcons(
+        context: Context,
+        survey: Survey,
+        assetMarkers: Map<Long, Marker>,
+        selectedAssetId: Long?,
+        snappedAssetId: Long?,
+        previousSelectedId: Long?,
+        previousSnappedId: Long?
+    ) {
+        val iconFactory = IconFactory.getInstance(context)
+        val touched = setOfNotNull(selectedAssetId, snappedAssetId, previousSelectedId, previousSnappedId)
+        if (touched.isEmpty()) return
+        val byId = survey.assets.associateBy { it.id }
+        touched.forEach { id ->
+            val asset = byId[id] ?: return@forEach
+            val marker = assetMarkers[id] ?: return@forEach
+            val icon = createMarkerBitmap(
+                context = context,
+                asset = asset,
+                selected = selectedAssetId != null && id == selectedAssetId,
+                isBlinking = false,
+                isSnapped = snappedAssetId != null && id == snappedAssetId
+            )
+            marker.setIcon(iconFactory.fromBitmap(icon))
+        }
     }
 
     /**
@@ -214,7 +257,7 @@ object SurveyMapRenderer {
                 .width(12f)
         )
         val dashGap = 10.0
-        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 16)
+        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 12)
         for (index in 0 until segmentCount) {
             val startFraction = index.toDouble() / segmentCount
             val endFraction = (startFraction + 0.48 / segmentCount).coerceAtMost(1.0)
@@ -312,13 +355,14 @@ object SurveyMapRenderer {
         distanceMetres: Double,
         color: Int,
         width: Float = 8f
-    ) {
+    ): List<Polyline> {
         val dashGap = 8.0
-        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 20)
+        val segmentCount = (distanceMetres / dashGap).toInt().coerceIn(2, 12)
+        val lines = ArrayList<Polyline>(segmentCount)
         for (index in 0 until segmentCount) {
             val startFraction = index.toDouble() / segmentCount
             val endFraction = (startFraction + 0.45 / segmentCount).coerceAtMost(1.0)
-            map.addPolyline(
+            lines += map.addPolyline(
                 PolylineOptions()
                     .add(
                         interpolate(from, to, startFraction),
@@ -328,6 +372,7 @@ object SurveyMapRenderer {
                     .width(width)
             )
         }
+        return lines
     }
 
     /**
@@ -339,17 +384,17 @@ object SurveyMapRenderer {
         to: LatLng,
         distanceMetres: Double,
         color: Int
-    ) {
+    ): List<Polyline> {
         val spacingM = 14.0
-        val markCount = (distanceMetres / spacingM).toInt().coerceIn(2, 28)
-        // Approximate metres → lat/lng for a small X arm (~3 m).
+        val markCount = (distanceMetres / spacingM).toInt().coerceIn(2, 16)
         val midLat = (from.latitude + to.latitude) / 2.0
         val dLat = 3.0 / 111_320.0
         val dLng = 3.0 / (111_320.0 * kotlin.math.cos(Math.toRadians(midLat)).coerceAtLeast(0.2))
+        val lines = ArrayList<Polyline>((markCount - 1) * 2)
         for (i in 1 until markCount) {
             val f = i.toDouble() / markCount
             val p = interpolate(from, to, f)
-            map.addPolyline(
+            lines += map.addPolyline(
                 PolylineOptions()
                     .add(
                         LatLng(p.latitude - dLat, p.longitude - dLng),
@@ -358,7 +403,7 @@ object SurveyMapRenderer {
                     .color(color)
                     .width(3.5f)
             )
-            map.addPolyline(
+            lines += map.addPolyline(
                 PolylineOptions()
                     .add(
                         LatLng(p.latitude - dLat, p.longitude + dLng),
@@ -368,6 +413,7 @@ object SurveyMapRenderer {
                     .width(3.5f)
             )
         }
+        return lines
     }
 
     private fun interpolate(from: LatLng, to: LatLng, fraction: Double): LatLng =

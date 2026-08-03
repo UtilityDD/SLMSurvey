@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SLM Estimate — Assembly Builder</title>
+    <title>SLM — Library · Edit</title>
     <script>
         (function () {
             var path = location.pathname || '/';
@@ -14,10 +14,21 @@
                 !/\.[a-z0-9]+$/i.test(path)
             ) {
                 location.replace(path + '/' + location.search + location.hash);
+                return;
             }
+            /* Standalone Builder URL → merged Library desk */
+            var params = new URLSearchParams(location.search);
+            if (params.get('embed') === '1') return;
+            var q = new URLSearchParams();
+            q.set('mode', 'edit');
+            ['kit', 'tab'].forEach(function (k) {
+                if (params.get(k)) q.set(k, params.get(k));
+            });
+            location.replace('../structure/?' + q.toString());
         })();
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../shell-rail.css">
     <link rel="stylesheet" href="./estimate.css">
     <link rel="stylesheet" href="../ui-dialog.css">
 </head>
@@ -50,26 +61,74 @@
         </div>
     </div>
 
-    <div class="est-shell" id="estShell">
-        <header class="est-top">
-            <div class="est-brand-block">
-                <a class="est-back" href="../index.html">← CAD</a>
-                <div class="est-brand">Assembly Builder</div>
+    <div class="est-shell est-embed" id="estShell">
+        <aside class="slm-rail est-embed-rail" aria-label="Edit sections and tools">
+            <div class="slm-rail-brand est-embed-brand">
+                <span class="slm-rail-logo">Edit</span>
+                <span class="slm-rail-product">Kits</span>
             </div>
-            <div class="est-top-actions">
-                <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
-                <button type="button" class="est-btn est-btn-ghost" id="btnGuide" title="User guide">?</button>
-                <details class="est-tools">
-                    <summary class="est-btn est-btn-ghost">Tools</summary>
-                    <div class="est-tools-menu">
-                        <button type="button" class="est-btn est-btn-ghost" id="btnExportKits">Export kits</button>
-                        <button type="button" class="est-btn est-btn-ghost" id="btnImportKits">Import kits</button>
-                        <button type="button" class="est-btn est-btn-ghost" id="btnPublishCatalog" disabled>Publish to app</button>
-                        <button type="button" class="est-btn est-btn-ghost" id="btnResetKits">Reset edits</button>
-                        <button type="button" class="est-btn est-btn-ghost" id="btnSignOutLicense">Sign out</button>
+
+            <div class="slm-rail-scroll">
+                <div>
+                    <p class="slm-rail-block-label">Sections</p>
+                    <nav class="slm-rail-list est-rail-tabs" role="tablist" aria-label="Edit sections">
+                        <button type="button" class="slm-rail-item est-tab active" data-tab="structure">
+                            <span>Structure</span>
+                            <span class="slm-rail-badge" id="tabCountStructure">0</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab" data-tab="conductor">
+                            <span>Conductor</span>
+                            <span class="slm-rail-badge" id="tabCountConductor">0</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab" data-tab="addon">
+                            <span>Guarding</span>
+                            <span class="slm-rail-badge" id="tabCountAddon">0</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab" data-tab="boq">
+                            <span>Estimate</span>
+                            <span class="slm-rail-badge" id="tabCountBoq">·</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab" data-tab="ratebook">
+                            <span>Rates</span>
+                            <span class="slm-rail-badge" id="tabCountRatebook">0</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab hidden" data-tab="suggestions" id="tabSuggestions">
+                            <span>Suggestions</span>
+                            <span class="slm-rail-badge" id="tabCountSuggestions">0</span>
+                        </button>
+                        <button type="button" class="slm-rail-item est-tab hidden" data-tab="licenses" id="tabLicenses">
+                            <span>Licenses</span>
+                            <span class="slm-rail-badge" id="tabCountLicenses">0</span>
+                        </button>
+                    </nav>
+                </div>
+
+                <div>
+                    <p class="slm-rail-block-label">Tools</p>
+                    <div class="slm-rail-tools">
+                        <button type="button" class="slm-rail-tool" id="btnExportKits">Export kits</button>
+                        <button type="button" class="slm-rail-tool" id="btnImportKits">Import kits</button>
+                        <button type="button" class="slm-rail-tool" id="btnPublishCatalog" disabled>Publish to app</button>
+                        <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnResetKits">Reset edits</button>
+                        <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnGuide">User guide</button>
+                        <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnSignOutLicense">Sign out</button>
+                        <input type="file" id="importKitsFile" accept=".json" hidden>
                     </div>
-                </details>
-                <input type="file" id="importKitsFile" accept=".json" hidden>
+                </div>
+            </div>
+
+            <div class="slm-rail-foot">
+                <button type="button" id="licenseBadge" class="license-badge hidden" title="License info"></button>
+            </div>
+        </aside>
+
+        <div class="est-main">
+        <header class="est-menubar est-menubar-slim" id="estMenubar">
+            <div class="est-menubar-brand">
+                <span class="est-menubar-product">Edit kits</span>
+            </div>
+            <div class="est-menubar-right">
+                <span class="est-menubar-hint">Same catalog as Browse — change recipes here</span>
             </div>
         </header>
 
@@ -81,34 +140,10 @@
         <div class="est-stats hidden" id="estStats" aria-hidden="true"></div>
         <div id="estSeedBannerSlot" class="hidden" aria-hidden="true"></div>
 
-        <nav class="est-tabs" role="tablist">
-            <button type="button" class="est-tab active" data-tab="structure">
-                Structure <span class="est-tab-count" id="tabCountStructure">0</span>
-            </button>
-            <button type="button" class="est-tab" data-tab="conductor">
-                Conductor <span class="est-tab-count" id="tabCountConductor">0</span>
-            </button>
-            <button type="button" class="est-tab" data-tab="addon">
-                Guarding <span class="est-tab-count" id="tabCountAddon">0</span>
-            </button>
-            <button type="button" class="est-tab" data-tab="boq">
-                Estimate <span class="est-tab-count" id="tabCountBoq">·</span>
-            </button>
-            <button type="button" class="est-tab" data-tab="ratebook">
-                Rates <span class="est-tab-count" id="tabCountRatebook">0</span>
-            </button>
-            <button type="button" class="est-tab hidden" data-tab="suggestions" id="tabSuggestions">
-                Suggestions <span class="est-tab-count" id="tabCountSuggestions">0</span>
-            </button>
-            <button type="button" class="est-tab hidden" data-tab="licenses" id="tabLicenses">
-                Licenses <span class="est-tab-count" id="tabCountLicenses">0</span>
-            </button>
-        </nav>
-
         <div class="est-body">
             <section class="est-board" id="boardPanel">
                 <div class="est-filters">
-                    <div class="est-filters-primary">
+                    <div class="est-filters-row est-filters-primary">
                         <input type="search" id="boardSearch" class="est-input" placeholder="Search code, pole, title…">
                         <select id="filterVoltage" class="est-select">
                             <option value="">All voltages</option>
@@ -117,7 +152,7 @@
                             <option>LT</option>
                         </select>
                         <select id="filterStatus" class="est-select">
-                            <option value="">All</option>
+                            <option value="">All status</option>
                             <option value="final">Final</option>
                             <option value="draft">Draft</option>
                             <option value="empty">Empty</option>
@@ -129,69 +164,66 @@
                         </select>
                         <button type="button" class="est-btn est-btn-primary est-btn-sm" id="btnAddCustomStructure">+ Custom</button>
                     </div>
-                    <details class="est-filters-more" id="filtersMore">
-                        <summary>More filters</summary>
-                        <div class="est-filters-extra">
-                            <select id="filterStructure" class="est-select">
-                                <option value="">All structures</option>
-                                <option value="1P">1P</option>
-                                <option value="2P">2P</option>
-                                <option value="3P">3P</option>
-                                <option value="4P">4P</option>
-                                <option value="DTR2P">DTR on 2P</option>
-                                <option value="DTR4P">DTR on 4P</option>
-                                <option value="CUSTOM">Custom</option>
-                            </select>
-                            <select id="filterPole" class="est-select">
-                                <option value="">All poles</option>
-                                <option value="8M">8m PCC</option>
-                                <option value="9M">9m PCC</option>
-                                <option value="RL">Rail</option>
-                                <option value="T9">Tubular 9m</option>
-                                <option value="T95">Tubular 9.5m</option>
-                                <option value="T11">Tubular 11m</option>
-                                <option value="WF">Wide flange</option>
-                            </select>
-                            <label class="est-check est-check-inline" title="Show DTR mount kits on the structure board">
-                                <input type="checkbox" id="filterShowDtr"> Show DTR
-                            </label>
-                            <select id="filterOrigin" class="est-select">
-                                <option value="">Matrix + custom</option>
-                                <option value="matrix">Matrix only</option>
-                                <option value="custom">Custom only</option>
-                            </select>
-                            <select id="filterConductor" class="est-select">
-                                <option value="">All conductors</option>
-                            </select>
-                            <select id="filterDtrCapacity" class="est-select">
-                                <option value="">All DTR kVA</option>
-                            </select>
-                            <select id="filterWire" class="est-select">
-                                <option value="">All wires</option>
-                                <option value="2W">2 wire</option>
-                                <option value="3W">3 wire</option>
-                                <option value="4W">4 wire</option>
-                                <option value="cable">cable</option>
-                            </select>
-                            <select id="filterLocation" class="est-select">
-                                <option value="">All locations</option>
-                                <option value="Tangent">Tangent</option>
-                                <option value="Angular">Angular</option>
-                                <option value="Dead-end">Dead-end</option>
-                                <option value="T-Off">T-Off</option>
-                            </select>
-                            <select id="filterArrangement" class="est-select">
-                                <option value="">All arrangements</option>
-                                <option value="InlineArr">In-line arr.</option>
-                                <option value="Sectional">Sectional</option>
-                            </select>
-                            <select id="filterExtension" class="est-select">
-                                <option value="">All extension</option>
-                                <option value="NoExt">No ext</option>
-                                <option value="WithExt">With ext</option>
-                            </select>
-                        </div>
-                    </details>
+                    <div class="est-filters-row est-filters-extra" id="filtersMore">
+                        <select id="filterStructure" class="est-select">
+                            <option value="">All structures</option>
+                            <option value="1P">1P</option>
+                            <option value="2P">2P</option>
+                            <option value="3P">3P</option>
+                            <option value="4P">4P</option>
+                            <option value="DTR2P">DTR on 2P</option>
+                            <option value="DTR4P">DTR on 4P</option>
+                            <option value="CUSTOM">Custom</option>
+                        </select>
+                        <select id="filterPole" class="est-select">
+                            <option value="">All poles</option>
+                            <option value="8M">8m PCC</option>
+                            <option value="9M">9m PCC</option>
+                            <option value="RL">Rail</option>
+                            <option value="T9">Tubular 9m</option>
+                            <option value="T95">Tubular 9.5m</option>
+                            <option value="T11">Tubular 11m</option>
+                            <option value="WF">Wide flange</option>
+                        </select>
+                        <select id="filterLocation" class="est-select">
+                            <option value="">All locations</option>
+                            <option value="Tangent">Tangent</option>
+                            <option value="Angular">Angular</option>
+                            <option value="Dead-end">Dead-end</option>
+                            <option value="T-Off">T-Off</option>
+                        </select>
+                        <select id="filterArrangement" class="est-select">
+                            <option value="">All arrangements</option>
+                            <option value="InlineArr">In-line arr.</option>
+                            <option value="Sectional">Sectional</option>
+                        </select>
+                        <select id="filterExtension" class="est-select">
+                            <option value="">All extension</option>
+                            <option value="NoExt">No ext</option>
+                            <option value="WithExt">With ext</option>
+                        </select>
+                        <select id="filterConductor" class="est-select">
+                            <option value="">All conductors</option>
+                        </select>
+                        <select id="filterWire" class="est-select">
+                            <option value="">All wires</option>
+                            <option value="2W">2 wire</option>
+                            <option value="3W">3 wire</option>
+                            <option value="4W">4 wire</option>
+                            <option value="cable">cable</option>
+                        </select>
+                        <select id="filterOrigin" class="est-select">
+                            <option value="">Matrix + custom</option>
+                            <option value="matrix">Matrix only</option>
+                            <option value="custom">Custom only</option>
+                        </select>
+                        <select id="filterDtrCapacity" class="est-select">
+                            <option value="">All DTR kVA</option>
+                        </select>
+                        <label class="est-check est-check-inline" title="Show DTR mount kits on the structure board">
+                            <input type="checkbox" id="filterShowDtr"> Show DTR
+                        </label>
+                    </div>
                 </div>
                 <div class="est-board-summary" id="boardSummary"></div>
                 <div class="est-board-toolbar hidden" id="boardToolbar" aria-hidden="true"></div>
@@ -199,41 +231,27 @@
             </section>
 
             <section class="est-editor hidden" id="editorPanel">
-                <div class="ed-top">
-                    <button type="button" class="est-btn est-btn-ghost" id="btnCloseEditor">← Back</button>
-                    <div class="ed-top-main">
-                        <h2 class="est-editor-title" id="editorTitle">Kit</h2>
-                        <p class="est-editor-sub hidden" id="editorSub"></p>
+                <header class="ed-hero">
+                    <button type="button" class="est-btn est-btn-ghost ed-back" id="btnCloseEditor">← Back to list</button>
+                    <div class="ed-hero-text">
+                        <div class="ed-hero-title-row">
+                            <h2 class="est-editor-title" id="editorTitle">Kit</h2>
+                            <span class="ed-status-pill" id="editorStatusPill">Draft</span>
+                        </div>
+                        <p class="est-editor-sub" id="editorSub">Recipe items for this structure</p>
                         <div class="ed-pole-variants hidden" id="editorPoleVariants"></div>
                         <div class="ed-summary-chips" id="editorSummaryChips"></div>
                     </div>
-                    <div class="ed-top-actions">
-                        <label class="est-final-check" title="Ready for estimates. Others can still suggest changes.">
-                            <input type="checkbox" id="kitFinal"> Final
-                        </label>
-                        <button type="button" class="est-btn est-btn-ghost hidden" id="btnSuggestKit" title="Send this kit edit for approval">Suggest</button>
-                        <button type="button" class="est-btn est-btn-ghost hidden" id="btnDeleteCustomKit" title="Remove this custom kit">Delete</button>
-                        <button type="button" class="est-btn est-btn-ghost" id="btnMoreActions" title="More">More</button>
-                        <button type="button" class="est-btn est-btn-primary" id="btnSaveKit">Save</button>
-                    </div>
-                </div>
-
-                <div class="ed-more-panel hidden" id="edMorePanel">
-                    <label class="est-check"><input type="checkbox" id="kitEnabled"> Use in estimates</label>
-                    <input type="checkbox" id="kitComplete" class="hidden" tabindex="-1" aria-hidden="true">
-                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedConductor" hidden>Fill conductor item</button>
-                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedFittings" hidden>Fill suggested fittings</button>
-                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnCopyFrom">Copy from similar kit…</button>
-                    <textarea id="kitNotes" class="est-notes" placeholder="Note (optional)"></textarea>
-                </div>
+                </header>
 
                 <div class="ed-view-tabs" role="tablist">
-                    <button type="button" class="ed-view-tab active" data-ed-view="review">Review list</button>
-                    <button type="button" class="ed-view-tab" data-ed-view="add">Add item</button>
+                    <button type="button" class="ed-view-tab active" data-ed-view="review">1. Review items</button>
+                    <button type="button" class="ed-view-tab" data-ed-view="add">2. Add item</button>
                 </div>
 
                 <div class="ed-body">
                     <div class="ed-review" id="edReviewView">
+                        <p class="ed-help">Adjust quantities with + / −. Remove what you do not need. Switch to <strong>Add item</strong> for the rate book.</p>
                         <div id="kitLines" class="est-lines"></div>
                     </div>
                     <div class="ed-add hidden" id="edAddView">
@@ -243,10 +261,33 @@
                             <button type="button" class="est-mini-tab" data-cat="poles">Poles</button>
                             <button type="button" class="est-mini-tab" data-cat="all">All</button>
                         </div>
-                        <input type="search" id="catalogSearch" class="est-input w-full" placeholder="Search…">
+                        <input type="search" id="catalogSearch" class="est-input w-full" placeholder="Type a word — e.g. insulator, stay, cement…">
                         <div id="catalogList" class="est-catalog-list"></div>
                     </div>
                 </div>
+
+                <div class="ed-more-panel hidden" id="edMorePanel">
+                    <label class="est-check"><input type="checkbox" id="kitEnabled"> Include this kit in estimates</label>
+                    <input type="checkbox" id="kitComplete" class="hidden" tabindex="-1" aria-hidden="true">
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedConductor" hidden>Fill conductor item</button>
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnSeedFittings" hidden>Fill starter fittings</button>
+                    <button type="button" class="est-btn est-btn-ghost est-btn-sm" id="btnCopyFrom">Copy from similar kit…</button>
+                    <textarea id="kitNotes" class="est-notes" placeholder="Note for reviewers (optional)"></textarea>
+                    <button type="button" class="est-btn est-btn-danger est-btn-sm hidden" id="btnDeleteCustomKit">Delete custom kit</button>
+                </div>
+
+                <footer class="ed-footer">
+                    <div class="ed-footer-left">
+                        <button type="button" class="est-btn est-btn-ghost" id="btnMoreActions">Options</button>
+                        <label class="est-final-check" id="kitFinalWrap" title="Approvers only — marks kit ready for estimates">
+                            <input type="checkbox" id="kitFinal"> Mark Final
+                        </label>
+                    </div>
+                    <div class="ed-footer-right">
+                        <button type="button" class="est-btn est-btn-ghost hidden" id="btnSuggestKit" title="Send for approval">Send suggestion</button>
+                        <button type="button" class="est-btn est-btn-primary" id="btnSaveKit">Save on this PC</button>
+                    </div>
+                </footer>
             </section>
 
             <section class="est-boq hidden" id="boqPanel">
@@ -254,19 +295,41 @@
                     <div>
                         <h2 class="boq-title">Generate estimate</h2>
                         <p class="boq-sub">
-                            Desktop is primary for the final estimate. Import a survey (or load demo),
-                            then generate <strong>separate Material &amp; Labour schedules</strong>
-                            with an editable abstract (WB style) and amount in words.
+                            Field survey stays physical. Choose a <strong>lens</strong>:
+                            <em>Actual</em> uses true kits; <em>Contract</em> uses your uploaded
+                            schedule + bridge mapping. Import survey (or demo), then generate.
                         </p>
                     </div>
                     <div class="boq-actions">
                         <button type="button" class="est-btn est-btn-primary" id="btnBoqImport">Import survey JSON</button>
                         <button type="button" class="est-btn est-btn-ghost" id="btnBoqLoadDemo" title="Load bundled demo from demo/ folder">Load demo</button>
+                        <button type="button" class="est-btn est-btn-primary" id="btnBoqDemoContract" title="Load demo survey + demo turnkey contract, auto-map, generate">Try demo contract</button>
                         <button type="button" class="est-btn est-btn-ghost" id="btnBoqFromCad" title="Use workspace loaded in CAD (same browser)">From CAD session</button>
                         <button type="button" class="est-btn est-btn-ghost" id="btnBoqGenerate" disabled>Generate BOQ</button>
                         <button type="button" class="est-btn est-btn-ghost" id="btnBoqExport" disabled>Export BOQ</button>
                         <button type="button" class="est-btn est-btn-ghost" id="btnBoqCopy" disabled>Copy text</button>
-                        <input type="file" id="boqImportFile" accept=".json,application/json" hidden>
+                        <input type="file" id="boqImportFile" accept=".slmmap,.json,application/json,application/octet-stream" hidden>
+                    </div>
+                </div>
+                <div class="lens-bar" id="lensBar">
+                    <div class="lens-toggle" role="group" aria-label="Estimate lens">
+                        <button type="button" class="lens-btn active" data-lens="actual" id="btnLensActual">Actual requirements</button>
+                        <button type="button" class="lens-btn" data-lens="contract" id="btnLensContract">Contract schedule</button>
+                    </div>
+                    <div class="lens-fields">
+                        <label class="lens-field" id="lensActualBookWrap">
+                            <span>My rates book (optional)</span>
+                            <select id="lensActualBook" class="est-select"></select>
+                        </label>
+                        <label class="lens-field" id="lensContractBookWrap">
+                            <span>Contract schedule</span>
+                            <select id="lensContractBook" class="est-select"></select>
+                        </label>
+                        <label class="lens-field" id="lensBridgeWrap">
+                            <span>Bridge pack</span>
+                            <select id="lensBridge" class="est-select"></select>
+                        </label>
+                        <a href="../schedules/" class="lens-link" id="btnOpenSchedulesTab">Manage schedules →</a>
                     </div>
                 </div>
                 <div class="boq-meta" id="boqMeta">No survey loaded</div>
@@ -442,10 +505,13 @@
     </div>
 
     <div class="est-toast hidden" id="estToast"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="../license-config.js"></script>
     <script src="../ui-dialog.js"></script>
     <script src="../license.js"></script>
+    <script src="../seal.js"></script>
     <script src="./estimate-match.js"></script>
+    <script src="./schedule-books.js"></script>
     <script src="./estimate.js"></script>
 </body>
 </html>

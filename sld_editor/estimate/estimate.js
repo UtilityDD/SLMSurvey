@@ -22,6 +22,10 @@
     boqExtras: null,
     /** Expanded family keys on the structure board (By family view). */
     expandedFamilies: new Set(),
+    /** Pending CSV/Excel import before column map save. */
+    schImportTable: null,
+    schImportColumnMap: null,
+    activeBridgeId: "",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -645,26 +649,8 @@
     const customBtn = $("btnAddCustomStructure");
     if (customBtn) customBtn.classList.toggle("hidden", state.tab !== "structure");
 
-    // Keep More filters open if any secondary filter is set
-    const more = $("filtersMore");
-    if (more) {
-      const secondaryIds = [
-        "filterStructure",
-        "filterPole",
-        "filterOrigin",
-        "filterConductor",
-        "filterDtrCapacity",
-        "filterWire",
-        "filterLocation",
-        "filterArrangement",
-        "filterExtension",
-      ];
-      const dtrOn = !!$("filterShowDtr")?.checked;
-      if (secondaryIds.some((id) => $(id)?.value) || dtrOn) more.open = true;
-    }
-
     if (!rows.length) {
-      list.innerHTML = `<div class="est-empty">No kits match. Clear search or open More filters.</div>`;
+      list.innerHTML = `<div class="est-empty">No kits match. Clear search or adjust filters.</div>`;
       return;
     }
 
@@ -968,6 +954,13 @@
   function openEditor(kitId) {
     const kit = state.kitsById[kitId];
     if (!kit) return;
+    const L = window.SlmLicense;
+    const licensedOff = !L || !L.enabled;
+    const canEdit = licensedOff || !!(L.canEditKits && L.canEditKits());
+    if (!canEdit) {
+      toast("Your license cannot edit kits (needs Suggest or Approve)");
+      return;
+    }
     state.activeKitId = kitId;
     state.draft = {
       enabled: kit.enabled,
@@ -981,19 +974,32 @@
 
     $("boardPanel").classList.add("hidden");
     $("ratebookPanel").classList.add("hidden");
+    $("boqPanel")?.classList.add("hidden");
+    $("schedulesPanel")?.classList.add("hidden");
     $("editorPanel").classList.remove("hidden");
     $("edMorePanel")?.classList.add("hidden");
 
     $("editorTitle").textContent = kitTitle(kit);
     if ($("editorSub")) {
-      const code = kitCode(kit);
-      const subBits = [
-        code ? `Code ${code}` : "",
-        kit.familyKey ? `Family ${kit.familyKey}` : "",
-        kit.id ? `id ${kit.id}` : "",
+      const bits = [
+        kit.voltage,
+        kit.structureLabel || kit.structure,
+        kit.location,
+        kit.conductorShort || kit.conductorFamily,
       ].filter(Boolean);
-      $("editorSub").textContent = subBits.join(" · ");
-      $("editorSub").classList.toggle("hidden", !subBits.length);
+      $("editorSub").textContent = bits.length
+        ? bits.join(" · ")
+        : "Review materials & labour, then save or send a suggestion.";
+      $("editorSub").classList.remove("hidden");
+    }
+    const pill = $("editorStatusPill");
+    if (pill) {
+      const empty = !(kit.lines || []).length;
+      const final = !!kit.complete;
+      pill.textContent = empty ? "Empty" : final ? "Final" : "Draft";
+      pill.className =
+        "ed-status-pill" +
+        (final ? " is-final" : empty ? " is-empty" : "");
     }
     renderEditorPoleVariants(kit);
     $("kitEnabled").checked = !!state.draft.enabled;
@@ -1018,24 +1024,55 @@
         ? "Fill GI wire starters"
         : kit.isDtr
           ? "Fill DTR starters"
-          : "Fill suggested fittings";
+          : "Fill starter fittings";
 
     renderEditorSummary();
     setEditorView("review");
     renderKitLines();
     updateSuggestButton();
+    updateEditorAuthUi();
   }
 
   function updateSuggestButton() {
     const btn = $("btnSuggestKit");
     if (!btn) return;
-    const can = !!(window.SlmLicense && window.SlmLicense.canSuggest());
+    const L = window.SlmLicense;
+    const licensedOff = !L || !L.enabled;
+    const can = licensedOff || !!(L && L.canSuggest());
     btn.classList.toggle("hidden", !can);
     btn.disabled = !can;
-    // Final kits can still receive suggestions — Final = ready for estimates, not locked.
     btn.title = can
-      ? "Suggest a change (works on Draft or Final kits)"
+      ? "Send this kit change for approval"
       : "Needs can_suggest on your license";
+  }
+
+  function updateEditorAuthUi() {
+    const L = window.SlmLicense;
+    const licensedOff = !L || !L.enabled;
+    const canApprove = licensedOff || !!(L && L.canApprove());
+    const canEdit = licensedOff || !!(L && L.canEditKits && L.canEditKits());
+    const finalWrap = $("kitFinalWrap");
+    const finalBox = $("kitFinal");
+    if (finalWrap) {
+      finalWrap.classList.toggle("is-locked", !canApprove);
+      finalWrap.title = canApprove
+        ? "Mark ready for estimates (approvers)"
+        : "Mark Final needs can_approve on your license";
+    }
+    if (finalBox) {
+      finalBox.disabled = !canApprove;
+      if (!canApprove && state.draft) {
+        // keep visual in sync with kit, but cannot toggle
+        finalBox.checked = !!state.draft.complete;
+      }
+    }
+    const saveBtn = $("btnSaveKit");
+    if (saveBtn) {
+      saveBtn.disabled = !canEdit;
+      saveBtn.title = canEdit
+        ? "Save kit changes on this computer"
+        : "Needs Suggest or Approve on your license";
+    }
   }
 
   function setBtnEnabled(el, enabled, whenOffTitle, whenOnTitle) {
@@ -1061,23 +1098,25 @@
     const prefs = L?.readPrefs?.() || {};
     const canSuggest = licensedOff ? true : !!(L && L.canSuggest());
     const canApprove = licensedOff ? true : !!(L && L.canApprove());
+    const canEditKits = licensedOff ? true : !!(L && L.canEditKits && L.canEditKits());
     // Dev mode (no Supabase): treat as full admin for local testing.
     const canPublish = licensedOff ? true : canApprove;
 
     const roleEl = $("estPermRole");
     const chips = $("estPermChips");
-    let roleLabel = "Local edit only";
+    let roleLabel = "Browse only";
     if (licensedOff) roleLabel = "Dev mode (licensing off) — all tools enabled";
     else if (canApprove && canSuggest) roleLabel = "Admin — suggest, approve, publish";
     else if (canApprove) roleLabel = "Approver — review suggestions & publish";
     else if (canSuggest) roleLabel = "Suggestor — edit kits & suggest changes";
-    else roleLabel = "Editor — local kits only (Export / Import / Reset)";
+    else roleLabel = "Viewer — browse catalog only";
     if (roleEl) {
       const code = prefs.licenseCode ? ` · ${prefs.licenseCode}` : "";
       roleEl.textContent = roleLabel + code;
     }
     if (chips) {
       chips.innerHTML = `
+        <span class="est-chip ${canEditKits ? "complete" : "disabled"}">Edit ${canEditKits ? "ON" : "OFF"}</span>
         <span class="est-chip ${canSuggest ? "complete" : "disabled"}">Suggest ${canSuggest ? "ON" : "OFF"}</span>
         <span class="est-chip ${canApprove ? "complete" : "disabled"}">Approve ${canApprove ? "ON" : "OFF"}</span>
         <span class="est-chip ${canPublish ? "complete" : "disabled"}">Publish ${canPublish ? "ON" : "OFF"}</span>
@@ -1094,30 +1133,31 @@
     );
     setBtnEnabled(
       $("btnExportKits"),
-      true,
-      "",
+      canEditKits,
+      "Export needs Suggest or Approve on your license",
       "Download a backup of kit edits from this browser"
     );
     setBtnEnabled(
       $("btnImportKits"),
-      true,
-      "",
+      canEditKits,
+      "Import needs Suggest or Approve on your license",
       "Load a kit backup into this browser"
     );
     setBtnEnabled(
       $("btnResetKits"),
-      true,
-      "",
+      canEditKits,
+      "Reset needs Suggest or Approve on your license",
       "Clear kit edits on this computer"
     );
     setBtnEnabled(
       $("btnAddCustomStructure"),
-      true,
-      "",
+      canEditKits,
+      "Custom kits need Suggest or Approve on your license",
       "Create a non-standard structure kit"
     );
 
     updateSuggestButton();
+    updateEditorAuthUi();
     updateSuggestionsTabVisibility();
     updateLicensesTabVisibility();
   }
@@ -1215,7 +1255,7 @@
                 <input class="est-qty" type="number" min="0" step="any" value="${line.qty ?? 1}" data-qty="${i}">
                 <button type="button" class="est-qty-btn" data-inc="${i}" aria-label="Increase">+</button>
               </div>
-              <button type="button" class="est-btn est-btn-danger est-btn-sm" data-rm="${i}" title="Remove">Remove</button>
+              <button type="button" class="est-btn est-btn-danger est-btn-sm" data-rm="${i}" title="Remove">×</button>
             </div>`
             )
             .join("")}
@@ -1518,6 +1558,7 @@
     $("boardPanel").classList.add("hidden");
     $("ratebookPanel").classList.add("hidden");
     $("boqPanel")?.classList.add("hidden");
+    $("schedulesPanel")?.classList.add("hidden");
     $("suggestionsPanel")?.classList.add("hidden");
     $("licensesPanel")?.classList.add("hidden");
 
@@ -1526,6 +1567,7 @@
       renderRatebook();
     } else if (tab === "boq") {
       $("boqPanel")?.classList.remove("hidden");
+      syncLensControls();
       renderBoqPanel();
     } else if (tab === "suggestions") {
       $("suggestionsPanel")?.classList.remove("hidden");
@@ -1613,12 +1655,44 @@
     if (!state.boqExtras) state.boqExtras = loadBoqExtras();
     mergeKits();
     const kits = Object.values(state.kitsById);
-    const report = window.SlmEstimateMatch.buildReport(
-      state.boqSurvey,
-      kits,
-      state.ratebook,
-      state.boqExtras
-    );
+    const SB = window.SlmScheduleBooks;
+    const prefs = SB ? SB.loadPrefs() : { mode: "actual" };
+    let report;
+
+    if (prefs.mode === "contract") {
+      const book = SB?.getBook(prefs.contractBookId);
+      const bridge = SB?.getBridge(prefs.bridgeId);
+      if (!book) {
+        toast("Pick a contract schedule book (Schedules tab or lens dropdown)");
+        return;
+      }
+      if (!bridge) {
+        toast("Pick or create a Bridge pack for this contract");
+        return;
+      }
+      report = window.SlmEstimateMatch.buildContractReport(
+        state.boqSurvey,
+        kits,
+        book,
+        bridge,
+        state.boqExtras
+      );
+    } else {
+      let ratebook = state.ratebook;
+      if (SB && prefs.actualBookId) {
+        const book = SB.getBook(prefs.actualBookId);
+        if (book) {
+          ratebook = SB.mergeRatebooks(state.ratebook, SB.bookAsRatebook(book));
+        }
+      }
+      report = window.SlmEstimateMatch.buildReport(
+        state.boqSurvey,
+        kits,
+        ratebook,
+        state.boqExtras
+      );
+    }
+
     state.boqReport = report;
     $("btnBoqExport").disabled = false;
     $("btnBoqCopy").disabled = false;
@@ -1627,9 +1701,14 @@
       (report.materialSchedule?.length || 0) + (report.labourSchedule?.length || 0);
     if (countEl) countEl.textContent = String(n);
     renderBoqPanel();
+    const bridgeN = report.bridgeGaps?.length || 0;
     toast(
       n
-        ? `Estimate: ${report.materialSchedule.length} mat · ${report.labourSchedule.length} lab · ${report.gaps.length} gap(s)`
+        ? `${prefs.mode === "contract" ? "Contract" : "Actual"}: ${
+            report.materialSchedule.length
+          } mat · ${report.labourSchedule.length} lab · ${report.gaps.length} gap(s)${
+            bridgeN ? ` · ${bridgeN} unmapped` : ""
+          }`
         : `No schedule lines — ${report.gaps.length} gap(s)`
     );
   }
@@ -1766,7 +1845,12 @@
       return;
     }
     const M = window.SlmEstimateMatch;
+    const lensLabel =
+      report.lens === "contract"
+        ? `Contract${report.scheduleBookName ? " · " + escapeHtml(report.scheduleBookName) : ""}`
+        : "Actual requirements";
     summary.innerHTML = `
+      <span class="est-chip">${lensLabel}</span>
       <span class="est-chip"><strong>${report.proposedPoles}</strong> Proposed</span>
       <span class="est-chip"><strong>${report.matchedStructures}</strong> structures</span>
       <span class="est-chip"><strong>${(report.matchedConductorKm || 0).toFixed(3)}</strong> km conductor</span>
@@ -1870,12 +1954,15 @@
       e.target.value = "";
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
-          const data = JSON.parse(String(reader.result || ""));
-          setBoqSurvey(data, file.name);
+          const text = String(reader.result || "");
+          const opened = window.SlmSeal
+            ? await window.SlmSeal.openTransferText(text, window.SlmSeal.KIND_MAP)
+            : { payload: JSON.parse(text) };
+          setBoqSurvey(opened.payload, file.name);
         } catch (err) {
-          toast("Invalid JSON: " + (err.message || err));
+          toast("Import failed: " + (err.message || err));
         }
       };
       reader.readAsText(file);
@@ -1894,6 +1981,7 @@
         );
       }
     });
+    $("btnBoqDemoContract")?.addEventListener("click", () => loadDemoContractFlow());
     $("btnBoqFromCad")?.addEventListener("click", () => {
       if (tryLoadBoqFromSession()) {
         toast("Loaded survey from CAD session");
@@ -1904,6 +1992,146 @@
     $("btnBoqGenerate")?.addEventListener("click", () => generateBoq());
     $("btnBoqExport")?.addEventListener("click", () => exportBoq());
     $("btnBoqCopy")?.addEventListener("click", () => copyBoq());
+    wireLensUi();
+  }
+
+  /* ── Contract Lens / local schedules ── */
+
+  function syncLensControls() {
+    const SB = window.SlmScheduleBooks;
+    if (!SB) return;
+    const prefs = SB.loadPrefs();
+    document.querySelectorAll(".lens-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.lens === prefs.mode);
+    });
+    const books = SB.listBooks();
+    const bridges = SB.listBridges();
+    const fill = (sel, opts, emptyLabel) => {
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML =
+        `<option value="">${emptyLabel}</option>` +
+        opts
+          .map(
+            (o) =>
+              `<option value="${escapeHtml(o.id)}">${escapeHtml(o.label)}</option>`
+          )
+          .join("");
+      if (opts.some((o) => o.id === cur)) sel.value = cur;
+    };
+    fill(
+      $("lensActualBook"),
+      books.map((b) => ({
+        id: b.id,
+        label: `${b.name} · ${b.kind || "book"} (${b.itemCount || b.items?.length || 0})`,
+      })),
+      "App ratebook only"
+    );
+    fill(
+      $("lensContractBook"),
+      books.map((b) => ({
+        id: b.id,
+        label: `${b.name} (${b.itemCount || b.items?.length || 0})`,
+      })),
+      "Select contract schedule…"
+    );
+    fill(
+      $("lensBridge"),
+      bridges.map((b) => ({ id: b.id, label: b.name })),
+      "Select bridge pack…"
+    );
+    if (prefs.actualBookId) $("lensActualBook").value = prefs.actualBookId;
+    if (prefs.contractBookId) $("lensContractBook").value = prefs.contractBookId;
+    if (prefs.bridgeId) $("lensBridge").value = prefs.bridgeId;
+    const contractMode = prefs.mode === "contract";
+    $("lensActualBookWrap")?.classList.toggle("hidden", contractMode);
+    $("lensContractBookWrap")?.classList.toggle("hidden", !contractMode);
+    $("lensBridgeWrap")?.classList.toggle("hidden", !contractMode);
+  }
+
+  function setLensMode(mode) {
+    const SB = window.SlmScheduleBooks;
+    if (!SB) return;
+    const prefs = SB.loadPrefs();
+    prefs.mode = mode === "contract" ? "contract" : "actual";
+    SB.savePrefs(prefs);
+    syncLensControls();
+    state.boqReport = null;
+    renderBoqPanel();
+  }
+
+  function kitsFromHits(survey) {
+    mergeKits();
+    const kits = Object.values(state.kitsById);
+    if (!survey || !window.SlmEstimateMatch?.collectKitHits) return kits;
+    const hits = window.SlmEstimateMatch.collectKitHits(survey, kits);
+    const out = [];
+    for (const { kit } of hits.structureQty.values()) out.push(kit);
+    for (const { kit } of hits.conductorHits) out.push(kit);
+    return out;
+  }
+
+  async function fetchDemoContractPayload() {
+    const res = await fetch("./demo_contract_schedule.json");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  }
+
+  async function installDemoContractForSurvey(survey) {
+    const SB = window.SlmScheduleBooks;
+    if (!SB) throw new Error("Schedule module missing");
+    const payload = await fetchDemoContractPayload();
+    const kits = kitsFromHits(survey);
+    return SB.installDemoContract(payload, kits);
+  }
+
+  /** One-click: demo survey + demo contract + auto-bridge + generate. */
+  async function loadDemoContractFlow() {
+    try {
+      const res = await fetch("../demo/sample_workspace_33_11_lt.json");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const survey = await res.json();
+      setBoqSurvey(survey, "demo survey");
+      const { book, mappedCount } = await installDemoContractForSurvey(survey);
+      state.activeBridgeId = "demo_bridge_v1";
+      syncLensControls();
+      setLensMode("contract");
+      generateBoq();
+      toast(
+        `Demo contract “${book.name}”: ${mappedCount} kits mapped · Contract BOQ ready`
+      );
+    } catch (err) {
+      toast(
+        "Demo contract failed — serve sld_editor over HTTP. " +
+          (err.message || err)
+      );
+    }
+  }
+
+  function wireLensUi() {
+    $("btnLensActual")?.addEventListener("click", () => setLensMode("actual"));
+    $("btnLensContract")?.addEventListener("click", () => setLensMode("contract"));
+    $("lensActualBook")?.addEventListener("change", () => {
+      const SB = window.SlmScheduleBooks;
+      if (!SB) return;
+      const prefs = SB.loadPrefs();
+      prefs.actualBookId = $("lensActualBook").value;
+      SB.savePrefs(prefs);
+    });
+    $("lensContractBook")?.addEventListener("change", () => {
+      const SB = window.SlmScheduleBooks;
+      if (!SB) return;
+      const prefs = SB.loadPrefs();
+      prefs.contractBookId = $("lensContractBook").value;
+      SB.savePrefs(prefs);
+    });
+    $("lensBridge")?.addEventListener("change", () => {
+      const SB = window.SlmScheduleBooks;
+      if (!SB) return;
+      const prefs = SB.loadPrefs();
+      prefs.bridgeId = $("lensBridge").value;
+      SB.savePrefs(prefs);
+    });
   }
 
   function canUseSuggestionsUi() {
@@ -2744,16 +2972,21 @@
     updatePermissionUi();
     refreshPendingBadge();
     wireBoqUi();
+    syncLensControls();
     state.boqExtras = loadBoqExtras();
 
     const params = new URLSearchParams(location.search);
     const startTab = params.get("tab");
+    const kitId = params.get("kit");
     const fromSession = tryLoadBoqFromSession();
     if (startTab === "boq" || fromSession) {
       showTab("boq");
       if (fromSession && state.boqSurvey) generateBoq();
     } else {
       showTab("structure");
+    }
+    if (kitId && state.kitsById[kitId]) {
+      openEditor(kitId);
     }
 
     document.querySelectorAll(".est-tab").forEach((tab) => {
@@ -2819,11 +3052,24 @@
       tab.addEventListener("click", () => setEditorView(tab.dataset.edView));
     });
     $("kitFinal")?.addEventListener("change", () => {
+      const L = window.SlmLicense;
+      const canApprove = !L || !L.enabled || !!(L && L.canApprove());
+      if (!canApprove) {
+        if ($("kitFinal") && state.draft) $("kitFinal").checked = !!state.draft.complete;
+        toast("Mark Final needs Approve on your license");
+        return;
+      }
       if (state.draft) {
         state.draft.complete = $("kitFinal").checked;
         if ($("kitComplete")) $("kitComplete").checked = state.draft.complete;
         markDraftDirty();
         renderEditorSummary();
+        const pill = $("editorStatusPill");
+        if (pill) {
+          pill.textContent = state.draft.complete ? "Final" : "Draft";
+          pill.className =
+            "ed-status-pill" + (state.draft.complete ? " is-final" : "");
+        }
       }
     });
     $("kitComplete")?.addEventListener("change", () => {

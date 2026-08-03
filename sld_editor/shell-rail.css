@@ -1,0 +1,275 @@
+/**
+ * Shared desktop rail — Job / Map / Library always in the same place.
+ * Used by workspace, structure, and CAD map.
+ */
+:root {
+    --slm-rail-bg: #10182a;
+    --slm-rail-ink: #cdd5e1;
+    --slm-rail-muted: #7c8899;
+    --slm-rail-line: rgba(255, 255, 255, 0.09);
+    --slm-rail-accent: #6aa9f8;
+    --slm-rail-width: 232px;
+    --font-display: "Outfit", sans-serif;
+    --font-body: "Source Sans 3", sans-serif;
+}
+
+.slm-rail {
+    width: var(--slm-rail-width);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--slm-rail-bg);
+    color: var(--slm-rail-ink);
+    min-height: 0;
+    height: 100%;
+    padding: 12px 10px 10px;
+    box-sizing: border-box;
+}
+
+.slm-rail-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 2px 6px 12px;
+}
+
+.slm-rail-logo {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 0.06em;
+    color: var(--slm-rail-accent);
+    text-decoration: none;
+}
+
+.slm-rail-product {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--slm-rail-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* Primary app tabs — fixed top of every desk */
+.slm-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    padding: 3px;
+    margin-bottom: 12px;
+    background: rgba(0, 0, 0, 0.28);
+    border-radius: 10px;
+}
+
+.slm-tab {
+    text-align: center;
+    text-decoration: none;
+    color: #8b97a8;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 8px 4px;
+    border-radius: 8px;
+    line-height: 1.1;
+}
+
+.slm-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+
+.slm-tab.is-active {
+    color: #fff;
+    background: rgba(106, 169, 248, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(106, 169, 248, 0.35);
+}
+
+.slm-rail-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.slm-rail-block-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--slm-rail-muted);
+    padding: 0 6px 6px;
+}
+
+.slm-rail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.slm-rail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: #a9b4c2;
+    text-align: left;
+    padding: 9px 10px;
+    border-radius: 8px;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.slm-rail-item:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+.slm-rail-item.is-active {
+    background: rgba(106, 169, 248, 0.16);
+    color: #fff;
+    box-shadow: inset 2px 0 0 var(--slm-rail-accent);
+}
+
+.slm-rail-badge {
+    margin-left: auto;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #dbe3ee;
+}
+
+.slm-rail-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 2px;
+}
+
+.slm-rail-tool {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    color: #e8eef6;
+    border-radius: 8px;
+    padding: 9px 11px;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    display: block;
+    box-sizing: border-box;
+}
+
+.slm-rail-tool:hover { background: rgba(255, 255, 255, 0.11); color: #fff; }
+.slm-rail-tool:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.slm-rail-tool-primary {
+    background: #1461c2;
+    border-color: #1461c2;
+    color: #fff;
+}
+.slm-rail-tool-primary:hover { background: #1a72e0; }
+
+.slm-rail-tool-quiet {
+    border-color: transparent;
+    background: transparent;
+    color: #8b97a8;
+}
+.slm-rail-tool-quiet:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+.slm-rail-foot {
+    flex-shrink: 0;
+    border-top: 1px solid var(--slm-rail-line);
+    padding-top: 10px;
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.slm-rail-jobname {
+    border: none;
+    background: transparent;
+    color: #d7dee8;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-align: left;
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.slm-rail-jobname:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+.slm-rail-row {
+    display: flex;
+    gap: 6px;
+}
+
+.slm-rail-row .slm-rail-tool { flex: 1; text-align: center; padding: 8px 6px; }
+
+/* Library sub-pages (Browse gallery / Edit kits) — same place under Library tab */
+.slm-lib-pages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 4px;
+}
+
+.slm-lib-page {
+    display: block;
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    text-decoration: none;
+    color: #a9b4c2;
+    font: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 9px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.slm-lib-page:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+.slm-lib-page.is-active {
+    background: rgba(106, 169, 248, 0.16);
+    color: #fff;
+    box-shadow: inset 2px 0 0 var(--slm-rail-accent);
+}
+
+.slm-lib-page small {
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: #7c8899;
+    margin-top: 2px;
+}
+
+.slm-lib-page.is-active small { color: #b8c9de; }
+
+/* Remove CAD light-theme tab overrides — Map uses the same dark rail */
+.sidebar .slm-rail-brand { color: inherit; }
+.sidebar .slm-rail-logo { color: #6aa9f8; }
+.sidebar .slm-rail-product { color: #7c8899; }
+
+.sidebar .slm-tabs {
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.sidebar .slm-tab { color: #8b97a8; }
+.sidebar .slm-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.sidebar .slm-tab.is-active {
+    color: #fff;
+    background: rgba(106, 169, 248, 0.22);
+    box-shadow: inset 0 0 0 1px rgba(106, 169, 248, 0.35);
+}

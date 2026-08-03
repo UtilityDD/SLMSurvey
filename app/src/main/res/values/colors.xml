@@ -15,6 +15,13 @@
     <color name="kv33">#FFD32F2F</color>
     <color name="kv11">#FFF9A825</color>
     <color name="lt">#FF388E3C</color>
+    <!-- Preset short-name parts (flow segments) -->
+    <color name="preset_part_voltage">#FF1565C0</color>
+    <color name="preset_part_structure">#FF0277BD</color>
+    <color name="preset_part_conductor">#FFE65100</color>
+    <color name="preset_part_location">#FF37474F</color>
+    <color name="preset_part_arrangement">#FF00897B</color>
+    <color name="preset_part_material">#FF546E7A</color>
     <color name="proposed_dash">#FF616161</color>
     <color name="selection_ring">#FFFF6F00</color>
     <color name="selection_ring_outer">#FFFFFFFF</color>

@@ -77,8 +77,8 @@
 
                     <LinearLayout
                         android:layout_width="0dp"
-                        android:layout_height="wrap_content"
                         android:layout_weight="1"
+                        android:layout_height="wrap_content"
                         android:orientation="vertical">
 
                         <TextView
@@ -104,6 +104,19 @@
                         android:layout_height="wrap_content" />
                 </LinearLayout>
 
+                <TextView
+                    android:id="@+id/tvUsualDefaultsHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:background="@color/surface"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp"
+                    android:text="@string/preset_usual_defaults_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+
                 <LinearLayout
                     android:id="@+id/presetInputsContainer"
                     android:layout_width="match_parent"
@@ -113,177 +126,30 @@
 
                     <TextView
                         style="@style/PresetSectionLabel"
-                        android:text="@string/preset_pattern" />
-
-                    <com.google.android.material.button.MaterialButtonToggleGroup
-                        android:id="@+id/tgPattern"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        app:checkedButton="@+id/btnPatternStandard"
-                        app:selectionRequired="true"
-                        app:singleSelection="true">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPatternStandard"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/preset_pattern_standard"
-                            android:textAllCaps="false" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnPatternDtrLt"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/preset_pattern_dtr_lt"
-                            android:textAllCaps="false" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                        android:text="@string/preset_pick_combination" />
 
                     <TextView
-                        android:id="@+id/tvPatternHint"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:paddingTop="6dp"
-                        android:text="@string/preset_pattern_dtr_lt_hint"
+                        android:paddingBottom="6dp"
+                        android:text="@string/preset_colour_legend"
                         android:textColor="@color/text_secondary"
-                        android:textSize="12sp"
-                        android:visibility="gone" />
+                        android:textSize="11sp" />
 
-                    <TextView
-                        android:id="@+id/tvVoltageLabel"
-                        style="@style/PresetSectionLabel"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/voltage" />
-
-                    <com.google.android.material.button.MaterialButtonToggleGroup
-                        android:id="@+id/tgVoltage"
+                    <RadioGroup
+                        android:id="@+id/rgPrePresets"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        app:checkedButton="@+id/btn11kv"
-                        app:selectionRequired="true"
-                        app:singleSelection="true">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn33kv"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/voltage_33kv"
-                            android:textAllCaps="false" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn11kv"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/voltage_11kv"
-                            android:textAllCaps="false" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnLt"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/voltage_lt"
-                            android:textAllCaps="false" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
-
-                    <TextView
-                        style="@style/PresetSectionLabel"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/status" />
-
-                    <com.google.android.material.button.MaterialButtonToggleGroup
-                        android:id="@+id/tgStatus"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        app:checkedButton="@+id/btnProposed"
-                        app:selectionRequired="true"
-                        app:singleSelection="true">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnExisting"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/existing"
-                            android:textAllCaps="false" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btnProposed"
-                            style="@style/Widget.Material3.Button.OutlinedButton"
-                            android:layout_width="0dp"
-                            android:layout_height="44dp"
-                            android:layout_weight="1"
-                            android:text="@string/proposed"
-                            android:textAllCaps="false" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
-
-                    <TextView
-                        style="@style/PresetSectionLabel"
-                        android:layout_marginTop="16dp"
-                        android:text="@string/preset_section_pole" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilMaterial"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/pole_material">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/actvMaterial"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:minHeight="48dp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilStructure"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:hint="@string/bubble_structure">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/actvStructure"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:minHeight="48dp" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/tilConductor"
-                        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:hint="@string/conductor">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/actvConductor"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                            android:minHeight="48dp" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                        android:background="@color/surface"
+                        android:paddingVertical="4dp" />
 
                     <LinearLayout
                         android:id="@+id/feederFieldsContainer"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:orientation="vertical">
+                        android:layout_marginTop="12dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
 
                         <TextView
                             style="@style/PresetSectionLabel"
@@ -321,6 +187,76 @@
                                 android:maxLines="1"
                                 android:minHeight="48dp" />
                         </com.google.android.material.textfield.TextInputLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
+                <!-- Desktop preset packs -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:background="@color/surface"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="14dp"
+                    android:paddingVertical="12dp">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/field_presets_title"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvFieldPresetStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="2dp"
+                        android:text="@string/field_presets_none"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <LinearLayout
+                        android:id="@+id/fieldPresetList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="vertical" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnImportFieldPresets"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:minHeight="48dp"
+                            android:text="@string/field_presets_import" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnExportFieldPresets"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:minHeight="48dp"
+                            android:text="@string/field_presets_export" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnClearFieldPresets"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="4dp"
+                            android:minHeight="48dp"
+                            android:text="@string/field_presets_clear"
+                            android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -382,41 +318,21 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:paddingBottom="12dp"
-                    android:text="@string/preset_post_hint"
+                    android:paddingBottom="8dp"
+                    android:text="@string/preset_post_named_hint"
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
                 <TextView
-                    style="@style/PresetGroupHeader"
-                    android:text="@string/post_group_33kv" />
-
-                <RadioGroup
-                    android:id="@+id/rgPost33"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="@color/surface"
-                    android:paddingVertical="4dp" />
-
-                <TextView
-                    style="@style/PresetGroupHeader"
-                    android:layout_marginTop="14dp"
-                    android:text="@string/post_group_11kv" />
+                    android:paddingBottom="6dp"
+                    android:text="@string/preset_colour_legend"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
 
                 <RadioGroup
-                    android:id="@+id/rgPost11"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="@color/surface"
-                    android:paddingVertical="4dp" />
-
-                <TextView
-                    style="@style/PresetGroupHeader"
-                    android:layout_marginTop="14dp"
-                    android:text="@string/post_group_dtr_lt" />
-
-                <RadioGroup
-                    android:id="@+id/rgPostDtrLt"
+                    android:id="@+id/rgPostPresets"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="@color/surface"

@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.blackgrapes.slmtoolbox.data.entity.SavedWorkspaceSummaryRow
 import com.blackgrapes.slmtoolbox.data.entity.SeriesMetaEntity
 import com.blackgrapes.slmtoolbox.data.entity.SurveyAssetEntity
 import com.blackgrapes.slmtoolbox.data.entity.SurveyConnectionEntity
@@ -61,6 +62,24 @@ interface SurveyDao {
     @Transaction
     @Query("SELECT * FROM surveys WHERE isSavedWorkspace = 1 ORDER BY savedAt DESC")
     fun observeSavedWorkspacesWithDetails(): Flow<List<SurveyWithDetails>>
+
+    @Query(
+        """
+        SELECT s.*,
+            (SELECT COUNT(*) FROM survey_assets a WHERE a.surveyId = s.id) AS poleCount,
+            (SELECT COUNT(*) FROM survey_connections c WHERE c.surveyId = s.id) AS spanCount,
+            (SELECT COUNT(*) FROM survey_assets a
+                WHERE a.surveyId = s.id AND a.locationVerified = 0) AS unverifiedCount
+        FROM surveys s
+        WHERE s.isSavedWorkspace = 1
+        ORDER BY s.savedAt DESC
+        """
+    )
+    fun observeSavedWorkspaceSummaries(): Flow<List<SavedWorkspaceSummaryRow>>
+
+    @Transaction
+    @Query("SELECT * FROM surveys WHERE isSavedWorkspace = 1 ORDER BY savedAt DESC")
+    suspend fun getSavedWorkspacesWithDetails(): List<SurveyWithDetails>
 
     @Query("SELECT * FROM surveys ORDER BY updatedAt DESC LIMIT 1")
     suspend fun getLatestSurvey(): SurveyEntity?

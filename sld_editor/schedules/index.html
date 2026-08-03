@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLM — Contract maps</title>
+    <script>
+        (function () {
+            var path = location.pathname || '/';
+            if (
+                location.hostname.endsWith('github.io') &&
+                path &&
+                !path.endsWith('/') &&
+                !/\.[a-z0-9]+$/i.test(path)
+            ) {
+                location.replace(path + '/' + location.search + location.hash);
+            }
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./schedules.css">
+    <link rel="stylesheet" href="../ui-dialog.css">
+</head>
+<body>
+    <div class="sch-shell">
+        <header class="sch-menubar">
+            <div class="sch-menubar-brand">
+                <a class="sch-menubar-logo" href="../index.html" title="Home">SLM</a>
+                <span class="sch-menubar-product">Contract maps</span>
+            </div>
+            <nav class="sch-menubar-nav" aria-label="Apps">
+                <a class="sch-nav-link" href="../index.html">CAD</a>
+                <a class="sch-nav-link" href="../workspace/">Workspace</a>
+                <a class="sch-nav-link" href="../structure/?mode=edit">Library · Edit</a>
+                <a class="sch-nav-link is-active" href="./">Contract maps</a>
+            </nav>
+            <div class="sch-menubar-right">
+                <a class="sch-nav-btn" href="../workspace/#estimate">Open Workspace →</a>
+            </div>
+        </header>
+
+        <!-- Top filter arrangement: schedule book first -->
+        <div class="sch-toolbar" id="schToolbar">
+            <label class="sch-filter">
+                <span>Schedule book</span>
+                <select id="schBookSelect" class="sch-select sch-select-lg"></select>
+            </label>
+            <label class="sch-filter">
+                <span>Bridge pack</span>
+                <select id="schBridgeSelect" class="sch-select"></select>
+            </label>
+            <label class="sch-filter sch-filter-grow">
+                <span>Search schedule</span>
+                <input type="search" id="schSearch" class="sch-input" placeholder="Code or description…">
+            </label>
+            <label class="sch-filter">
+                <span>Show</span>
+                <select id="schTypeFilter" class="sch-select">
+                    <option value="">Mat + Lab</option>
+                    <option value="material">Materials</option>
+                    <option value="labour">Labour</option>
+                </select>
+            </label>
+            <div class="sch-toolbar-actions">
+                <button type="button" class="sch-btn sch-btn-primary" id="btnSchUpload">Upload</button>
+                <button type="button" class="sch-btn" id="btnSchLoadDemo">Demo</button>
+                <button type="button" class="sch-btn" id="btnBridgeNew">+ Bridge</button>
+                <button type="button" class="sch-btn" id="btnSchTemplate" title="CSV template">Template</button>
+                <button type="button" class="sch-btn sch-btn-danger-ghost" id="btnSchDeleteBook" title="Delete selected book">Delete book</button>
+                <input type="file" id="schUploadFile" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+            </div>
+        </div>
+
+        <div class="sch-workspace">
+            <!-- Left: drag sources -->
+            <aside class="sch-pool" id="schPool">
+                <div class="sch-pool-head">Field kits</div>
+                <input type="search" id="poolSearch" class="sch-input sch-pool-search" placeholder="Filter kits…">
+                <label class="sch-check">
+                    <input type="checkbox" id="poolSurveyOnly" checked> In current survey first
+                </label>
+                <p class="sch-pool-hint" id="poolHint">Drag a kit onto a turnkey card. One schedule item can take many field kits.</p>
+                <div class="sch-pool-list" id="poolList"></div>
+            </aside>
+
+            <!-- Main: contract schedule cards (drop targets) -->
+            <section class="sch-board-wrap">
+                <div class="sch-board-meta" id="schBoardMeta">Select a schedule book above.</div>
+                <div class="sch-board" id="schBoard"></div>
+            </section>
+        </div>
+    </div>
+
+    <div class="sch-modal hidden" id="schImportModal" aria-modal="true" role="dialog">
+        <div class="sch-modal-card">
+            <h3>Import schedule</h3>
+            <p class="sch-muted" id="schImportMeta"></p>
+            <label class="sch-field">
+                <span>Name</span>
+                <input type="text" id="schImportName" class="sch-input" placeholder="e.g. WB Turnkey Mat 2024">
+            </label>
+            <label class="sch-field">
+                <span>Use as</span>
+                <select id="schImportKind" class="sch-select">
+                    <option value="contract">Contract schedule</option>
+                    <option value="actual">My material / labour rates</option>
+                </select>
+            </label>
+            <div class="sch-colmap" id="schColumnMap"></div>
+            <div class="sch-preview" id="schImportPreview"></div>
+            <div class="sch-modal-actions">
+                <button type="button" class="sch-btn" id="btnSchImportCancel">Cancel</button>
+                <button type="button" class="sch-btn sch-btn-primary" id="btnSchImportSave">Save book</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="sch-toast hidden" id="schToast"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../ui-dialog.js"></script>
+    <script src="../estimate/estimate-match.js"></script>
+    <script src="../estimate/schedule-books.js"></script>
+    <script src="./schedules.js"></script>
+</body>
+</html>

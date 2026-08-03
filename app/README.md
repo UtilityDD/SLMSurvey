@@ -76,14 +76,20 @@ Room version: **8** (`guarding` column). New schema changes need a new migration
 3. **Use this** → Place & Continue / Place & End  
    - **Dead-end** → End only
 
-### Grey / disable rules (only these)
+### Grey / disable rules (summary)
 
 | Rule | Effect |
 |------|--------|
 | Location = Dead-end | Arrangement disabled; HT Type cannot be 1P |
-| Extension = No-ext | Guarding disabled |
+| HT Type = 1P | Dead-end location greyed |
+| Continuing 33/11kV 1P | Conductor locked to previous pole/current section |
+| HT Type = 2P/3P/4P/DTR | Arrangement forced to Sectional |
+| Extension / material | Guarding only when `allowsGuardingChoice` (With-ext, or No-ext on Rail/H-Pole) |
+| LT ABC / PVC | ABC → 3P only; PVC → 1P or 3P |
 
-Existing and Proposed both get Loc/Arr/Ext/Guard (user requirement). Defaults pre-highlighted; user may change.
+**Full admissible / default matrix:** [`docs/SURVEY_COMBINATIONS.md`](../docs/SURVEY_COMBINATIONS.md)
+
+Existing and Proposed both get Loc/Arr/Ext/Guard. Defaults pre-highlighted; user may change.
 
 ### Catalog options by voltage (`NetworkCatalog`)
 
@@ -91,23 +97,35 @@ Existing and Proposed both get Loc/Arr/Ext/Guard (user requirement). Defaults pr
 |--|------|------|-----|
 | Material | H-Pole, Rail, 9m PCC | 8m/9m PCC, H-Pole, Rail | 8m PCC |
 | Conductor | 100, 150, 200 | 30, 50, 100, ABC | 30, 50, ABC, PVC |
-| Type | 1P–4P (Dead-end: 2P–4P) | 1P–4P, DTR (Dead-end: 2P–4P or DTR) | Phase 1P/2P/3P (ABC/PVC → 1P) |
+| Type | 1P–4P (Dead-end: 2P–4P) | 1P–4P, DTR (Dead-end: 2P–4P or DTR) | Phase 1P/2P/3P (ABC & bare; PVC→1P\|3P) |
 
 **Dead-end** = end of network. HT never 1P (33kV: 2P/3P/4P; 11kV: also DTR).  
+**HT arrangement:** 1P defaults In-line but may be Sectional; 2P/3P/4P/DTR are always Sectional.  
+**HT continuation:** a continuing 1P always keeps the previous pole/current-section conductor; conductor change requires a sectional multi-pole structure.  
 **Location defaults:** insert/tap → T-Off; else Tangent.  
-**Guarding:** With-ext + Yes → map draws ×× on spans (`SurveyMapRenderer.addGuardedCrossMarks`).
+**Guarding:** Yes (when allowed) → map draws ×× on spans (`SurveyMapRenderer.addGuardedCrossMarks`).
 
 ### Wizard entry modes
 
 | Trigger | Mode |
 |---------|------|
 | Empty map tap | `NEW_NETWORK` |
-| Place & Continue | `CONTINUE_SERIES` (series locks voltage/status) |
+| Place & Continue | `CONTINUE_SERIES` (locks voltage/status; HT 1P also locks conductor) |
 | Insert on line | `NEAR_LINE` / split |
 | Branch from pole | `TAPPING_BRANCH` |
 | Tap pole | Edit menu |
 
-Also: Survey **preset**, **LT conversion ABC**, **DTR branch** (11kV or LT only) — see `SurveyBubbleWizard.startFlow()`.
+Also: **DTR branch** (11kV or LT only) — see `SurveyBubbleWizard.startFlow()`.
+
+### Survey presets — parked (do later)
+
+Named Pre/Post presets (`SurveyPresetCatalog`, colour-coded short names, `PresetSettingsFragment`) are **disabled** for now:
+
+- Flag: `PresetPreferences.FEATURE_ENABLED = false`
+- Map FAB `btnPresetSettings` is hidden
+- Wizard ignores presets / LT-conversion-from-preset until the flag is turned back on
+
+Survey uses the usual voltage → status → compact review flow only. Revisit presets after desktop UI cleanup.
 
 ---
 
@@ -147,6 +165,7 @@ Also: Survey **preset**, **LT conversion ABC**, **DTR branch** (11kV or LT only)
 ## Related docs
 
 - Desktop CAD + Assembly Builder: [`../sld_editor/README.md`](../sld_editor/README.md)
+- Structure combinations (admissible / defaults): [`../docs/SURVEY_COMBINATIONS.md`](../docs/SURVEY_COMBINATIONS.md)
 - Estimate kits detail: [`../sld_editor/estimate/README.md`](../sld_editor/estimate/README.md)
 - Supabase: [`../supabase/README.md`](../supabase/README.md)
 - Repo root: [`../README.md`](../README.md)

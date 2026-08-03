@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.blackgrapes.slmtoolbox.data.repo.SurveyRepository
+import com.blackgrapes.slmtoolbox.data.entity.SavedWorkspaceSummaryRow
 import com.blackgrapes.slmtoolbox.domain.NetworkCatalog
 import com.blackgrapes.slmtoolbox.domain.PlacementDraft
 import com.blackgrapes.slmtoolbox.domain.SeriesConfig
@@ -84,8 +85,9 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
         // while the map fragment is stopped (no collectors).
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val savedWorkspaces: StateFlow<List<Survey>> =
-        repository.observeSavedWorkspaces()
+    /** My Maps list — titles/counts only (full graphs load on open/share/history). */
+    val savedWorkspaceSummaries: StateFlow<List<SavedWorkspaceSummaryRow>> =
+        repository.observeSavedWorkspaceSummaries()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
@@ -684,6 +686,12 @@ class SurveyViewModel(private val repository: SurveyRepository) : ViewModel() {
 
     suspend fun getSeriesMeta(seriesId: Long) =
         repository.getSeriesMeta(seriesId)
+
+    suspend fun getSurvey(surveyId: Long): Survey? =
+        repository.getSurvey(surveyId)
+
+    suspend fun getSavedWorkspacesWithDetails(): List<Survey> =
+        repository.getSavedWorkspacesWithDetails()
 
     class Factory(private val repository: SurveyRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

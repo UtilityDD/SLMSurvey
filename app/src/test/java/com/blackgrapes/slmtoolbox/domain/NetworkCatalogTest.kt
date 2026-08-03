@@ -1,9 +1,14 @@
 package com.blackgrapes.slmtoolbox.domain
 
 import com.blackgrapes.slmtoolbox.domain.model.AssetType
+import com.blackgrapes.slmtoolbox.domain.model.KitArrangement
+import com.blackgrapes.slmtoolbox.domain.model.KitLocation
 import com.blackgrapes.slmtoolbox.domain.model.PoleMaterial
+import com.blackgrapes.slmtoolbox.domain.model.PoleRole
 import com.blackgrapes.slmtoolbox.domain.model.PoleStructure
+import com.blackgrapes.slmtoolbox.domain.model.SurveyAsset
 import com.blackgrapes.slmtoolbox.domain.model.VoltageLevel
+import com.blackgrapes.slmtoolbox.domain.model.WorkStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,9 +79,98 @@ class NetworkCatalogTest {
     }
 
     @Test
-    fun ltAbcForces3Phase() {
-        assertEquals(listOf(PoleStructure.P3), NetworkCatalog.ltPhasesForConductor("ABC"))
-        assertEquals(PoleStructure.P3, NetworkCatalog.ltForcedStructure("ABC"))
+    fun htArrangementRules() {
+        assertEquals(
+            listOf(KitArrangement.INLINE, KitArrangement.SECTIONAL),
+            NetworkCatalog.kitArrangementsFor(
+                VoltageLevel.KV_33,
+                PoleStructure.P1,
+                KitLocation.TANGENT
+            )
+        )
+        assertEquals(
+            listOf(KitArrangement.SECTIONAL),
+            NetworkCatalog.kitArrangementsFor(
+                VoltageLevel.KV_33,
+                PoleStructure.P2,
+                KitLocation.TANGENT
+            )
+        )
+        assertEquals(
+            listOf(KitArrangement.SECTIONAL),
+            NetworkCatalog.kitArrangementsFor(
+                VoltageLevel.KV_11,
+                PoleStructure.DTR,
+                KitLocation.T_OFF
+            )
+        )
+        assertTrue(
+            NetworkCatalog.kitArrangementsFor(
+                VoltageLevel.KV_11,
+                PoleStructure.P4,
+                KitLocation.DEAD_END
+            ).isEmpty()
+        )
+        assertEquals(
+            KitArrangement.INLINE,
+            NetworkCatalog.defaultKitArrangement(
+                VoltageLevel.KV_11,
+                PoleStructure.P1,
+                KitLocation.ANGULAR
+            )
+        )
+        assertEquals(
+            KitArrangement.SECTIONAL,
+            NetworkCatalog.defaultKitArrangement(
+                VoltageLevel.KV_11,
+                PoleStructure.P3,
+                KitLocation.ANGULAR
+            )
+        )
+    }
+
+    @Test
+    fun continuationUsesTipConductorAfterSectionChange() {
+        val start = SurveyAsset(
+            id = 1,
+            surveyId = 10,
+            sequence = 1,
+            latitude = 0.0,
+            longitude = 0.0,
+            voltage = VoltageLevel.KV_11,
+            status = WorkStatus.PROPOSED,
+            type = AssetType.POLE,
+            poleRole = PoleRole.START,
+            poleMaterial = PoleMaterial.PCC_8M.label,
+            conductor = "30",
+            structure = PoleStructure.P1.label,
+            seriesId = 50
+        )
+        val sectionalTip = start.copy(
+            id = 2,
+            sequence = 2,
+            poleRole = PoleRole.CONTINUE,
+            conductor = "100",
+            structure = PoleStructure.P2.label
+        )
+
+        val config = NetworkCatalog.seriesConfigFromSeries(
+            listOf(start, sectionalTip),
+            seriesId = 50,
+            tipAsset = sectionalTip
+        )
+
+        assertEquals("100", config?.conductor)
+        assertEquals(PoleStructure.P1, config?.startStructure)
+    }
+
+    @Test
+    fun ltAbcAllows1P2P3P() {
+        assertEquals(
+            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
+            NetworkCatalog.ltPhasesForConductor("ABC")
+        )
+        assertEquals(null, NetworkCatalog.ltForcedStructure("ABC"))
         assertEquals(null, NetworkCatalog.ltForcedStructure("PVC"))
         assertEquals(null, NetworkCatalog.ltForcedStructure("50"))
     }
@@ -179,7 +273,10 @@ class NetworkCatalogTest {
             listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
             NetworkCatalog.ltPhasesForConductor("50")
         )
-        assertEquals(listOf(PoleStructure.P3), NetworkCatalog.ltPhasesForConductor("ABC"))
+        assertEquals(
+            listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3),
+            NetworkCatalog.ltPhasesForConductor("ABC")
+        )
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "ABC", PoleStructure.P3))
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "30", PoleStructure.P3))
         assertEquals(1, NetworkCatalog.lineParallelCount(VoltageLevel.LT, "50", PoleStructure.P2))

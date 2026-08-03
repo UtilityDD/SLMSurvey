@@ -36,13 +36,22 @@ object ExportHelper {
 
             val stampSuffix = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val pngFile = File(exportDirectory(context), "sld_preview_${survey.id}_$stampSuffix.png")
-            val scale = 3f
-            val bitmap = PrintableSldRenderer.renderPage(sldDoc.pages.first(), scale)
+            val scale = 2f
+            val bitmap = try {
+                PrintableSldRenderer.renderPage(sldDoc.pages.first(), scale)
+            } catch (oom: OutOfMemoryError) {
+                Log.e(TAG, "PNG preview OOM — retrying at lower scale", oom)
+                System.gc()
+                PrintableSldRenderer.renderPage(sldDoc.pages.first(), 1.25f)
+            }
             FileOutputStream(pngFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+                bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
             }
             bitmap.recycle()
             pngFile
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "PNG preview export OOM", e)
+            null
         } catch (e: Exception) {
             Log.e(TAG, "PNG preview export failed", e)
             null
@@ -176,6 +185,35 @@ object ExportHelper {
             jsonFile
         } catch (e: Exception) {
             Log.e(TAG, "JSON Export failed", e)
+            null
+        }
+    }
+
+    /**
+     * Default transfer format for all users: sealed .slmmap with license stamp inside.
+     */
+    fun exportSealedWorkspace(
+        context: Context,
+        survey: Survey,
+        seriesMeta: List<SeriesMetaEntity>
+    ): File? {
+        return try {
+            val plain = exportJsonWorkspace(context, survey, seriesMeta) ?: return null
+            val payload = org.json.JSONObject(plain.readText(Charsets.UTF_8))
+            val sealed = com.blackgrapes.slmtoolbox.seal.SlmSeal.seal(
+                context,
+                com.blackgrapes.slmtoolbox.seal.SlmSeal.KIND_MAP,
+                payload
+            )
+            val sealedFile = File(exportDirectory(context), "workspace_${survey.id}.slmmap")
+            FileOutputStream(sealedFile).use { out ->
+                out.write(sealed.toByteArray(Charsets.UTF_8))
+            }
+            // Drop the intermediate plain file from cache so it is not shared by mistake.
+            plain.delete()
+            sealedFile
+        } catch (e: Exception) {
+            Log.e(TAG, "Sealed map export failed", e)
             null
         }
     }

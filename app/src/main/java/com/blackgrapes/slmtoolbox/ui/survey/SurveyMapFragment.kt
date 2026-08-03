@@ -77,6 +77,7 @@ import com.blackgrapes.slmtoolbox.domain.model.Survey
 import com.blackgrapes.slmtoolbox.domain.AccuracyGrade
 import com.blackgrapes.slmtoolbox.domain.ContinueSpanGuidance
 import com.blackgrapes.slmtoolbox.domain.EnglishNumbers
+import com.blackgrapes.slmtoolbox.domain.PresetPreferences
 import com.blackgrapes.slmtoolbox.domain.SiteVerification
 import kotlin.coroutines.resume
 import java.util.ArrayDeque
@@ -128,6 +129,7 @@ class SurveyMapFragment : Fragment() {
     private var gnssCallback: GnssStatus.Callback? = null
 
     private var assetMarkers: Map<Long, Marker> = emptyMap()
+    private var surveyRenderHandle: SurveyMapRenderer.RenderHandle? = null
     private var snappedPoleId: Long? = null
     private var continuePreview: SurveyMapRenderer.ContinuePreviewHandle? = null
     /** Avoid redrawing preview when tip/drop/distance unchanged. */
@@ -252,6 +254,8 @@ class SurveyMapFragment : Fragment() {
         binding.btnClearDrawing.setOnClickListener { confirmClearDrawing() }
         binding.btnQuickDrop.setOnClickListener { performQuickDrop() }
         binding.btnPresetSettings.setOnClickListener {
+            // Presets UI parked — see PresetPreferences.FEATURE_ENABLED / app/README.md
+            if (!PresetPreferences.FEATURE_ENABLED) return@setOnClickListener
             findNavController().navigate(R.id.action_survey_to_preset_settings)
         }
         binding.btnLicenseAdmin.setOnClickListener {
@@ -264,10 +268,6 @@ class SurveyMapFragment : Fragment() {
         binding.btnMySld.setOnClickListener {
             findNavController().navigate(R.id.action_survey_to_my_sld)
         }
-        binding.btnEstimate.setOnClickListener {
-            findNavController().navigate(R.id.action_survey_to_estimate)
-        }
-        binding.btnSaveWorkspace.setOnClickListener { saveToMySld() }
         binding.btnPreviewSld.setOnClickListener {
             val id = viewModel.survey.value?.id ?: return@setOnClickListener
             findNavController().navigate(
@@ -294,8 +294,6 @@ class SurveyMapFragment : Fragment() {
                 launch {
                     viewModel.survey.collect { survey ->
                         if (survey == null) return@collect
-                        binding.btnSaveWorkspace.isVisible =
-                            survey.assets.any { it.poleRole == PoleRole.END }
                         binding.liveSiteBanner.isVisible =
                             survey.assets.isNotEmpty() && !survey.isLiveAtSite
                         scheduleRender()
@@ -714,35 +712,6 @@ class SurveyMapFragment : Fragment() {
             .show()
     }
 
-    private fun saveToMySld() {
-        val survey = viewModel.survey.value ?: return
-        if (survey.assets.none { it.poleRole == PoleRole.END }) {
-            Toast.makeText(requireContext(), R.string.save_requires_end, Toast.LENGTH_SHORT).show()
-            return
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            val suggestedName = WorkspaceNameResolver.suggest(requireContext(), survey)
-            if (!isAdded) return@launch
-            SaveWorkspaceDialog.show(this@SurveyMapFragment, survey, suggestedName) { name, surveyor, mobile ->
-                viewLifecycleOwner.lifecycleScope.launch {
-                    val replaced = viewModel.saveWorkspaceAndStartNew(
-                        name = name,
-                        linemanName = surveyor,
-                        linemanMobile = mobile
-                    )
-                    if (isAdded) {
-                        val msg = when (replaced) {
-                            true -> R.string.workspace_replaced
-                            false -> R.string.workspace_created
-                            null -> R.string.workspace_save_failed
-                        }
-                        Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
     /** Updates the floating coordinate chip with the current map-center lat/long. */
     private fun updateCoordinateChip() {
         val binding = _binding ?: return
@@ -983,6 +952,8 @@ class SurveyMapFragment : Fragment() {
      */
     private fun invalidateAnnotationState() {
         clearContinuePreview()
+        surveyRenderHandle?.remove()
+        surveyRenderHandle = null
         myLocationMarker = null
         assetMarkers = emptyMap()
         lastRenderedSurveyId = null
@@ -1055,15 +1026,35 @@ class SurveyMapFragment : Fragment() {
             snappedId == lastRenderedSnappedId &&
             assetMarkers.isNotEmpty()
         ) {
-            // Still ensure GPS dot survived (map.clear races / dialog overlays).
             ensureMyLocationMarker()
             return
         }
 
-        // map.clear() inside render wipes GPS + continue preview — recreate after.
-        clearContinuePreview()
-        myLocationMarker = null
-        assetMarkers = SurveyMapRenderer.render(
+        // Selection / snap only — refresh icons, keep lines.
+        if (
+            survey.id == lastRenderedSurveyId &&
+            survey.updatedAt == lastRenderedUpdatedAt &&
+            assetMarkers.isNotEmpty() &&
+            (selectedId != lastRenderedSelectedId || snappedId != lastRenderedSnappedId)
+        ) {
+            SurveyMapRenderer.updateSelectionIcons(
+                context = requireContext(),
+                survey = survey,
+                assetMarkers = assetMarkers,
+                selectedAssetId = selectedId,
+                snappedAssetId = snappedId,
+                previousSelectedId = lastRenderedSelectedId,
+                previousSnappedId = lastRenderedSnappedId
+            )
+            lastRenderedSelectedId = selectedId
+            lastRenderedSnappedId = snappedId
+            updateDynamicSpanHint()
+            return
+        }
+
+        // Remove previous survey annotations only — keep GPS + continue preview.
+        surveyRenderHandle?.remove()
+        surveyRenderHandle = SurveyMapRenderer.render(
             context = requireContext(),
             map = mapLibreMap,
             survey = survey,
@@ -1071,11 +1062,12 @@ class SurveyMapFragment : Fragment() {
             selectedAssetId = selectedId,
             snappedAssetId = snappedId
         )
+        assetMarkers = surveyRenderHandle?.assetMarkers.orEmpty()
         lastRenderedSurveyId = survey.id
         lastRenderedUpdatedAt = survey.updatedAt
         lastRenderedSelectedId = selectedId
         lastRenderedSnappedId = snappedId
-        ensureMyLocationMarker(forceRecreate = true)
+        ensureMyLocationMarker()
         updateDynamicSpanHint()
     }
 
@@ -1186,7 +1178,6 @@ class SurveyMapFragment : Fragment() {
         binding.mapView.isEnabled = enabled
         binding.btnMySld.isEnabled = enabled
         binding.btnPreviewSld.isEnabled = enabled
-        binding.btnSaveWorkspace.isEnabled = enabled
         binding.btnQuickDrop.isEnabled = enabled
     }
 

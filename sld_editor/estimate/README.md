@@ -15,7 +15,8 @@ Desktop admin UI to turn the Mat/Lab rate book into reusable estimate kits.
 
 **Structure kits** — usually `Voltage × Structure × Location × Arrangement × Pole × Conductor × Ext`.  
 Locations: **Tangent / Angular / Dead-end / T-Off**.  
-**T-Off** = take-off where a new network starts from an existing network (In-line/Sectional × ext).  
+**T-Off** = take-off where a new network starts from an existing network. HT 1P may
+be In-line or Sectional; HT 2P/3P/4P/DTR are Sectional-only.  
 - LT T-Off: SP, or from DTR  
 - 11kV T-Off: SP/DP/TP/4P, or DTR  
 - 33kV T-Off: 1P / 2P / 3P / 4P  
@@ -34,7 +35,13 @@ Locations: **Tangent / Angular / Dead-end / T-Off**.
 
 Long pipe `id` remains the technical key. Each kit also has `poleVariants[]` (same axes, one code per allowed pole, plus `matCode` / `labourCodes` for ratebook swap). `familyKey` e.g. `33|1P` groups the Structure board (**By family** view). DTR kits are hidden until **Show DTR** (or a DTR structure filter). Pole filter and editor pole-variant chips use the same tokens (`9M`, `RL`, …); clicking a chip loads that pole’s Mat (+ erection Lab when present) into the kit.  
 
+**HT section rule:** on 33/11kV, a continuing 1P keeps the previous pole/current-section conductor. Conductor
+changes occur at sectional 2P/3P/4P structures. Accordingly, the predefined matrix
+generates In-line + Sectional for HT 1P, but Sectional only for HT 2P/3P/4P/DTR.
+
 **Estimate (desktop primary):** Assembly Builder → **Estimate** tab. Generates a West Bengal–style estimate: separate **Schedule of Materials** and **Schedule of Labour** (code, description, unit, qty, rate, amount — no Mat/Lab column on each row), then an **Abstract** with editable % extras (contingency on Mat/Lab, GST, cess) and **amount in words**.
+
+**Contract maps (separate page):** Open from CAD home → **Estimate → Contract maps…**, or Tools sidebar **Contract maps**, or Assembly Builder header link. Upload Mat/Lab / contract SoR via CSV/Excel, build Bridge packs. Estimate tab keeps Actual vs Contract lens and reads those local books.
 
 **Sample survey (demo):** bundled at [`../demo/sample_workspace_33_11_lt.json`](../demo/sample_workspace_33_11_lt.json).
 
@@ -84,3 +91,8 @@ Use **+ Custom structure** on the Structure kits tab for non-matrix poles/struct
 - Not wiped when `_gen_catalog.py` regenerates the matrix
 - Included when you **Publish to app**
 - Filter: Structure = Custom, or Origin = Custom only
+
+## Related
+
+Phone wizard **admissible / not admissible / default** combinations (must stay aligned with this matrix):  
+[`docs/SURVEY_COMBINATIONS.md`](../../docs/SURVEY_COMBINATIONS.md)

@@ -430,7 +430,11 @@ def build_matrix():
         {"id": "Dead-end", "label": "Dead-end"},
         {"id": "T-Off", "label": "T-Off"},  # take-off from existing network
     ]
-    # Arrangement: Tangent / Angular / T-Off have In-line vs Sectional; Dead-end has none
+    # Arrangement:
+    # - Dead-end has none.
+    # - 33/11kV 2P/3P/4P and DTR are always Sectional.
+    # - HT 1P defaults In-line but may also be Sectional.
+    # - LT retains both because P1 is the canonical kit structure for LT phase/wire variants.
     arrangements_tangent_angular = [
         {"id": "InlineArr", "label": "In-line arr."},
         {"id": "Sectional", "label": "Sectional"},
@@ -442,9 +446,11 @@ def build_matrix():
     ]
     structure_by_id = {s["id"]: s for s in structures}
 
-    def arrangements_for(location_id: str):
+    def arrangements_for(voltage: str, structure_id: str, location_id: str):
         if location_id == "Dead-end":
             return [{"id": None, "label": None}]
+        if voltage in ("33kV", "11kV") and structure_id != "1P":
+            return [{"id": "Sectional", "label": "Sectional"}]
         return arrangements_tangent_angular
 
     def structures_allowed(voltage: str, location_id: str):
@@ -461,7 +467,7 @@ def build_matrix():
                 # HT dead-end is never a single pole
                 if v in ("33kV", "11kV") and loc["id"] == "Dead-end" and sid == "1P":
                     continue
-                for arr in arrangements_for(loc["id"]):
+                for arr in arrangements_for(v, sid, loc["id"]):
                     for c in structure_conductor_variants(
                         v, s["id"], loc["id"], arr["id"]
                     ):
@@ -586,7 +592,7 @@ def build_matrix():
     poles = allowed_pole_codes(v)
     for mount in DTR_MOUNTS:
         for loc in locations:
-            for arr in arrangements_for(loc["id"]):
+            for arr in arrangements_for(v, "DTR", loc["id"]):
                 for c in conductors_for_voltage(v):
                     for w in wire_options_for(v, c["family"]):
                         for ext in extensions:
@@ -663,7 +669,7 @@ def build_matrix():
     v = "LT"
     poles = allowed_pole_codes(v)
     for mount in DTR_MOUNTS:
-        for arr in arrangements_for("T-Off"):
+        for arr in arrangements_for(v, "DTR", "T-Off"):
             for c in size_agnostic_structure_variants(v):
                 for ext in extensions:
                     w = c["wire"]
@@ -847,7 +853,8 @@ def build_matrix():
             "LT T-Off: SP (existing or new) In-line/Sectional × ext, or from DTR. "
             "11kV T-Off: SP/DP/TP/4P (existing or new) or DTR. "
             "33kV T-Off: 1P/2P/3P/4P. "
-            "Tangent / Angular / T-Off have In-line vs Sectional; Dead-end has no arrangement split. "
+            "For 33/11kV, 2P/3P/4P and DTR are Sectional-only; 1P defaults In-line "
+            "but may also be Sectional; Dead-end has no arrangement split. "
             "33kV: no DTR on normal locations; no Rabbit 50; pole from Mat except 8m PCC. "
             "11kV: poles include Rail (and PCC / H-pole / tubular). "
             "11kV/33kV: dead-end is never single pole (1P); 33kV dead-end 2P/3P/4P; "

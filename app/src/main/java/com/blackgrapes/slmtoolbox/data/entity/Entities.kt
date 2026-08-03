@@ -118,3 +118,14 @@ data class SurveyWithDetails(
     @Relation(parentColumn = "id", entityColumn = "surveyId")
     val connections: List<SurveyConnectionEntity>
 )
+
+/** Lightweight My Maps row — no assets/connections loaded into RAM. */
+data class SavedWorkspaceSummaryRow(
+    @Embedded val survey: SurveyEntity,
+    val poleCount: Int,
+    val spanCount: Int,
+    val unverifiedCount: Int
+) {
+    val isLiveAtSite: Boolean
+        get() = poleCount > 0 && unverifiedCount == 0
+}

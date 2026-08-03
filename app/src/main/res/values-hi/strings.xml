@@ -201,7 +201,7 @@
     <string name="no">नहीं</string>
     <string name="bubble_voltage">Voltage चुनें</string>
     <string name="bubble_hint_new">Workspace पर नया नेटवर्क शुरू करें</string>
-    <string name="bubble_status">%1$s · Existing या Proposed?</string>
+    <string name="bubble_status">Existing या Proposed?</string>
     <string name="bubble_status_hint">इस सीरीज़ के अंत तक लॉक रहेगा</string>
     <string name="bubble_material">पोल प्रकार</string>
     <string name="bubble_structure">Structure</string>
@@ -218,9 +218,9 @@
     <string name="bubble_kit_suggest_hint">सही हो तो Use दबाएँ। केवल अलग पोल पर Change करें।</string>
     <string name="bubble_kit_use">Use: %1$s</string>
     <string name="bubble_kit_change">Kit विवरण बदलें</string>
-    <string name="bubble_pole_review_first">पहला पोल</string>
+    <string name="bubble_pole_review_first">पोल</string>
     <string name="bubble_pole_review_first_hint">सभी विकल्प एक स्क्रीन पर — Extension आवश्यक</string>
-    <string name="bubble_pole_review_next">यह पोल</string>
+    <string name="bubble_pole_review_next">पोल</string>
     <string name="bubble_pole_review_next_hint">सभी विकल्प यहाँ — chip बदलें। Extension आवश्यक।</string>
     <string name="bubble_pole_use_this">इसे उपयोग करें</string>
     <string name="bubble_field_pole_type">पोल प्रकार</string>

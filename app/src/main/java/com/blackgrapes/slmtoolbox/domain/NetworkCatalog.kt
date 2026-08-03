@@ -135,18 +135,15 @@ object NetworkCatalog {
     fun isPvcConductor(conductor: String?): Boolean =
         conductor?.equals("PVC", ignoreCase = true) == true
 
-    /** LT phase options after conductor: ABC is always 3-phase; PVC allows 1P or 3P; bare allows 1P/2P/3P. */
+    /** LT phase options after conductor: ABC / PVC / bare allow 1–3 phase (preset may pick 1P ABC). */
     fun ltPhasesForConductor(conductor: String?): List<PoleStructure> = when {
-        isAbcConductor(conductor) -> listOf(PoleStructure.P3)
+        isAbcConductor(conductor) -> listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
         isPvcConductor(conductor) -> listOf(PoleStructure.P1, PoleStructure.P3)
         else -> listOf(PoleStructure.P1, PoleStructure.P2, PoleStructure.P3)
     }
 
-    /** Forced phase/structure when conductor locks the choice (ABC → 3Ph only). */
-    fun ltForcedStructure(conductor: String?): PoleStructure? = when {
-        isAbcConductor(conductor) -> PoleStructure.P3
-        else -> null
-    }
+    /** Forced phase/structure when conductor locks the choice (none today — presets may set 1P ABC). */
+    fun ltForcedStructure(conductor: String?): PoleStructure? = null
 
     fun defaultMaterial(voltage: VoltageLevel): PoleMaterial = materialsFor(voltage).first()
 
@@ -165,7 +162,37 @@ object NetworkCatalog {
         }
     }
 
-    fun kitArrangements(): List<KitArrangement> = KitArrangement.entries.toList()
+    /**
+     * Arrangement rules:
+     * - Dead-end has no arrangement.
+     * - On 33/11kV, 2P/3P/4P and DTR are sectional structures.
+     * - HT 1P may be In-line (default) or Sectional.
+     * - LT keeps both choices because P1/P2/P3 represent phase, not pole count.
+     */
+    fun kitArrangementsFor(
+        voltage: VoltageLevel,
+        structure: PoleStructure?,
+        location: KitLocation?
+    ): List<KitArrangement> {
+        if (location == KitLocation.DEAD_END) return emptyList()
+        val isHt = voltage == VoltageLevel.KV_33 || voltage == VoltageLevel.KV_11
+        return if (isHt && structure != null && structure != PoleStructure.P1) {
+            listOf(KitArrangement.SECTIONAL)
+        } else {
+            KitArrangement.entries.toList()
+        }
+    }
+
+    fun defaultKitArrangement(
+        voltage: VoltageLevel,
+        structure: PoleStructure?,
+        location: KitLocation?
+    ): KitArrangement? {
+        if (location == KitLocation.DEAD_END) return null
+        return kitArrangementsFor(voltage, structure, location).let { options ->
+            KitArrangement.INLINE.takeIf { it in options } ?: options.firstOrNull()
+        }
+    }
 
     fun kitExtensions(): List<KitExtension> = KitExtension.entries.toList()
 
@@ -295,8 +322,10 @@ object NetworkCatalog {
 
     /**
      * Build locked series config for CONTINUE.
-     * Voltage / material / conductor / DTR start come from the series START pole.
-     * Status comes from the open tip (previous pole): once Proposed, all continues stay Proposed.
+     * Voltage / material / DTR start come from the series START pole.
+     * Status and conductor come from the open tip (previous pole). This lets a
+     * sectional 2P/3P/4P change conductor, after which following 1P poles keep
+     * that new section conductor.
      */
     fun seriesConfigFromSeries(
         assets: List<SurveyAsset>,
@@ -316,9 +345,13 @@ object NetworkCatalog {
                 }
                 .maxByOrNull { it.sequence }
             ?: start
-        return seriesConfigFrom(start)?.copy(
+        val base = seriesConfigFrom(start) ?: return null
+        return base.copy(
             startStructure = start.poleStructure,
-            status = tip.status
+            status = tip.status,
+            conductor = tip.conductor
+                ?.takeIf { it in conductorsFor(start.voltage) }
+                ?: base.conductor
         )
     }
 }

@@ -109,7 +109,7 @@
         year: "numeric",
       });
     } catch (_) {
-      return "—";
+      return "ΓÇö";
     }
   }
 
@@ -207,17 +207,17 @@
       case "invalid_code":
         return "Invalid license code";
       case "expired":
-        return "License expired — renew rental";
+        return "License expired ΓÇö renew rental";
       case "blocked":
-        return "License blocked — contact seller";
+        return "License blocked ΓÇö contact seller";
       case "device_limit":
         return "Device limit reached. Ask the seller to allow 2 devices (phone + desktop) for this code.";
       case "not_activated":
         return "Not activated on this computer";
       case "functions_missing":
-        return "License server not set up — deploy Edge Functions";
+        return "License server not set up ΓÇö deploy Edge Functions";
       case "network":
-        return "Network error — try again when online";
+        return "Network error ΓÇö try again when online";
       default:
         return "Could not activate (" + (code || "unknown") + ")";
     }
@@ -245,16 +245,16 @@
       var date = formatDate(prefs.expiresAtEpochMs);
       var days = daysRemaining(prefs);
       el.textContent = isTrial(prefs)
-        ? "Trial · until " + date + " (" + days + " days left)"
+        ? "Trial ┬╖ until " + date + " (" + days + " days left)"
         : "Active for " +
-          (prefs.customerName || "—") +
-          " · until " +
+          (prefs.customerName || "ΓÇö") +
+          " ┬╖ until " +
           date +
           " (" +
           days +
           " days left)";
     } else if (access === "grace") {
-      el.textContent = "Offline grace — connect once to renew check";
+      el.textContent = "Offline grace ΓÇö connect once to renew check";
     } else {
       el.textContent =
         "Locked: " + errorMessage(prefs.lastError || "not_activated");
@@ -324,7 +324,7 @@
     var errEl = $("licenseError");
     if (errEl) errEl.textContent = "";
     var status = $("licenseStatus");
-    if (status) status.textContent = "Signed out — enter a license code";
+    if (status) status.textContent = "Signed out ΓÇö enter a license code";
     return true;
   }
 
@@ -344,13 +344,13 @@
     var date = formatDate(prefs.expiresAtEpochMs);
     var days = daysRemaining(prefs);
     var code = prefs.licenseCode || (isTrial(prefs) ? "Trial" : "License");
-    badge.textContent = code + " · " + days + "d";
+    badge.textContent = code + " ┬╖ " + days + "d";
     badge.classList.remove("hidden");
     badge.title =
       (isTrial(prefs) ? "Trial" : "License") +
-      " · expires " +
+      " ┬╖ expires " +
       date +
-      " · tap for details / sign out";
+      " ┬╖ tap for details / sign out";
   }
 
   async function onActivateClick() {
@@ -491,6 +491,12 @@
     },
     canApprove: function () {
       return !!readPrefs().canApprove;
+    },
+    /** Edit / change kits in Library (suggestors & approvers; open when licensing off). */
+    canEditKits: function () {
+      if (!ENABLED) return true;
+      var p = readPrefs();
+      return !!(p.canSuggest || p.canApprove);
     },
     post: post,
     urlBase: function () {

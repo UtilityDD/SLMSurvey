@@ -174,24 +174,21 @@ body {
 }
 
 .license-badge {
-    position: fixed;
-    top: 10px;
-    right: 12px;
-    z-index: 900;
-    border: 1px solid var(--border-color);
-    background: #fff;
-    color: var(--primary-color);
+    position: static;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: #93c5fd;
     font-size: 11px;
     font-weight: 600;
-    padding: 6px 12px;
+    padding: 5px 10px;
     border-radius: 999px;
     cursor: pointer;
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     font-family: var(--font-body);
 }
 
 .license-badge:hover {
-    background: #eff6ff;
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .license-badge.hidden {
@@ -203,11 +200,11 @@ html {
     overflow: hidden;
 }
 
-/* App Layout Grid */
+/* App shell: fixed left rail (same as Job / Library) + map */
 .app-container {
-    --sidebar-width: 260px;
-    display: grid;
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    --sidebar-width: var(--slm-rail-width, 232px);
+    display: flex;
+    flex-direction: column;
     height: 100vh;
     height: 100dvh;
     width: 100%;
@@ -216,37 +213,265 @@ html {
     position: relative;
 }
 
+.app-menubar.hidden {
+    display: none !important;
+}
+
+.app-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
 .sidebar-backdrop {
+    display: none !important;
+}
+
+/* Map rail = shared slm-rail; keep always visible */
+.sidebar.slm-rail {
+    width: var(--slm-rail-width, 232px);
+    flex-shrink: 0;
+    height: 100%;
+    position: relative;
+    transform: none !important;
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    max-width: none;
+    box-shadow: none;
+    border-right: none;
+    padding: 12px 10px 10px;
+    gap: 0;
+    overflow: hidden;
+    z-index: 20;
+}
+
+.slm-map-card {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+.map-view-row {
+    display: flex;
+    gap: 6px;
+}
+
+.map-view-row .map-view-btn {
+    flex: 1;
+    text-align: center;
+    padding: 8px 6px;
+}
+
+.map-view-btn.active {
+    background: #1461c2;
+    border-color: #1461c2;
+    color: #fff;
+}
+
+.map-rail-doc {
+    font-size: 0.72rem;
+    color: #8b97a8;
+    padding: 2px 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidebar .drop-zone {
+    padding: 12px 10px;
+    margin-bottom: 8px;
+}
+
+.sidebar .drop-icon { display: none; }
+
+.sidebar .section-title { display: none; }
+
+.app-menubar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 46px;
+    padding: 0 12px;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 40;
+}
+
+.app-menubar-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.app-menubar-logo {
+    font-family: var(--font-heading);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    color: #60a5fa;
+}
+
+.app-menubar-product {
+    font-size: 12px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.app-menu {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+}
+
+.app-menu-item {
+    position: relative;
+}
+
+.app-menu-item > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 7px 11px;
+    border-radius: 8px;
+    font: 600 0.82rem var(--font-body);
+    color: #cbd5e1;
+    user-select: none;
+}
+
+.app-menu-item > summary::-webkit-details-marker {
     display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.45);
-    z-index: 19;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.25s ease;
 }
 
-.app-container.sidebar-open .sidebar-backdrop {
-    opacity: 1;
-    pointer-events: auto;
+.app-menu-item > summary:hover,
+.app-menu-item[open] > summary {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
 }
 
-/* Sidebar Styling */
+.app-menu-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 220px;
+    padding: 6px;
+    background: #fff;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.app-menu-action {
+    appearance: none;
+    border: none;
+    background: transparent;
+    text-align: left;
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 7px;
+    font: 500 0.84rem var(--font-body);
+    color: var(--text-primary);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.app-menu-action:hover {
+    background: #eff6ff;
+    color: var(--primary-hover);
+}
+
+.app-menu-action:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.app-menu-action.hidden {
+    display: none;
+}
+
+.app-menu-sep {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 4px 2px;
+}
+
+.app-menubar-center {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
+.app-menubar-doc {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 500;
+    color: #94a3b8;
+}
+
+.app-menubar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.app-menubar-iconbtn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-width: 34px;
+    height: 32px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    color: #e2e8f0;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.app-menubar-iconbtn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.app-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
+.sidebar-backdrop {
+    display: none !important;
+}
+
+/* Sidebar Styling — when paired with slm-rail, shell-rail.css owns chrome */
 .sidebar {
     background-color: var(--sidebar-bg);
     color: var(--text-on-dark);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
-    overflow-y: auto;
-    overflow-x: hidden;
-    box-shadow: var(--shadow-lg);
-    z-index: 20;
     min-width: 0;
-    transition: transform 0.25s ease;
+    z-index: 20;
+}
+
+.sidebar.slm-rail {
+    overflow: hidden;
 }
 
 .sidebar-header {
@@ -591,8 +816,9 @@ html {
 .main-content {
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    height: 100dvh;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
     min-width: 0;
     overflow: hidden;
 }
@@ -604,13 +830,20 @@ html {
     border-bottom: 1px solid var(--border-color);
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
     flex-wrap: wrap;
     gap: 10px 12px;
     padding: 8px 16px;
     box-shadow: var(--shadow-sm);
     z-index: 5;
     flex-shrink: 0;
+}
+
+.workspace-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
 }
 
 .btn-sidebar-toggle {
@@ -775,9 +1008,9 @@ html {
     border-radius: 20px;
 }
 
-/* ── Print / CAD sheet toolbar ── */
+/* ── Print / CAD sheet toolbar (shown only when Print Layout is on) ── */
 .print-toolbar {
-    display: flex;
+    display: none;
     align-items: flex-start;
     gap: 8px 10px;
     flex-wrap: wrap;
@@ -787,6 +1020,10 @@ html {
     border-bottom: 1px solid var(--border-color);
     z-index: 4;
     flex-shrink: 0;
+}
+
+.print-toolbar.is-print-active:not(.is-sld-hidden) {
+    display: flex;
 }
 
 .print-toolbar-group {
@@ -824,8 +1061,45 @@ html {
     flex: 0 0 auto;
 }
 
+.print-workflow-hint {
+    flex: 1 0 100%;
+    margin: 0;
+    padding: 2px 2px 0;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.01em;
+}
+
+.print-overlay.is-sheet-review .print-frame {
+    cursor: grab;
+}
+.print-overlay.is-sheet-review .print-frame.is-swiping {
+    cursor: grabbing;
+}
+
+.print-sheet-swipe-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 10px;
+    transform: translateX(-50%);
+    z-index: 6;
+    pointer-events: none;
+    background: rgba(15, 23, 42, 0.78);
+    color: #f8fafc;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+.print-overlay.is-sheet-review .print-sheet-swipe-hint {
+    opacity: 1;
+}
+
 .print-toolbar.is-sld-hidden {
-    display: none;
+    display: none !important;
 }
 
 .print-toolbar-divider {
@@ -1709,33 +1983,42 @@ html {
     .pf-footer-cell:nth-child(2) {
         border-right: none;
     }
+
+    .app-menubar-product {
+        display: none;
+    }
 }
 
 @media (max-width: 1024px) {
-    .app-container {
-        grid-template-columns: minmax(0, 1fr);
+    .app-body {
+        display: flex;
+    }
+
+    .app-menubar-iconbtn {
+        display: none !important;
     }
 
     .btn-sidebar-toggle {
-        display: inline-flex;
+        display: none !important;
     }
 
     .sidebar-backdrop {
-        display: block;
+        display: none !important;
     }
 
-    .sidebar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: min(300px, 88vw);
-        max-width: 300px;
-        transform: translateX(-105%);
+    .sidebar,
+    .sidebar.slm-rail {
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        bottom: auto !important;
+        width: var(--slm-rail-width, 232px) !important;
+        max-width: none !important;
+        transform: none !important;
     }
 
     .app-container.sidebar-open .sidebar {
-        transform: translateX(0);
+        transform: none !important;
     }
 
     .view-toggle-container {
@@ -2065,13 +2348,27 @@ html {
     height: 28px;
     border-radius: 50%;
     background-color: white;
-    border: 3px solid var(--primary-color);
-    color: var(--primary-color);
+    border: 3px solid var(--pole, var(--primary-color));
+    color: var(--pole, var(--primary-color));
     font-family: var(--font-heading);
     font-size: 9px;
     font-weight: bold;
     box-shadow: var(--shadow-md);
     transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.map-pole-icon.is-existing {
+    background-color: var(--pole, var(--primary-color));
+    color: #fff;
+    border-color: #fff;
+    border-width: 2.5px;
+}
+
+.map-pole-icon.is-proposed {
+    background-color: #fff;
+    color: var(--pole, var(--primary-color));
+    border-color: var(--pole, var(--primary-color));
 }
 
 .map-pole-icon:hover {

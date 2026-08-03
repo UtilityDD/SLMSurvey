@@ -1,8 +1,10 @@
 package com.blackgrapes.slmtoolbox.data.repo
 
 import com.blackgrapes.slmtoolbox.data.dao.SurveyDao
+import com.blackgrapes.slmtoolbox.data.entity.SavedWorkspaceSummaryRow
 import com.blackgrapes.slmtoolbox.data.entity.SeriesMetaEntity
 import com.blackgrapes.slmtoolbox.data.entity.SurveyEntity
+import com.blackgrapes.slmtoolbox.data.entity.SurveyWithDetails
 import com.blackgrapes.slmtoolbox.data.mapper.toDomain
 import com.blackgrapes.slmtoolbox.data.mapper.toEntity
 import com.blackgrapes.slmtoolbox.domain.FieldRules
@@ -16,6 +18,12 @@ class SurveyRepository(private val dao: SurveyDao) {
 
     fun observeSavedWorkspaces(): Flow<List<Survey>> =
         dao.observeSavedWorkspacesWithDetails().map { rows -> rows.map { it.toDomain() } }
+
+    fun observeSavedWorkspaceSummaries(): Flow<List<SavedWorkspaceSummaryRow>> =
+        dao.observeSavedWorkspaceSummaries()
+
+    suspend fun getSavedWorkspacesWithDetails(): List<Survey> =
+        dao.getSavedWorkspacesWithDetails().map { it.toDomain() }
 
     fun observeSurvey(surveyId: Long): Flow<Survey?> =
         dao.observeSurveyWithDetails(surveyId).map { it?.toDomain() }

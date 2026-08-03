@@ -19,6 +19,7 @@ import com.blackgrapes.slmtoolbox.domain.PlacementDraft
 import com.blackgrapes.slmtoolbox.domain.SeriesConfig
 import com.blackgrapes.slmtoolbox.domain.PresetPreferences
 import com.blackgrapes.slmtoolbox.domain.PostExecPreferences
+import com.blackgrapes.slmtoolbox.domain.SurveyPresetCatalog
 import com.blackgrapes.slmtoolbox.domain.model.DtrMount
 import com.blackgrapes.slmtoolbox.domain.model.KitArrangement
 import com.blackgrapes.slmtoolbox.domain.model.KitExtension
@@ -319,6 +320,14 @@ class SurveyBubbleWizard : DialogFragment() {
         render()
     }
 
+    /** Title-only by default; subtitle only when it carries unique info (place summary, delete, etc.). */
+    private fun setBubbleHeader(title: String, subtitle: String? = null) {
+        binding.bubbleTitle.text = title
+        val sub = subtitle?.takeIf { it.isNotBlank() }
+        binding.bubbleSubtitle.text = sub.orEmpty()
+        binding.bubbleSubtitle.isVisible = sub != null
+    }
+
     private fun render() {
         val step = stepStack.lastOrNull() ?: return
         clearProceedError()
@@ -329,8 +338,7 @@ class SurveyBubbleWizard : DialogFragment() {
         showFeederInputs(step == Step.FEEDER_INFO)
         when (step) {
             Step.LINE_ACTION_CHOICE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_near_line_title)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_near_line_hint)
+                setBubbleHeader(getString(R.string.bubble_near_line_title))
 
                 // Option 1: Insert joint into line — voltage locked; always ask Existing/Proposed
                 addChoice(getString(R.string.choice_split_line)) {
@@ -367,8 +375,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.VOLTAGE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_voltage)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_hint_new)
+                setBubbleHeader(getString(R.string.bubble_voltage))
                 VoltageLevel.entries.forEach { option ->
                     addChoice(option.label) {
                         voltage = option
@@ -385,15 +392,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     render()
                     return
                 }
-                binding.bubbleTitle.text = getString(R.string.bubble_status, voltage!!.label)
-                binding.bubbleSubtitle.text = when {
-                    splitConnectionId != null ->
-                        getString(R.string.bubble_status_insert_hint)
-                    voltageLocked || mode == Mode.TAPPING_BRANCH ->
-                        getString(R.string.bubble_status_branch_hint)
-                    else ->
-                        getString(R.string.bubble_status_hint)
-                }
+                setBubbleHeader(getString(R.string.bubble_status))
                 WorkStatus.entries.forEach { option ->
                     addChoice(option.label) {
                         status = option
@@ -407,8 +406,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.DTR_BRANCH_VOLTAGE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_dtr_branch_voltage)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_dtr_branch_voltage_hint)
+                setBubbleHeader(getString(R.string.bubble_dtr_branch_voltage))
                 listOf(VoltageLevel.KV_11, VoltageLevel.LT).forEach { option ->
                     addChoice(option.label, highlighted = voltage == option) {
                         voltage = option
@@ -438,20 +436,10 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
                 val v = voltage ?: lockedSeries!!.voltage
                 val isLtPhase = v == VoltageLevel.LT
-                binding.bubbleTitle.text = if (isLtPhase) {
-                    getString(R.string.bubble_lt_phase)
-                } else {
-                    getString(R.string.bubble_structure)
-                }
-                binding.bubbleSubtitle.text = if (isLtPhase) {
-                    getString(R.string.bubble_lt_phase_hint, conductor ?: "")
-                } else {
-                    buildString {
-                        append(voltage?.label ?: lockedSeries?.voltage?.label)
-                        append(" · ")
-                        append(status?.label ?: lockedSeries?.status?.label)
-                    }
-                }
+                setBubbleHeader(
+                    if (isLtPhase) getString(R.string.bubble_lt_phase)
+                    else getString(R.string.bubble_structure)
+                )
                 structureOptionsForCurrent().forEach { option ->
                     addChoice(structureLabel(option), highlighted = option == structure) {
                         structure = option
@@ -490,8 +478,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 binding.btnUsePoleReview.setOnClickListener { onUsePoleReview() }
             }
             Step.KIT_LOCATION -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_field_location)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_pick_hint)
+                setBubbleHeader(getString(R.string.bubble_field_location))
                 locationOptionsForCurrent().forEach { option ->
                     addChoice(option.label, highlighted = option == kitLocation) {
                         kitLocation = option
@@ -504,17 +491,17 @@ class SurveyBubbleWizard : DialogFragment() {
                             ) {
                                 structure = null
                             }
-                        } else if (kitArrangement == null) {
-                            kitArrangement = KitArrangement.INLINE
+                        } else {
+                            normalizeArrangementForReview()
                         }
                         returnToPoleReview()
                     }
                 }
             }
             Step.KIT_ARRANGEMENT -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_field_arrangement)
-                binding.bubbleSubtitle.text = kitLocation?.label ?: getString(R.string.bubble_pick_hint)
-                NetworkCatalog.kitArrangements().forEach { option ->
+                setBubbleHeader(getString(R.string.bubble_field_arrangement))
+                val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+                NetworkCatalog.kitArrangementsFor(v, structure, kitLocation).forEach { option ->
                     addChoice(option.label, highlighted = option == kitArrangement) {
                         kitArrangement = option
                         returnToPoleReview()
@@ -522,8 +509,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.KIT_EXTENSION -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_field_extension)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_kit_extension_hint)
+                setBubbleHeader(getString(R.string.bubble_field_extension))
                 val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
                 NetworkCatalog.kitExtensionsFor(v, material).forEach { option ->
                     addChoice(option.label, highlighted = option == kitExtension) {
@@ -534,8 +520,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.GUARDING -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_field_guarding)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_guarding_hint)
+                setBubbleHeader(getString(R.string.bubble_field_guarding))
                 addChoice(getString(R.string.yes), highlighted = guarding == true) {
                     guarding = true
                     if (stepStack.contains(Step.POLE_REVIEW)) {
@@ -556,8 +541,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.DTR_MOUNT -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_dtr_mount)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_dtr_mount_hint)
+                setBubbleHeader(getString(R.string.bubble_dtr_mount))
                 NetworkCatalog.dtrMounts().forEach { option ->
                     addChoice(option.label) {
                         dtrMount = option
@@ -576,8 +560,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.DTR_CAPACITY -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_dtr_capacity)
-                binding.bubbleSubtitle.text = dtrMount?.label ?: "DTR"
+                setBubbleHeader(getString(R.string.bubble_dtr_capacity))
                 val caps = if (showAllDtrCapacities) {
                     NetworkCatalog.dtrCapacitiesCommon() + NetworkCatalog.dtrCapacitiesMore()
                 } else {
@@ -608,8 +591,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.PLACE_ROLE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_place)
-                binding.bubbleSubtitle.text = summaryLine()
+                setBubbleHeader(getString(R.string.bubble_place), summaryLine())
                 val deadEnd = kitLocation == KitLocation.DEAD_END
                 val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
                 fun tryPlaceEnd() {
@@ -644,8 +626,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.TAPPING_YES_NO -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_tapping)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_tapping_hint)
+                setBubbleHeader(getString(R.string.bubble_tapping))
                 addChoice(getString(R.string.yes)) {
                     wantTapping = true
                     push(Step.SOURCE_POLE)
@@ -659,8 +640,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.SOURCE_POLE -> {
-                binding.bubbleTitle.text = getString(R.string.bubble_source_pole)
-                binding.bubbleSubtitle.text = getString(R.string.bubble_source_hint)
+                setBubbleHeader(getString(R.string.bubble_source_pole))
                 candidatePoles.forEach { pole ->
                     addChoice("#${pole.sequence} ${pole.voltage.label}") {
                         beginBranchFrom(pole)
@@ -669,7 +649,6 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.EDIT_MENU -> {
-                binding.bubbleTitle.text = getString(R.string.edit_asset)
                 val kitBit = if (editing!!.status == WorkStatus.PROPOSED) {
                     val ready = if (editing!!.isEstimateReady()) {
                         getString(R.string.bubble_kit_ready)
@@ -686,8 +665,10 @@ class SurveyBubbleWizard : DialogFragment() {
                 } else {
                     ""
                 }
-                binding.bubbleSubtitle.text =
+                setBubbleHeader(
+                    getString(R.string.edit_asset),
                     "Pole #${editing!!.sequence}  ·  ${editing!!.voltage.label}  ·  ${editing!!.status.label}$kitBit"
+                )
                 addChoice(getString(R.string.bubble_change_structure)) {
                     editingKitOnly = false
                     push(Step.STRUCTURE)
@@ -711,8 +692,10 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.CONFIRM_DELETE -> {
-                binding.bubbleTitle.text = "⚠️ Delete Pole #${editing!!.sequence}?"
-                binding.bubbleSubtitle.text = "This will remove the pole and all its connections. This cannot be undone."
+                setBubbleHeader(
+                    "Delete Pole #${editing!!.sequence}?",
+                    "Removes the pole and its connections. Cannot be undone."
+                )
                 addChoice("Yes, Delete Permanently") {
                     onDelete?.invoke(editing!!)
                     dismiss()
@@ -722,22 +705,15 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.PRESET_SUMMARY -> {
-                binding.bubbleTitle.text = getString(R.string.use_preset_title)
-                binding.bubbleSubtitle.text = buildString {
-                    if (PresetPreferences.isDtrLt(requireContext())) {
-                        append(getString(R.string.preset_pattern_dtr_lt_hint))
-                        append("\n")
-                    }
-                    append(voltage?.label ?: "").append(" · ")
-                    append(status?.label ?: "").append(" · ")
-                    append(material?.label ?: "").append(" · ")
-                    append(structure?.label ?: "").append(" · ")
-                    append(conductor ?: "")
-                    if (voltage != VoltageLevel.LT) {
-                        append("\n")
-                        append("Feeder: ").append(feederName ?: "—").append(" · ")
-                        append("SS: ").append(sourceSubstation ?: "—")
-                    }
+                val def = PresetPreferences.get(requireContext()).def
+                setBubbleHeader(
+                    getString(R.string.use_preset_title),
+                    def?.plainName()
+                )
+                // Colour-coded name in the choice area header via subtitle replacement below.
+                if (def != null) {
+                    binding.bubbleSubtitle.text = SurveyPresetCatalog.colouredName(requireContext(), def)
+                    binding.bubbleSubtitle.isVisible = true
                 }
                 addChoice(getString(R.string.place_continue)) {
                     pendingPlaceRole = PoleRole.CONTINUE
@@ -771,8 +747,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_START_DTR -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_start_dtr)
-                binding.bubbleSubtitle.text = getString(R.string.lt_conv_start_dtr_hint)
+                setBubbleHeader(getString(R.string.lt_conv_start_dtr))
                 addChoice(getString(R.string.yes)) {
                     voltage = VoltageLevel.KV_11
                     status = WorkStatus.EXISTING
@@ -791,8 +766,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_DTR_CAPACITY -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_capacity)
-                binding.bubbleSubtitle.text = "Existing DTR"
+                setBubbleHeader(getString(R.string.lt_conv_dtr_capacity))
                 listOf("25", "63", "100").forEach { kva ->
                     addChoice("${kva}kVA") {
                         dtCapacityKva = kva
@@ -802,8 +776,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_DTR_CODE -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_code)
-                binding.bubbleSubtitle.text = getString(R.string.lt_conv_dtr_code_hint)
+                setBubbleHeader(getString(R.string.lt_conv_dtr_code))
                 showFeederInputs(true)
                 binding.bubbleChoices.isVisible = true
                 binding.tilFeederName.hint = getString(R.string.lt_conv_dtr_code)
@@ -828,8 +801,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_DTR_POLE -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_dtr_pole)
-                binding.bubbleSubtitle.text = "DTR ${dtCapacityKva ?: ""}kVA"
+                setBubbleHeader(getString(R.string.lt_conv_dtr_pole))
                 listOf(
                     PoleMaterial.PCC_8M,
                     PoleMaterial.PCC_9M,
@@ -844,8 +816,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_FIRST_SPAN -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_first_span)
-                binding.bubbleSubtitle.text = getString(R.string.lt_conv_first_span_hint)
+                setBubbleHeader(getString(R.string.lt_conv_first_span))
                 addChoice(getString(R.string.lt_conv_span_pvc)) {
                     conductor = "PVC"
                     material = PoleMaterial.PCC_8M
@@ -860,8 +831,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 }
             }
             Step.LT_CONV_POLE_KIND -> {
-                binding.bubbleTitle.text = getString(R.string.lt_conv_pole_kind)
-                binding.bubbleSubtitle.text = getString(R.string.lt_conv_pole_kind_hint)
+                setBubbleHeader(getString(R.string.lt_conv_pole_kind))
                 addChoice(getString(R.string.lt_conv_pole_old)) {
                     structure = PoleStructure.P1
                     material = material ?: PoleMaterial.PCC_8M
@@ -951,11 +921,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 else -> KitLocation.TANGENT
             }
         }
-        if (kitLocation == KitLocation.DEAD_END) {
-            kitArrangement = null
-        } else if (kitArrangement == null) {
-            kitArrangement = tipKitArrangement ?: KitArrangement.INLINE
-        }
+        normalizeArrangementForReview(preferred = tipKitArrangement)
         if (kitExtension == null) {
             kitExtension = tipKitExtension ?: KitExtension.NO_EXT
         }
@@ -966,12 +932,22 @@ class SurveyBubbleWizard : DialogFragment() {
         }
     }
 
-    private fun normalizeArrangementForReview() {
-        if (kitLocation == KitLocation.DEAD_END) {
-            kitArrangement = null
-        } else if (kitArrangement == null) {
-            kitArrangement = KitArrangement.INLINE
+    private fun normalizeArrangementForReview(preferred: KitArrangement? = kitArrangement) {
+        val v = voltage ?: lockedSeries?.voltage ?: VoltageLevel.KV_11
+        val options = NetworkCatalog.kitArrangementsFor(v, structure, kitLocation)
+        kitArrangement = when {
+            options.isEmpty() -> null
+            preferred in options -> preferred
+            else -> NetworkCatalog.defaultKitArrangement(v, structure, kitLocation)
         }
+    }
+
+    /** A continuing HT single pole cannot change the conductor mid-span. */
+    private fun isHtSinglePoleContinuation(): Boolean {
+        val v = voltage ?: lockedSeries?.voltage ?: return false
+        return mode == Mode.CONTINUE_SERIES &&
+            v in listOf(VoltageLevel.KV_33, VoltageLevel.KV_11) &&
+            structure == PoleStructure.P1
     }
 
     /** True for brand-new network start (titles / feeder); options are same as any pole. */
@@ -1065,16 +1041,14 @@ class SurveyBubbleWizard : DialogFragment() {
     private fun bindPoleReviewHeader() {
         val first = isNetworkStart()
         val isExisting = (status ?: lockedSeries?.status) == WorkStatus.EXISTING
-        binding.bubbleTitle.text = when {
-            isExisting && first -> getString(R.string.bubble_existing_review_first)
-            isExisting -> getString(R.string.bubble_existing_review_next)
-            first -> getString(R.string.bubble_pole_review_first)
-            else -> getString(R.string.bubble_pole_review_next)
-        }
-        binding.bubbleSubtitle.text = when {
-            isExisting -> getString(R.string.bubble_existing_review_hint)
-            else -> getString(R.string.bubble_pole_review_compact_hint)
-        }
+        setBubbleHeader(
+            when {
+                isExisting && first -> getString(R.string.bubble_existing_review_first)
+                isExisting -> getString(R.string.bubble_existing_review_next)
+                first -> getString(R.string.bubble_pole_review_first)
+                else -> getString(R.string.bubble_pole_review_next)
+            }
+        )
     }
 
     private fun bindPoleReviewFeeder() {
@@ -1151,8 +1125,6 @@ class SurveyBubbleWizard : DialogFragment() {
         val arrEnabled = kitLocation != null && kitLocation != KitLocation.DEAD_END
         val guardEnabled = NetworkCatalog.allowsGuardingChoice(material, kitExtension)
 
-        addReviewSectionHeader(getString(R.string.bubble_section_pole))
-
         addCompactOptionRow(
             getString(R.string.bubble_field_material_short),
             NetworkCatalog.materialsFor(v).map { CompactOpt(it.name, it.label) },
@@ -1176,6 +1148,7 @@ class SurveyBubbleWizard : DialogFragment() {
                 CompactOpt(opt, label)
             },
             selectedKey = conductor,
+            rowEnabled = !isHtSinglePoleContinuation(),
             rowTag = "conductor"
         ) { key ->
             conductor = key
@@ -1195,18 +1168,19 @@ class SurveyBubbleWizard : DialogFragment() {
             rowTag = "type"
         ) { key ->
             structure = structureOptionsForCurrent().firstOrNull { it.name == key }
+            if (isHtSinglePoleContinuation()) {
+                conductor = lockedSeries?.conductor
+            }
             // Picking HT 1P drops Dead-end (not allowed).
             if (structure != null &&
                 kitLocation == KitLocation.DEAD_END &&
                 !NetworkCatalog.allowsDeadEnd(v, structure)
             ) {
                 kitLocation = KitLocation.TANGENT
-                if (kitArrangement == null) kitArrangement = KitArrangement.INLINE
             }
+            normalizeArrangementForReview()
             refreshPoleReview()
         }
-
-        addReviewSectionHeader(getString(R.string.bubble_section_kit))
 
         addCompactOptionRow(
             getString(R.string.bubble_field_location_short),
@@ -1223,22 +1197,24 @@ class SurveyBubbleWizard : DialogFragment() {
                 if (structure != null && !NetworkCatalog.allowsDeadEnd(v, structure)) {
                     structure = null
                 }
-            } else if (kitArrangement == null) {
-                kitArrangement = KitArrangement.INLINE
+            } else {
+                normalizeArrangementForReview()
             }
             refreshPoleReview()
         }
 
+        val arrangementOptions =
+            NetworkCatalog.kitArrangementsFor(v, structure, kitLocation)
         addCompactOptionRow(
             getString(R.string.bubble_field_arrangement_short),
-            NetworkCatalog.kitArrangements().map {
+            arrangementOptions.map {
                 CompactOpt(it.name, shortArrangement(it), enabled = arrEnabled)
             },
             selectedKey = kitArrangement?.name,
             rowEnabled = arrEnabled,
             rowTag = "arrangement"
         ) { key ->
-            kitArrangement = NetworkCatalog.kitArrangements().firstOrNull { it.name == key }
+            kitArrangement = arrangementOptions.firstOrNull { it.name == key }
             refreshPoleReview()
         }
 
@@ -1350,21 +1326,6 @@ class SurveyBubbleWizard : DialogFragment() {
                 render()
             }
         }
-    }
-
-    private fun addReviewSectionHeader(title: String) {
-        val ctx = requireContext()
-        val density = resources.displayMetrics.density
-        binding.poleReviewRows.addView(
-            android.widget.TextView(ctx).apply {
-                text = title.uppercase(java.util.Locale.getDefault())
-                setTextColor(ctx.getColor(R.color.primary))
-                textSize = 12f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                letterSpacing = 0.06f
-                setPadding(0, (10 * density).toInt(), 0, (4 * density).toInt())
-            }
-        )
     }
 
     /** Outdoor-friendly block: label above, large chips below. */
@@ -1643,13 +1604,17 @@ class SurveyBubbleWizard : DialogFragment() {
         structure = preset.structure.takeIf { it in structures } ?: NetworkCatalog.defaultStructure(v)
         conductor = preset.conductor.takeIf { it in conductors } ?: conductors.first()
         if (v == VoltageLevel.LT) {
-            NetworkCatalog.ltForcedStructure(conductor)?.let { structure = it }
-                ?: run {
-                    val phases = NetworkCatalog.ltPhasesForConductor(conductor)
-                    if (structure !in phases) {
-                        structure = phases.firstOrNull() ?: PoleStructure.P1
-                    }
-                }
+            val phases = NetworkCatalog.ltPhasesForConductor(conductor)
+            if (structure !in phases) {
+                structure = phases.firstOrNull() ?: PoleStructure.P1
+            }
+        }
+        preset.def?.let { def ->
+            if (def.voltage == v) {
+                kitLocation = def.kitLocation
+                kitArrangement = def.kitArrangement
+                kitExtension = def.kitExtension
+            }
         }
         if (feederName.isNullOrBlank()) feederName = preset.feederName.takeIf { it.isNotBlank() }
         if (sourceSubstation.isNullOrBlank()) {
@@ -1661,14 +1626,24 @@ class SurveyBubbleWizard : DialogFragment() {
         val v = voltage ?: lockedSeries?.voltage ?: return
         val s = status ?: lockedSeries?.status ?: return
         val m = material ?: lockedSeries?.material ?: NetworkCatalog.defaultMaterial(v)
-        val c = conductor ?: lockedSeries?.conductor ?: NetworkCatalog.conductorsFor(v).first()
+        val selectedConductor =
+            conductor ?: lockedSeries?.conductor ?: NetworkCatalog.conductorsFor(v).first()
         val st = when {
             structure == PoleStructure.P1N -> PoleStructure.P1N
             v == VoltageLevel.LT ->
-                NetworkCatalog.ltForcedStructure(c)
+                NetworkCatalog.ltForcedStructure(selectedConductor)
                     ?: structure
                     ?: NetworkCatalog.defaultStructure(v)
             else -> structure ?: NetworkCatalog.defaultStructure(v)
+        }
+        val c = if (
+            mode == Mode.CONTINUE_SERIES &&
+            v in listOf(VoltageLevel.KV_33, VoltageLevel.KV_11) &&
+            st == PoleStructure.P1
+        ) {
+            lockedSeries?.conductor ?: selectedConductor
+        } else {
+            selectedConductor
         }
         // Ending a run: Dead-end unless user already chose T-Off / Dead-end.
         var loc = kitLocation
@@ -1685,9 +1660,13 @@ class SurveyBubbleWizard : DialogFragment() {
         if (loc == KitLocation.DEAD_END && !NetworkCatalog.allowsDeadEnd(v, st)) {
             // Safety: never persist illegal HT Dead-end 1P.
             loc = KitLocation.TANGENT
-            arr = arr ?: KitArrangement.INLINE
         }
-        if (loc == KitLocation.DEAD_END) arr = null
+        val allowedArrangements = NetworkCatalog.kitArrangementsFor(v, st, loc)
+        arr = when {
+            allowedArrangements.isEmpty() -> null
+            arr in allowedArrangements -> arr
+            else -> NetworkCatalog.defaultKitArrangement(v, st, loc)
+        }
         val ext = kitExtension ?: KitExtension.NO_EXT
         val mount = if (st == PoleStructure.DTR) dtrMount else null
         val wire = if (s == WorkStatus.PROPOSED) {
@@ -1800,14 +1779,18 @@ class SurveyBubbleWizard : DialogFragment() {
         conductor = when {
             preset.isDtrLt() -> {
                 val opts = NetworkCatalog.conductorsFor(VoltageLevel.KV_11)
-                preset.conductor.takeIf { it in opts } ?: opts.first()
+                // DTR start uses HT conductor; LT ABC is for continue poles.
+                opts.firstOrNull() ?: "50"
             }
             else -> preset.conductor
         }
         feederName = preset.feederName.takeIf { it.isNotBlank() }
         sourceSubstation = preset.sourceSubstation.takeIf { it.isNotBlank() }
-        if (voltage == VoltageLevel.LT && NetworkCatalog.isAbcConductor(conductor)) {
-            structure = PoleStructure.P3
+        val def = preset.def
+        if (def != null && !preset.isDtrLt()) {
+            kitLocation = def.kitLocation
+            kitArrangement = def.kitArrangement
+            kitExtension = def.kitExtension
         }
     }
 

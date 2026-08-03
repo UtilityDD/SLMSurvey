@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLM — Job</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="../shell-rail.css">
+    <link rel="stylesheet" href="./workspace.css">
+    <link rel="stylesheet" href="../ui-dialog.css">
+</head>
+<body>
+    <div class="ws-shell">
+        <aside class="slm-rail" aria-label="Navigation and tools">
+            <div class="slm-rail-brand">
+                <span class="slm-rail-logo">SLM</span>
+                <span class="slm-rail-product">Desktop</span>
+            </div>
+
+            <nav class="slm-tabs" aria-label="Desks">
+                <a class="slm-tab is-active" href="./" title="Job — map, poles, estimate">Job</a>
+                <a class="slm-tab" href="../structure/" title="Structure library">Library</a>
+            </nav>
+
+            <div class="slm-rail-scroll">
+                <div>
+                    <p class="slm-rail-block-label">Pages</p>
+                    <nav class="slm-rail-list" id="wsNav" aria-label="Job pages"></nav>
+                </div>
+
+                <div>
+                    <p class="slm-rail-block-label">Tools</p>
+                    <div class="slm-rail-tools" id="wsTools"></div>
+                </div>
+            </div>
+
+            <div class="slm-rail-foot">
+                <button type="button" class="slm-rail-jobname" id="wsFileName" title="Rename job">Untitled job</button>
+                <div class="slm-rail-row">
+                    <button type="button" class="slm-rail-tool" id="btnWsOpen">Open</button>
+                    <button type="button" class="slm-rail-tool slm-rail-tool-primary" id="btnWsSave">Save</button>
+                </div>
+                <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnWsNew">New job</button>
+            </div>
+        </aside>
+
+        <main class="ws-main">
+            <div class="ws-content" id="wsContent"></div>
+        </main>
+    </div>
+
+    <!-- kept for JS that still sets title/hint (optional strip above content) -->
+    <h1 id="wsTitle" class="hidden" hidden>Survey</h1>
+    <p id="wsHint" class="hidden" hidden></p>
+    <div id="wsActions" class="hidden" hidden></div>
+
+    <aside class="ws-drawer hidden" id="wsDrawer" aria-label="Details">
+        <header class="ws-drawer-head">
+            <div>
+                <h2 id="wsDrawerTitle">Details</h2>
+                <p id="wsDrawerSub"></p>
+            </div>
+            <button type="button" class="ws-icon-btn" id="btnWsDrawerClose" aria-label="Close">✕</button>
+        </header>
+        <div class="ws-drawer-body" id="wsDrawerBody"></div>
+    </aside>
+    <div class="ws-scrim hidden" id="wsScrim"></div>
+    <div class="ws-toast hidden" id="wsToast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="../ui-dialog.js"></script>
+    <script src="../license-config.js"></script>
+    <script src="../license.js"></script>
+    <script src="../seal.js"></script>
+    <script src="../estimate/estimate-match.js"></script>
+    <script src="../estimate/schedule-books.js"></script>
+    <script src="./ws-store.js"></script>
+    <script src="./ws-catalog.js"></script>
+    <script src="./ws-app.js"></script>
+    <script src="./ws-map.js"></script>
+    <script src="./network-catalog.js"></script>
+    <script src="./views/survey.js"></script>
+    <script src="./views/assemblies.js"></script>
+    <script src="./views/rates.js"></script>
+    <script src="./views/contract.js"></script>
+    <script src="./views/presets.js"></script>
+    <script src="./views/estimate.js"></script>
+    <script src="./ws-boot.js"></script>
+</body>
+</html>

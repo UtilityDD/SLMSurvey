@@ -508,22 +508,18 @@
   }
 
   /**
-   * @param {object} survey workspace JSON { assets, connections, title, ... }
-   * @param {object[]} kits merged kits from Assembly Builder (state.kitsById values)
-   * @param {object} [ratebook]
-   * @param {object[]} [extras] abstract % rows
+   * Match survey poles/spans to kits without rolling up Mat/Lab.
+   * Shared by Actual BOQ and Contract Lens bridge.
    */
-  function buildReport(survey, kits, ratebook, extras) {
+  function collectKitHits(survey, kits) {
     const assets = survey?.assets || [];
     const connections = survey?.connections || [];
-    const itemIndex = buildItemIndex(ratebook || {});
     const structures = kits.filter((k) => k.family === "structure" && k.enabled !== false);
     const conductors = kits.filter((k) => k.family === "conductor" && k.enabled !== false);
 
     const proposed = assets.filter((a) => a.status === "Proposed");
     const gaps = [];
     const structureHits = [];
-    const acc = { material: new Map(), labour: new Map() };
 
     for (const pole of [...proposed].sort((a, b) => (a.sequence || 0) - (b.sequence || 0))) {
       if (!isEstimateReady(pole)) {
@@ -566,9 +562,6 @@
       const prev = structureQty.get(kit.id);
       structureQty.set(kit.id, { kit, n: (prev?.n || 0) + 1 });
     }
-    for (const { kit, n } of structureQty.values()) {
-      accumulateKitLines(acc, kit, n, itemIndex);
-    }
 
     const byId = new Map(assets.map((a) => [a.id, a]));
     const spanGroups = new Map();
@@ -583,6 +576,7 @@
     }
 
     let matchedKm = 0;
+    const conductorHits = [];
     for (const [key, conns] of spanGroups) {
       const sample = byId.get(conns[0].toAssetId);
       if (!sample) continue;
@@ -605,7 +599,7 @@
       const hit = findConductorKit(sample, conductors, false);
       if (hit) {
         matchedKm += km;
-        accumulateKitLines(acc, hit, km, itemIndex);
+        conductorHits.push({ kit: hit, km });
         continue;
       }
       gaps.push({
@@ -623,12 +617,6 @@
       });
     }
 
-    const materialSchedule = scheduleFromMap(acc.material);
-    const labourSchedule = scheduleFromMap(acc.labour);
-    const materialTotal = sumSchedule(materialSchedule);
-    const labourTotal = sumSchedule(labourSchedule);
-    const abstract = computeAbstract(materialTotal, labourTotal, extras);
-
     return {
       title: survey.title || survey.surveyTitle || "Survey",
       surveyId: survey.surveyId || survey.id || "",
@@ -636,13 +624,215 @@
       readyPoles: proposed.filter(isEstimateReady).length,
       matchedStructures: structureHits.length,
       matchedConductorKm: matchedKm,
+      structureQty,
+      conductorHits,
+      gaps,
+    };
+  }
+
+  function accumulateMappedLines(acc, mappings, factor, itemIndex, bridgeGaps, kitLabel) {
+    const f = Number(factor) || 0;
+    if (f <= 0) return;
+    const lines = Array.isArray(mappings) ? mappings : [];
+    if (!lines.length) {
+      bridgeGaps.push({
+        kind: "gap",
+        title: `Unmapped for contract: ${kitLabel}`,
+        qty: f,
+        unit: "units",
+        detail: "Add this field kit to the Bridge pack",
+        amount: null,
+      });
+      return;
+    }
+    for (const line of lines) {
+      const code = String(line.code || "").trim();
+      if (!code) continue;
+      const q = (Number(line.qtyPerUnit) > 0 ? Number(line.qtyPerUnit) : 1) * f;
+      const item = itemIndex[code];
+      const labour =
+        line.type === "labour" ||
+        item?.type === "labour" ||
+        /^L/i.test(code);
+      const bucket = labour ? acc.labour : acc.material;
+      const prev = bucket.get(code) || {
+        code,
+        description: item?.description || code,
+        unit: item?.unit || "NOS",
+        rate: item?.rate != null ? Number(item.rate) : 0,
+        qty: 0,
+      };
+      prev.qty += q;
+      if (item?.description) prev.description = item.description;
+      if (item?.unit) prev.unit = item.unit;
+      if (item?.rate != null) prev.rate = Number(item.rate);
+      bucket.set(code, prev);
+    }
+  }
+
+  /**
+   * Hit set built from explicit per-assembly counts instead of a survey.
+   * Lets a workspace price concept quantities (pre-survey) or desktop overrides.
+   * @param {object[]} kits
+   * @param {object} counts { [kitId]: number } — poles for per_structure, km for per_km
+   */
+  function hitsFromCounts(kits, counts, meta) {
+    const structureQty = new Map();
+    const conductorHits = [];
+    let matchedKm = 0;
+    for (const kit of kits || []) {
+      const n = Number(counts?.[kit.id]) || 0;
+      if (n <= 0) continue;
+      if (kit.qtyBasis === "per_km" || kit.family === "conductor" || kit.family === "addon") {
+        conductorHits.push({ kit, km: n });
+        matchedKm += n;
+      } else {
+        structureQty.set(kit.id, { kit, n });
+      }
+    }
+    let structures = 0;
+    for (const { n } of structureQty.values()) structures += n;
+    return {
+      title: meta?.title || "Concept quantities",
+      surveyId: meta?.surveyId || "",
+      proposedPoles: meta?.proposedPoles ?? structures,
+      readyPoles: meta?.readyPoles ?? structures,
+      matchedStructures: structures,
+      matchedConductorKm: matchedKm,
+      structureQty,
+      conductorHits,
+      gaps: meta?.gaps || [],
+    };
+  }
+
+  /**
+   * Contract Lens BOQ: same field kit hits, rolled up via bridge → schedule book.
+   * @param {object} scheduleBook local uploaded schedule
+   * @param {object} bridge { mappings: { kitId: [{code,type,qtyPerUnit}] } }
+   */
+  function buildContractReport(survey, kits, scheduleBook, bridge, extras) {
+    return buildContractReportFromHits(
+      collectKitHits(survey, kits),
+      scheduleBook,
+      bridge,
+      extras
+    );
+  }
+
+  function buildContractReportFromHits(hits, scheduleBook, bridge, extras) {
+    const itemIndex = buildItemIndex({
+      materials: (scheduleBook?.items || []).filter((i) => i.type !== "labour"),
+      labour: (scheduleBook?.items || []).filter((i) => i.type === "labour"),
+    });
+    // Also index any item regardless of type tag
+    for (const it of scheduleBook?.items || []) {
+      if (!it.code || itemIndex[it.code]) continue;
+      itemIndex[it.code] = {
+        code: it.code,
+        description: it.description || it.code,
+        unit: it.unit || "NOS",
+        rate: Number(it.rate) || 0,
+        type: it.type === "labour" ? "labour" : "material",
+      };
+    }
+
+    const mappings = (bridge && bridge.mappings) || {};
+    const acc = { material: new Map(), labour: new Map() };
+    const bridgeGaps = [];
+
+    for (const { kit, n } of hits.structureQty.values()) {
+      accumulateMappedLines(
+        acc,
+        mappings[kit.id],
+        n,
+        itemIndex,
+        bridgeGaps,
+        kit.code || kit.title || kit.id
+      );
+    }
+    for (const { kit, km } of hits.conductorHits) {
+      accumulateMappedLines(
+        acc,
+        mappings[kit.id],
+        km,
+        itemIndex,
+        bridgeGaps,
+        kit.code || kit.title || kit.id
+      );
+    }
+
+    const materialSchedule = scheduleFromMap(acc.material);
+    const labourSchedule = scheduleFromMap(acc.labour);
+    const materialTotal = sumSchedule(materialSchedule);
+    const labourTotal = sumSchedule(labourSchedule);
+    const abstract = computeAbstract(materialTotal, labourTotal, extras);
+    const gaps = [...hits.gaps, ...bridgeGaps];
+
+    return {
+      title: hits.title,
+      surveyId: hits.surveyId,
+      proposedPoles: hits.proposedPoles,
+      readyPoles: hits.readyPoles,
+      matchedStructures: hits.matchedStructures,
+      matchedConductorKm: hits.matchedConductorKm,
       materialSchedule,
       labourSchedule,
       materialTotal,
       labourTotal,
       abstract,
       gaps,
+      bridgeGaps,
       totalAmount: abstract.grandTotal,
+      lens: "contract",
+      scheduleBookName: scheduleBook?.name || "",
+      bridgeName: bridge?.name || "",
+      money,
+      moneyPlain,
+    };
+  }
+
+  /**
+   * @param {object} survey workspace JSON { assets, connections, title, ... }
+   * @param {object[]} kits merged kits from Assembly Builder (state.kitsById values)
+   * @param {object} [ratebook]
+   * @param {object[]} [extras] abstract % rows
+   */
+  function buildReport(survey, kits, ratebook, extras) {
+    return buildReportFromHits(collectKitHits(survey, kits), ratebook, extras);
+  }
+
+  function buildReportFromHits(hits, ratebook, extras) {
+    const itemIndex = buildItemIndex(ratebook || {});
+    const acc = { material: new Map(), labour: new Map() };
+
+    for (const { kit, n } of hits.structureQty.values()) {
+      accumulateKitLines(acc, kit, n, itemIndex);
+    }
+    for (const { kit, km } of hits.conductorHits) {
+      accumulateKitLines(acc, kit, km, itemIndex);
+    }
+
+    const materialSchedule = scheduleFromMap(acc.material);
+    const labourSchedule = scheduleFromMap(acc.labour);
+    const materialTotal = sumSchedule(materialSchedule);
+    const labourTotal = sumSchedule(labourSchedule);
+    const abstract = computeAbstract(materialTotal, labourTotal, extras);
+
+    return {
+      title: hits.title,
+      surveyId: hits.surveyId,
+      proposedPoles: hits.proposedPoles,
+      readyPoles: hits.readyPoles,
+      matchedStructures: hits.matchedStructures,
+      matchedConductorKm: hits.matchedConductorKm,
+      materialSchedule,
+      labourSchedule,
+      materialTotal,
+      labourTotal,
+      abstract,
+      gaps: hits.gaps,
+      totalAmount: abstract.grandTotal,
+      lens: "actual",
       money,
       moneyPlain,
     };
@@ -650,7 +840,12 @@
 
   function reportAsText(report) {
     const lines = [];
-    lines.push("SLM Estimate (West Bengal style)");
+    const lensLabel =
+      report.lens === "contract"
+        ? `Contract Lens${report.scheduleBookName ? " · " + report.scheduleBookName : ""}`
+        : "Actual requirements";
+    lines.push(`SLM Estimate (West Bengal style) — ${lensLabel}`);
+    if (report.bridgeName) lines.push(`Bridge: ${report.bridgeName}`);
     lines.push(`Survey: ${report.title}`);
     lines.push(
       `Proposed poles: ${report.proposedPoles} · ready: ${report.readyPoles} · matched: ${report.matchedStructures}`
@@ -714,6 +909,11 @@
 
   global.SlmEstimateMatch = {
     buildReport,
+    buildReportFromHits,
+    buildContractReport,
+    buildContractReportFromHits,
+    hitsFromCounts,
+    collectKitHits,
     reportAsText,
     computeAbstract,
     defaultExtras,

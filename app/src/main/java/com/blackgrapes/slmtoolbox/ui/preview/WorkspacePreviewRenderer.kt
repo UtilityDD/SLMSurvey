@@ -25,7 +25,14 @@ import kotlin.math.min
  */
 object WorkspacePreviewRenderer {
 
-    fun render(context: Context, survey: Survey, widthPx: Int = 1400): Bitmap {
+    /** Cap preview bitmap to device screen (keeps RAM under ~4–6 MB on phones). */
+    fun preferredWidthPx(context: Context): Int {
+        val dm = context.resources.displayMetrics
+        val screen = max(dm.widthPixels, dm.heightPixels)
+        return screen.coerceIn(720, 1080)
+    }
+
+    fun render(context: Context, survey: Survey, widthPx: Int = preferredWidthPx(context)): Bitmap {
         val heightPx = (widthPx * 1.15f).toInt()
         val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)

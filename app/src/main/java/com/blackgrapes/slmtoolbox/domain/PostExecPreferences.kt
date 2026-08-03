@@ -44,7 +44,8 @@ object PostExecPreferences {
 
     /** Active implemented post-exec preset. */
     fun isLtConversionAbc(context: Context): Boolean =
-        getSelected(context, PostExecGroup.DTR_LT) == OPTION_LT_CONVERSION_ABC
+        PresetPreferences.FEATURE_ENABLED &&
+            getSelected(context, PostExecGroup.DTR_LT) == OPTION_LT_CONVERSION_ABC
 
     fun isImplemented(optionId: String): Boolean =
         optionId == OPTION_LT_CONVERSION_ABC || optionId == OPTION_NONE

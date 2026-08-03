@@ -18,6 +18,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import com.blackgrapes.slmtoolbox.R
 import com.blackgrapes.slmtoolbox.SlmApp
+import com.blackgrapes.slmtoolbox.data.entity.SavedWorkspaceSummaryRow
 import com.blackgrapes.slmtoolbox.databinding.FragmentMySldBinding
 import com.blackgrapes.slmtoolbox.databinding.ItemDailyHistoryBinding
 import com.blackgrapes.slmtoolbox.databinding.ItemMySldWorkspaceBinding
@@ -33,17 +34,22 @@ import com.blackgrapes.slmtoolbox.ui.export.ShareHelper
 import com.blackgrapes.slmtoolbox.ui.survey.SurveyViewModel
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MySldFragment : Fragment() {
 
     private var _binding: FragmentMySldBinding? = null
     private val binding get() = _binding!!
-    private var workspaces: List<Survey> = emptyList()
     private var adapter: WorkspaceHistoryAdapter? = null
     private var historyAdapter: DailyHistoryAdapter? = null
     private var languageReady = false
     private var languageChangePending = false
+    private var historyLoaded = false
 
     private val viewModel: SurveyViewModel by activityViewModels {
         SurveyViewModel.Factory((requireActivity().application as SlmApp).repository)
@@ -79,13 +85,14 @@ class MySldFragment : Fragment() {
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.savedWorkspaces.collect { saved ->
-                    workspaces = saved
+                viewModel.savedWorkspaceSummaries.collect { saved ->
                     adapter?.submit(saved)
                     binding.emptyText.isVisible = saved.isEmpty()
-                    val days = DailySurveyHistory.build(saved)
-                    historyAdapter?.submit(days)
-                    binding.historyEmptyText.isVisible = days.isEmpty()
+                    // Summaries changed — refresh history next time that tab is opened.
+                    historyLoaded = false
+                    if (binding.mapsTabs.selectedTabPosition == 1) {
+                        loadHistoryIfNeeded()
+                    }
                 }
             }
         }
@@ -97,11 +104,27 @@ class MySldFragment : Fragment() {
                 val history = tab.position == 1
                 binding.mapsPanel.isVisible = !history
                 binding.historyPanel.isVisible = history
+                if (history) loadHistoryIfNeeded()
             }
 
             override fun onTabUnselected(tab: TabLayout.Tab) = Unit
             override fun onTabReselected(tab: TabLayout.Tab) = Unit
         })
+    }
+
+    /** Full graphs only when History tab is shown (not kept for the list). */
+    private fun loadHistoryIfNeeded() {
+        if (historyLoaded) return
+        viewLifecycleOwner.lifecycleScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                viewModel.getSavedWorkspacesWithDetails()
+            }
+            if (!isAdded || _binding == null) return@launch
+            val days = DailySurveyHistory.build(saved)
+            historyAdapter?.submit(days)
+            binding.historyEmptyText.isVisible = days.isEmpty()
+            historyLoaded = true
+        }
     }
 
     private fun setupLanguageChips() {
@@ -128,61 +151,103 @@ class MySldFragment : Fragment() {
         }
     }
 
-    private fun openWorkspace(survey: Survey) {
-        viewModel.openWorkspace(survey.id)
+    private fun openWorkspace(row: SavedWorkspaceSummaryRow) {
+        viewModel.openWorkspace(row.survey.id)
         findNavController().popBackStack(R.id.surveyMapFragment, false)
     }
 
-    private fun shareSummary(survey: Survey) {
-        if (survey.assets.isEmpty()) {
-            Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
-            return
+    private fun shareSummary(row: SavedWorkspaceSummaryRow) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val survey = withContext(Dispatchers.IO) { viewModel.getSurvey(row.survey.id) }
+            if (!isAdded) return@launch
+            if (survey == null || survey.assets.isEmpty()) {
+                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val text = SurveyShareSummary.build(requireContext(), survey)
+            ShareHelper.shareText(
+                context = requireContext(),
+                text = text,
+                title = "${survey.title} — Survey Summary"
+            )
         }
-        val text = SurveyShareSummary.build(requireContext(), survey)
-        ShareHelper.shareText(
-            context = requireContext(),
-            text = text,
-            title = "${survey.title} — Survey Summary"
-        )
     }
 
-    private fun shareJson(survey: Survey) {
-        if (survey.assets.isEmpty()) {
+    private fun shareJson(row: SavedWorkspaceSummaryRow) {
+        if (row.poleCount <= 0) {
             Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
             return
         }
+        val ctx = requireContext()
+        if (com.blackgrapes.slmtoolbox.seal.SlmSeal.isAdmin(ctx)) {
+            MaterialAlertDialogBuilder(ctx)
+                .setTitle(R.string.share_map_format_title)
+                .setItems(
+                    arrayOf(
+                        getString(R.string.share_map_sealed),
+                        getString(R.string.share_map_plain_admin)
+                    )
+                ) { _, which ->
+                    doShareMap(row.survey.id, row.survey.title, plainJson = which == 1)
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        } else {
+            doShareMap(row.survey.id, row.survey.title, plainJson = false)
+        }
+    }
+
+    private fun doShareMap(surveyId: Long, title: String, plainJson: Boolean) {
         viewModel.setProcessing(true, getString(R.string.export_processing_json))
         viewLifecycleOwner.lifecycleScope.launch {
             try {
-                val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
-                val jsonFile = ExportHelper.exportJsonWorkspace(requireContext(), survey, seriesMeta)
-                if (jsonFile != null) {
+                val file = withContext(Dispatchers.IO) {
+                    val survey = viewModel.getSurvey(surveyId) ?: return@withContext null
+                    if (survey.assets.isEmpty()) return@withContext null
+                    val seriesMeta = viewModel.getSeriesMetaForSurvey(survey.id)
+                    if (plainJson) {
+                        ExportHelper.exportJsonWorkspace(requireContext(), survey, seriesMeta)
+                    } else {
+                        ExportHelper.exportSealedWorkspace(requireContext(), survey, seriesMeta)
+                    }
+                }
+                if (!isAdded) return@launch
+                if (file != null) {
                     ShareHelper.shareFiles(
                         context = requireContext(),
-                        files = listOf(jsonFile),
-                        title = getString(R.string.share_workspace_json),
-                        caption = getString(R.string.share_workspace_json_caption, survey.title),
-                        mimeType = "application/json"
+                        files = listOf(file),
+                        title = getString(
+                            if (plainJson) R.string.share_workspace_json
+                            else R.string.share_workspace_sealed
+                        ),
+                        caption = getString(
+                            if (plainJson) R.string.share_workspace_json_caption
+                            else R.string.share_workspace_sealed_caption,
+                            title
+                        ),
+                        mimeType = if (plainJson) "application/json" else "application/octet-stream"
                     )
                     Toast.makeText(requireContext(), R.string.export_ready, Toast.LENGTH_SHORT).show()
                 } else {
                     Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
                 }
             } catch (_: Exception) {
-                Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+                if (isAdded) {
+                    Toast.makeText(requireContext(), R.string.export_failed, Toast.LENGTH_SHORT).show()
+                }
             } finally {
                 viewModel.setProcessing(false)
             }
         }
     }
 
-    private fun confirmDelete(survey: Survey) {
+    private fun confirmDelete(row: SavedWorkspaceSummaryRow) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(R.string.delete_workspace_title)
-            .setMessage(getString(R.string.delete_workspace_confirm, survey.title))
+            .setMessage(getString(R.string.delete_workspace_confirm, row.survey.title))
             .setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.delete) { _, _ ->
-                viewModel.deleteWorkspace(survey.id)
+                viewModel.deleteWorkspace(row.survey.id)
             }
             .show()
     }
@@ -218,22 +283,23 @@ class MySldFragment : Fragment() {
     }
 
     private class WorkspaceHistoryAdapter(
-        private val onOpen: (Survey) -> Unit,
-        private val onShareSummary: (Survey) -> Unit,
-        private val onShareJson: (Survey) -> Unit,
-        private val onLongPress: (Survey) -> Unit
+        private val onOpen: (SavedWorkspaceSummaryRow) -> Unit,
+        private val onShareSummary: (SavedWorkspaceSummaryRow) -> Unit,
+        private val onShareJson: (SavedWorkspaceSummaryRow) -> Unit,
+        private val onLongPress: (SavedWorkspaceSummaryRow) -> Unit
     ) : BaseAdapter() {
 
-        private var items: List<Survey> = emptyList()
+        private var items: List<SavedWorkspaceSummaryRow> = emptyList()
+        private val dateFmt = SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault())
 
-        fun submit(list: List<Survey>) {
+        fun submit(list: List<SavedWorkspaceSummaryRow>) {
             items = list
             notifyDataSetChanged()
         }
 
         override fun getCount(): Int = items.size
-        override fun getItem(position: Int): Survey = items[position]
-        override fun getItemId(position: Int): Long = items[position].id
+        override fun getItem(position: Int): SavedWorkspaceSummaryRow = items[position]
+        override fun getItemId(position: Int): Long = items[position].survey.id
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
             val binding = if (convertView?.tag is ItemMySldWorkspaceBinding) {
@@ -243,24 +309,25 @@ class MySldFragment : Fragment() {
                     .also { it.root.tag = it }
             }
 
-            val survey = items[position]
-            val ctx = parent.context
+            val row = items[position]
+            val survey = row.survey
             binding.tvTitle.text = survey.title
+            val whenMs = survey.savedAt
+                ?: survey.updatedAt.takeIf { it > 0 }
+                ?: survey.createdAt
             binding.tvMeta.text = buildString {
-                append(SurveyShareSummary.formatSurveyDate(survey))
+                append(dateFmt.format(Date(whenMs)))
                 append(" · ")
-                append(SurveyShareSummary.compactStats(ctx, survey))
+                append("${row.poleCount} poles · ${row.spanCount} spans")
             }
 
-            val showWarn = survey.assets.isNotEmpty() && !survey.isLiveAtSite
-            binding.tvLiveWarning.isVisible = showWarn
+            binding.tvLiveWarning.isVisible = row.poleCount > 0 && !row.isLiveAtSite
 
-            binding.btnOpen.setOnClickListener { onOpen(survey) }
-            binding.btnShareSummary.setOnClickListener { onShareSummary(survey) }
-            binding.btnShareJson.setOnClickListener { onShareJson(survey) }
-            binding.root.setOnClickListener { onOpen(survey) }
+            binding.btnShareSummary.setOnClickListener { onShareSummary(row) }
+            binding.btnShareJson.setOnClickListener { onShareJson(row) }
+            binding.root.setOnClickListener { onOpen(row) }
             binding.root.setOnLongClickListener {
-                onLongPress(survey)
+                onLongPress(row)
                 true
             }
             return binding.root
