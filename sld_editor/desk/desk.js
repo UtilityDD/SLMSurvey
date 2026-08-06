@@ -59,6 +59,7 @@
         "dk-block-item" +
         (a.kind === "primary" ? " is-primary" : "") +
         (a.kind === "quiet" ? " is-quiet" : "") +
+        (a.kind === "sub" ? " is-sub" : "") +
         (a.active ? " is-on" : "");
       btn.textContent = a.label;
       if (a.disabled) btn.disabled = true;

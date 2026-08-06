@@ -754,7 +754,7 @@
         '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
         "</div>" +
         '<div class="dk-modal-body is-embed">' +
-        '<iframe class="dk-kit-embed" id="dkKitEmbed" title="Edit kit" src="../estimate/?embed=1&solo=1&kit=' +
+        '<iframe class="dk-kit-embed" id="dkKitEmbed" title="Edit kit" src="../estimate/?embed=1&solo=1&theme=desk&kit=' +
         encodeURIComponent(live.id || "") +
         '"></iframe></div>' +
         '<div class="dk-modal-actions dk-modal-actions-bar">' +

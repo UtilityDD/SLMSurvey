@@ -3004,6 +3004,16 @@
       document.documentElement.classList.add("est-solo-page");
       $("estShell")?.classList.add("est-solo");
     }
+    if (params.get("theme") === "desk") {
+      document.documentElement.classList.add("est-theme-desk");
+      $("estShell")?.classList.add("est-theme-desk");
+      // Shorter tabs for the narrow Structures detail pane
+      document.querySelectorAll(".ed-view-tab").forEach((tab) => {
+        const view = tab.getAttribute("data-ed-view");
+        if (view === "review") tab.textContent = "Items";
+        if (view === "add") tab.textContent = "Add";
+      });
+    }
     const fromSession = tryLoadBoqFromSession();
     if (solo && kitId) {
       // Focused single-kit editor — skip board tabs.

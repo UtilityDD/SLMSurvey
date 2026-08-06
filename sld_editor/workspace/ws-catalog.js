@@ -7,6 +7,8 @@
 
   var MATRIX_URL = "../estimate/kit-matrix.json";
   var RATEBOOK_URL = "../estimate/ratebook.json";
+  var EDITS_KEY = "slm_estimate_kits_v7";
+  var CUSTOM_KITS_KEY = "slm_estimate_custom_kits_v1";
 
   var matrix = null;
   var ratebook = null;
@@ -23,7 +25,8 @@
     return []
       .concat(matrix.structureKits || [])
       .concat(matrix.conductorKits || [])
-      .concat(matrix.addonKits || []);
+      .concat(matrix.addonKits || [])
+      .concat(matrix.customKits || []);
   }
 
   function indexMatrix() {
@@ -44,8 +47,63 @@
       });
   }
 
-  function load() {
-    if (matrix) return Promise.resolve(matrix);
+  function readJsonKey(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return fallback;
+      return JSON.parse(raw);
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  /** Merge Assembly Builder local saves into the in-memory matrix. */
+  function applyLocalEdits() {
+    if (!matrix) return;
+    var edits = readJsonKey(EDITS_KEY, {}) || {};
+    var customs = readJsonKey(CUSTOM_KITS_KEY, []);
+    if (!Array.isArray(customs)) customs = [];
+
+    function patchKit(k) {
+      if (!k || !k.id) return;
+      var e = edits[k.id];
+      if (!e) return;
+      if (Array.isArray(e.lines)) k.lines = e.lines;
+      if (e.notes != null) k.notes = e.notes;
+      if (e.enabled != null) k.enabled = e.enabled;
+      if (e.complete != null) k.complete = e.complete;
+    }
+
+    []
+      .concat(matrix.structureKits || [])
+      .concat(matrix.conductorKits || [])
+      .concat(matrix.addonKits || [])
+      .forEach(patchKit);
+
+    var byCustom = Object.create(null);
+    customs.forEach(function (k) {
+      if (k && k.id) {
+        k.custom = true;
+        patchKit(k);
+        byCustom[k.id] = k;
+      }
+    });
+    matrix.customKits = Object.keys(byCustom).map(function (id) {
+      return byCustom[id];
+    });
+  }
+
+  function load(force) {
+    if (force) {
+      matrix = null;
+      ratebook = null;
+      loadPromise = null;
+    }
+    if (matrix) {
+      applyLocalEdits();
+      indexMatrix();
+      return Promise.resolve(matrix);
+    }
     if (loadPromise) return loadPromise;
     loadPromise = Promise.all([
       fetch(MATRIX_URL).then(function (r) {
@@ -62,11 +120,16 @@
     ]).then(function (pair) {
       matrix = pair[0];
       ratebook = pair[1];
+      applyLocalEdits();
       indexMatrix();
       indexRates();
       return matrix;
     });
     return loadPromise;
+  }
+
+  function reload() {
+    return load(true);
   }
 
   function getById(id) {
@@ -210,6 +273,7 @@
   global.SlmCatalog = {
     isLoaded: isLoaded,
     load: load,
+    reload: reload,
     all: all,
     getById: getById,
     title: title,
