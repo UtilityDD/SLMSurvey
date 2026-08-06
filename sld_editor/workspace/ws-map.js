@@ -1,5 +1,6 @@
 /**
  * Job map — Android SurveyMapRenderer pole symbols via SlmPoleSymbol.
+ * Keeps the user's manual zoom/centre across pole clicks and side-panel refreshes.
  */
 (function (global) {
   "use strict";
@@ -9,6 +10,10 @@
   var hostEl = null;
   var selectedId = null;
   var onSelect = null;
+  /** @type {{ center: {lat:number,lng:number}, zoom: number } | null} */
+  var savedView = null;
+  var fittedSurveyKey = null;
+  var viewWired = false;
 
   function sym() {
     return global.SlmPoleSymbol;
@@ -35,15 +40,58 @@
     return Math.round(n) + " m";
   }
 
+  function surveyKey(survey) {
+    if (!survey) return "";
+    var id = survey.surveyId != null ? survey.surveyId : survey.id;
+    var n = (survey.assets && survey.assets.length) || 0;
+    return String(id != null ? id : survey.title || "job") + ":" + n;
+  }
+
+  function captureView() {
+    if (!map) return;
+    try {
+      var c = map.getCenter();
+      savedView = {
+        center: { lat: c.lat, lng: c.lng },
+        zoom: map.getZoom(),
+      };
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function restoreView() {
+    if (!map || !savedView) return false;
+    try {
+      map.setView(
+        [savedView.center.lat, savedView.center.lng],
+        savedView.zoom,
+        { animate: false }
+      );
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function wireViewTracking() {
+    if (!map || viewWired) return;
+    viewWired = true;
+    map.on("moveend", captureView);
+    map.on("zoomend", captureView);
+  }
+
   function ensureMap(host) {
     if (!host || typeof L === "undefined") return null;
     if (map && hostEl === host) {
       setTimeout(function () {
-        map.invalidateSize();
+        if (map) map.invalidateSize({ animate: false });
       }, 40);
       return map;
     }
-    destroy();
+    // Host node is replaced on Desk.refresh — keep the user's zoom.
+    captureView();
+    destroyMapOnly();
     hostEl = host;
     host.innerHTML = "";
     map = L.map(host, {
@@ -55,11 +103,15 @@
       attribution: "&copy; OpenStreetMap",
     }).addTo(map);
     layer = L.layerGroup().addTo(map);
-    map.setView([22.57, 88.36], 12);
+    viewWired = false;
+    wireViewTracking();
+    if (!restoreView()) {
+      map.setView([22.57, 88.36], 12);
+    }
     return map;
   }
 
-  function destroy() {
+  function destroyMapOnly() {
     if (map) {
       try {
         map.remove();
@@ -70,6 +122,28 @@
     map = null;
     layer = null;
     hostEl = null;
+    viewWired = false;
+  }
+
+  function destroy() {
+    captureView();
+    destroyMapOnly();
+    fittedSurveyKey = null;
+    savedView = null;
+  }
+
+  function fitToBounds(bounds) {
+    if (!map || !bounds.length) return;
+    if (bounds.length === 1) {
+      map.setView(bounds[0], 16, { animate: false });
+    } else {
+      try {
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17, animate: false });
+      } catch (e) {
+        map.setView(bounds[0], 14, { animate: false });
+      }
+    }
+    captureView();
   }
 
   function render(host, survey, opts) {
@@ -145,23 +219,30 @@
       });
       marker.on("click", function () {
         selectedId = asset.id;
+        captureView();
         if (onSelect) onSelect(asset);
       });
       marker.addTo(layer);
     });
 
-    if (bounds.length === 1) {
-      map.setView(bounds[0], 16);
-    } else if (bounds.length > 1) {
-      try {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
-      } catch (e) {
-        map.setView(bounds[0], 14);
-      }
+    var key = surveyKey(survey);
+    var forceFit = opts.fit === true;
+    var shouldFit =
+      forceFit ||
+      (opts.preserveView !== true && fittedSurveyKey !== key && bounds.length > 0);
+
+    if (shouldFit) {
+      fitToBounds(bounds);
+      fittedSurveyKey = key;
+    } else {
+      restoreView();
     }
 
     setTimeout(function () {
-      if (map) map.invalidateSize();
+      if (!map) return;
+      map.invalidateSize({ animate: false });
+      // invalidateSize can nudge the view — put the user zoom back.
+      if (!shouldFit) restoreView();
     }, 80);
   }
 
