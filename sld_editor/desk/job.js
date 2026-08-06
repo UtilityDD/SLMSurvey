@@ -244,27 +244,47 @@
     var raw;
     try {
       raw = JSON.stringify(payload);
-      sessionStorage.setItem("slm_job_print_map_v1", raw);
-      localStorage.setItem("slm_job_print_map_v1", raw);
-    } catch (e) {
-      // Still try window.name below.
-      try {
-        raw = JSON.stringify(payload);
-      } catch (e2) {
-        Desk.toast("Could not hand off map");
-        return;
-      }
-    }
-
-    // window.name survives same-tab navigation even on file:// (storage often does not).
-    try {
-      window.name = "slmprint:" + raw;
     } catch (e) {
       Desk.toast("Could not hand off map");
       return;
     }
 
-    location.assign("../index.html?cad=1&print=1&simple=1");
+    var stored = false;
+    try {
+      sessionStorage.setItem("slm_job_print_map_v1", raw);
+      stored = true;
+    } catch (e) {
+      /* ignore */
+    }
+    try {
+      localStorage.setItem("slm_job_print_map_v1", raw);
+      stored = true;
+    } catch (e) {
+      /* ignore */
+    }
+
+    // window.name is a backup for file:// — skip if payload is huge (can throw / abort nav).
+    try {
+      if (raw.length < 400000) {
+        window.name = "slmprint:" + raw;
+      }
+    } catch (e) {
+      /* storage handoff is enough */
+    }
+
+    if (!stored && !(window.name && String(window.name).indexOf("slmprint:") === 0)) {
+      Desk.toast("Could not hand off map (storage full)");
+      return;
+    }
+
+    // Serve (and some hosts) redirect /index.html?… → / and DROP the query,
+    // which makes the CAD boot script bounce back to desk. Navigate to /?cad=1…
+    var url = new URL("../", location.href);
+    url.searchParams.set("cad", "1");
+    url.searchParams.set("print", "1");
+    url.searchParams.set("simple", "1");
+    Desk.toast("Opening print…");
+    location.assign(url.href);
   }
 
   function ensureAssemblies() {
@@ -579,14 +599,60 @@
     }
   }
 
+  function kitLineRowsHtml(lines) {
+    if (!lines || !lines.length) {
+      return '<tr><td colspan="4" class="dk-sched-empty">No recipe lines</td></tr>';
+    }
+    return lines
+      .map(function (l) {
+        var code = l.itemId || l.code || l.matCode || "—";
+        var rate = Cat && Cat.rateFor ? Cat.rateFor(code) : null;
+        var desc =
+          (rate && (rate.description || rate.name)) ||
+          l.description ||
+          l.name ||
+          "";
+        var unit = (rate && rate.unit) || l.unit || "";
+        var typ = l.type || (rate && rate.type) || "";
+        return (
+          "<tr>" +
+          "<td><code class=\"dk-kit-code\">" +
+          esc(code) +
+          "</code>" +
+          (desc
+            ? '<div class="dk-kit-line-desc">' + esc(desc) + "</div>"
+            : "") +
+          "</td>" +
+          "<td>" +
+          esc(typ) +
+          "</td>" +
+          '<td class="dk-num">' +
+          esc(String(kitLineQty(l))) +
+          "</td>" +
+          "<td>" +
+          esc(unit) +
+          "</td></tr>"
+        );
+      })
+      .join("");
+  }
+
   /**
-   * View kit recipe in-modal. Admins can switch to the same embed editor
-   * used on Structures — without leaving the Map desk.
+   * Clean single-kit recipe modal (Map → View kit).
+   * View-only here — editing stays on the Structures desk.
    */
-  function openKitModal(kit, opts) {
-    if (!kit) return;
-    opts = opts || {};
-    var editing = !!opts.edit && canEditKits();
+  function openKitModal(kit) {
+    if (!kit) {
+      if (global.SlmDialog && global.SlmDialog.alert) {
+        global.SlmDialog.alert({
+          title: "No matching kit",
+          message: "No structure kit matches this pole’s current chips.",
+        });
+      } else {
+        Desk.toast("No matching kit");
+      }
+      return;
+    }
     var Match = global.SlmEstimateMatch;
     var live = refreshKitFromCatalog(kit.id) || kit;
     var title =
@@ -595,15 +661,16 @@
       live.label ||
       live.id ||
       "Kit";
-    var sub = [
+    var chips = [
+      live.voltage,
       live.structureLabel || live.structure,
-      live.location || live.kitLocation,
+      live.locationLabel || live.location,
       live.arrangementLabel || live.arrangement,
       live.extensionLabel || live.extension,
-      live.conductorShort || live.conductorFamily || live.conductor,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+      live.conductorShort || live.conductorName || live.conductorFamily,
+      live.wireLabel,
+      live.dtrCapacity || live.dtCapacityKva,
+    ].filter(Boolean);
     var lines = live.lines || [];
     var admin = canEditKits();
 
@@ -620,99 +687,59 @@
       });
     }
 
-    var body;
-    var actions;
-    if (editing) {
-      body =
-        '<iframe class="dk-kit-embed" title="Edit kit" src="../estimate/?embed=1&kit=' +
-        encodeURIComponent(live.id || "") +
-        '"></iframe>';
-      actions =
-        '<button type="button" class="dk-btn dk-btn-sm" id="dkKitBack">← Recipe</button>' +
-        '<button type="button" class="dk-btn dk-btn-sm" id="dkKitDone">Close</button>';
-    } else {
-      body =
-        '<p class="dk-kit-modal-meta">' +
-        esc(live.id || "") +
-        " · " +
-        lines.length +
-        " lines</p>" +
-        '<div class="dk-sched-scroll"><table class="dk-sched-table"><thead><tr>' +
-        '<th>Code</th><th>Type</th><th class="dk-num">Qty</th></tr></thead><tbody>' +
-        (lines.length
-          ? lines
-              .map(function (l) {
-                return (
-                  "<tr><td>" +
-                  esc(l.itemId || l.code || l.matCode || "—") +
-                  "</td><td>" +
-                  esc(l.type || "") +
-                  '</td><td class="dk-num">' +
-                  esc(String(kitLineQty(l))) +
-                  "</td></tr>"
-                );
-              })
-              .join("")
-          : '<tr><td colspan="3" class="dk-sched-empty">No recipe lines</td></tr>') +
-        "</tbody></table></div>";
-      actions =
-        (admin
-          ? '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitEdit">Edit kit</button>'
-          : "") +
-        '<button type="button" class="dk-btn dk-btn-sm" id="dkKitDone">Close</button>';
-    }
-
     root.innerHTML =
-      '<div class="dk-modal-card dk-modal-wide' +
-      (editing ? " is-editing" : "") +
-      '">' +
-      '<div class="dk-modal-head"><div class="dk-modal-head-text"><h2>' +
-      esc(editing ? "Edit kit" : title) +
+      '<div class="dk-modal-card dk-kit-view-card">' +
+      '<div class="dk-modal-head">' +
+      '<div class="dk-modal-head-text">' +
+      "<h2>" +
+      esc(title) +
       "</h2>" +
-      (sub && !editing
-        ? '<p class="dk-modal-sub">' + esc(sub) + "</p>"
-        : editing
-          ? '<p class="dk-modal-sub">' + esc(title) + "</p>"
-          : "") +
-      '</div><button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button></div>' +
-      '<div class="dk-modal-body' +
-      (editing ? " is-embed" : "") +
-      '">' +
-      body +
-      (editing ? "" : '<div class="dk-modal-actions">' + actions + "</div>") +
+      '<p class="dk-modal-sub">' +
+      esc(live.id || "") +
+      " · " +
+      lines.length +
+      " lines</p>" +
       "</div>" +
-      (editing
-        ? '<div class="dk-modal-actions dk-modal-actions-bar">' + actions + "</div>"
+      '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
+      "</div>" +
+      '<div class="dk-modal-body dk-kit-view-body">' +
+      (chips.length
+        ? '<div class="dk-kit-attr-chips">' +
+          chips
+            .map(function (c) {
+              return '<span class="dk-kit-attr-chip">' + esc(c) + "</span>";
+            })
+            .join("") +
+          "</div>"
         : "") +
-      "</div>";
+      '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
+      '<table class="dk-sched-table"><thead><tr>' +
+      "<th>Item</th><th>Type</th><th class=\"dk-num\">Qty</th><th>Unit</th>" +
+      "</tr></thead><tbody>" +
+      kitLineRowsHtml(lines) +
+      "</tbody></table></div>" +
+      '<div class="dk-modal-actions">' +
+      (admin
+        ? '<button type="button" class="dk-btn dk-btn-sm" id="dkKitEdit">Edit in Structures</button>'
+        : "") +
+      '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitDone">Close</button>' +
+      "</div></div></div>";
 
     root.classList.remove("hidden");
 
     var closeBtn = root.querySelector("#dkKitClose");
     var doneBtn = root.querySelector("#dkKitDone");
-    var backBtn = root.querySelector("#dkKitBack");
     var editBtn = root.querySelector("#dkKitEdit");
     if (closeBtn) closeBtn.addEventListener("click", closeKitModal);
     if (doneBtn) doneBtn.addEventListener("click", closeKitModal);
-    if (backBtn) {
-      backBtn.addEventListener("click", function () {
-        // Prefer refreshed catalog copy after save in embed.
-        if (Cat && Cat.load) {
-          Cat.load()
-            .then(function () {
-              openKitModal(refreshKitFromCatalog(live.id) || live, { edit: false });
-            })
-            .catch(function () {
-              openKitModal(live, { edit: false });
-            });
-        } else {
-          openKitModal(live, { edit: false });
-        }
-      });
-    }
     if (editBtn) {
       editBtn.addEventListener("click", function () {
-        openKitModal(live, { edit: true });
+        closeKitModal();
+        if (global.SlmStructuresDesk && global.SlmStructuresDesk.openKitEdit) {
+          global.SlmStructuresDesk.openKitEdit(live.id);
+        } else {
+          Desk.go("structures");
+        }
       });
     }
     if (!openKitModal._esc) {
@@ -810,8 +837,19 @@
       var viewBtn = panel.querySelector("#dkPoleViewKit");
       if (viewBtn) {
         viewBtn.addEventListener("click", function () {
-          if (!matchedKit) return;
-          openKitModal(matchedKit);
+          // Rematch against current chips after pole edits — open that kit only.
+          var draft = panel._draft || state;
+          var kit =
+            matchKitForDraft(asset, draft) ||
+            matchedKit ||
+            null;
+          if (Cat && Cat.load && !kit) {
+            Cat.load().then(function () {
+              openKitModal(matchKitForDraft(asset, draft));
+            });
+            return;
+          }
+          openKitModal(kit);
         });
       }
 
@@ -972,6 +1010,56 @@
     }
   }
 
+  function doCloseMap() {
+    if (global.SlmWsMap) {
+      try {
+        global.SlmWsMap.destroy();
+      } catch (e) {
+        /* ignore */
+      }
+    }
+    WS.reset();
+    selectedId = null;
+    Desk.refresh();
+  }
+
+  async function closeMapWithSavePrompt() {
+    var survey = effective();
+    if (!survey) {
+      doCloseMap();
+      return;
+    }
+
+    var choice = null;
+    if (global.SlmDialog && global.SlmDialog.choice) {
+      choice = await global.SlmDialog.choice({
+        title: "Close map?",
+        message:
+          "Save this map before closing? Unsaved changes will be lost if you don’t save.",
+        okLabel: "Save",
+        secondaryLabel: "Don't save",
+        cancelLabel: "Cancel",
+      });
+    } else {
+      // Fallback when SlmDialog is unavailable
+      if (!window.confirm("Save this map before closing?")) {
+        if (!window.confirm("Close without saving?")) return;
+        choice = "secondary";
+      } else {
+        choice = "primary";
+      }
+    }
+
+    if (choice == null) return; // Cancel — stay on map
+
+    if (choice === "primary") {
+      var saved = await Desk.saveJob();
+      if (!saved) return; // picker cancelled or save failed
+    }
+
+    doCloseMap();
+  }
+
   Desk.register("map", {
     tools: function () {
       var ws = WS.get();
@@ -990,18 +1078,7 @@
           label: "Close map",
           kind: "quiet",
           onClick: function () {
-            if (!window.confirm("Close this map and return to the start page?"))
-              return;
-            if (global.SlmWsMap) {
-              try {
-                global.SlmWsMap.destroy();
-              } catch (e) {
-                /* ignore */
-              }
-            }
-            WS.reset();
-            selectedId = null;
-            Desk.refresh();
+            closeMapWithSavePrompt();
           },
         },
       ];

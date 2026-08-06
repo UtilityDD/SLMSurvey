@@ -18,10 +18,16 @@
                 location.replace(path + '/' + location.search + location.hash);
                 return;
             }
-            /* Primary desk is the clean 3-page shell. Keep ?cad=1 for print CAD. */
+            /* Primary desk is the clean 3-page shell. Keep CAD for print / embed.
+               Prefer /?cad=1… (not /index.html?…) — clean-URL hosts strip query on index redirects. */
             var q = new URLSearchParams(location.search);
-            if (q.get('cad') === '1' || q.get('embed') === '1') {
-                if (q.get('simple') === '1') {
+            if (
+                q.get('cad') === '1' ||
+                q.get('embed') === '1' ||
+                q.get('print') === '1' ||
+                q.get('simple') === '1'
+            ) {
+                if (q.get('simple') === '1' || q.get('print') === '1') {
                     document.documentElement.classList.add('print-simple-pending');
                 }
                 return;
@@ -34,6 +40,7 @@
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="./pole-marker.css">
     <link rel="stylesheet" href="./shell-rail.css">
     <link rel="stylesheet" href="./ui-dialog.css">
 </head>
@@ -522,6 +529,7 @@
     <script src="./ui-dialog.js"></script>
     <script src="./license.js"></script>
     <script src="./seal.js"></script>
+    <script src="./pole-marker.js"></script>
     <script src="./app.js"></script>
     <script src="./print_layout.js"></script>
 </body>

@@ -126,15 +126,17 @@
   }
 
   function saveJob() {
-    if (!WS) return Promise.reject();
+    if (!WS) return Promise.reject(new Error("No workspace"));
     return WS.saveToFile(true)
       .then(function () {
         toast("Saved");
         refresh();
+        return true;
       })
       .catch(function (err) {
-        if (err && err.name === "AbortError") return;
+        if (err && err.name === "AbortError") return false;
         toast((err && err.message) || "Could not save");
+        return false;
       });
   }
 

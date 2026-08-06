@@ -1379,21 +1379,36 @@ function renderMap() {
 
         const poleNo = node.label || `P-${String(node.sequence).padStart(2, '0')}`;
         const asset = node.assetRef || {};
-        const volt = String(asset.voltage || '');
-        let poleColor = '#388e3c'; // LT — match Android colors.xml
-        if (volt.indexOf('33') >= 0) poleColor = '#d32f2f';
-        else if (volt.indexOf('11') >= 0) poleColor = '#f9a825';
-        const proposed = String(asset.status || '').toLowerCase() === 'proposed';
-        const struct = node.structure || asset.structure || '1P';
-        const markerIcon = L.divIcon({
-            html: `<div class="map-pole-root">
-                <div class="map-pole-icon ${proposed ? 'is-proposed' : 'is-existing'}" style="--pole:${poleColor}">${struct}</div>
-                <div class="map-pole-number">${poleNo}</div>
-            </div>`,
-            className: 'custom-map-icon',
-            iconSize: [56, 44],
-            iconAnchor: [28, 14]
-        });
+        const selected = activeSelection?.type === 'node' && activeSelection?.data === node;
+        let markerIcon;
+        try {
+            markerIcon = L.divIcon(
+                (typeof window.SlmPoleSymbol !== 'undefined')
+                    ? {
+                        className: 'slm-map-pole-icon custom-map-icon',
+                        html:
+                            '<div class="map-pole-root">' +
+                            window.SlmPoleSymbol.poleIconHtml(asset, { selected: selected }) +
+                            '<div class="map-pole-number">' + poleNo + '</div></div>',
+                        iconSize: [56, 52],
+                        iconAnchor: [28, 20]
+                    }
+                    : {
+                        html: '<div class="slm-pole is-existing" style="--pole:#388e3c"><span class="slm-pole-mark"><span class="slm-pole-label">1P</span></span></div>',
+                        className: 'slm-map-pole-icon',
+                        iconSize: [40, 40],
+                        iconAnchor: [20, 20]
+                    }
+            );
+        } catch (err) {
+            console.warn('Pole marker failed', err);
+            markerIcon = L.divIcon({
+                className: 'slm-map-pole-icon',
+                html: '<div class="slm-pole is-existing" style="--pole:#388e3c"><span class="slm-pole-mark"><span class="slm-pole-label">1P</span></span></div>',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+        }
 
         const marker = L.marker([lat, lng], {
             icon: markerIcon,
@@ -2422,51 +2437,39 @@ function drawCanvas() {
         ctx.fillText(spanText, midX, midY);
     });
 
-    // 6. Draw nodes (poles) on top of lines & decorations
+    // 6. Draw nodes (poles) — Android SurveyMapRenderer symbols (voltage colour)
     nodes.forEach(node => {
-        const isExisting = node.assetRef?.status?.toLowerCase() === 'existing';
-        
-        // Main circle drop shadow/glow
-        ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetY = 2;
+        if (typeof SlmPoleSymbol !== 'undefined') {
+            SlmPoleSymbol.drawPoleOnCanvas(ctx, node.x, node.y, node, { radius: 16 });
+        } else {
+            const isExisting = node.assetRef?.status?.toLowerCase() === 'existing';
+            ctx.fillStyle = isExisting ? '#2563eb' : '#f97316';
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 16, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, 13, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.fillStyle = isExisting ? '#1e40af' : '#c2410c';
+            ctx.font = 'bold 10px Outfit';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.structure, node.x, node.y + 0.5);
+        }
 
-        // Draw outer ring
-        ctx.fillStyle = isExisting ? '#2563eb' : '#f97316'; // Blue for existing, orange for proposed
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 16, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Clear shadow for interior text
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetY = 0;
-
-        // Draw inner body circle
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, 13, 0, 2 * Math.PI);
-        ctx.fill();
-
-        // Draw structure type text inside the circle (e.g. 1P, DTR)
-        ctx.fillStyle = isExisting ? '#1e40af' : '#c2410c';
-        ctx.font = 'bold 10px Outfit';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(node.structure, node.x, node.y + 0.5);
-
-        // Draw pole labels text (Sequence title e.g. P-01) below the node
+        // Pole sequence label below the Android mark (CAD convenience)
         ctx.fillStyle = '#1e293b';
         ctx.font = 'bold 11px Inter';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.fillText(node.label, node.x, node.y + 20);
 
-        // If remarks are present, render a small info indicator icon or prefix text
-        if (node.remarks.trim()) {
+        if (node.remarks && String(node.remarks).trim()) {
             ctx.fillStyle = '#64748b';
             ctx.font = 'italic 9px Inter';
-            // Truncated remarks
-            const remText = node.remarks.length > 15 ? node.remarks.substring(0, 12) + '...' : node.remarks;
+            const rem = String(node.remarks);
+            const remText = rem.length > 15 ? rem.substring(0, 12) + '...' : rem;
             ctx.fillText(remText, node.x, node.y + 34);
         }
     });

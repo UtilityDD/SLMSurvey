@@ -1,6 +1,8 @@
 /**
  * Shared clean dialogs for SLM desktop (replaces alert / confirm / prompt).
- * window.SlmDialog.alert | confirm | prompt → Promise
+ * window.SlmDialog.alert | confirm | prompt | choice → Promise
+ *
+ * choice resolves: "primary" | "secondary" | null (cancel / dismiss)
  */
 (function (global) {
   "use strict";
@@ -26,36 +28,40 @@
       "  </div>" +
       '  <div class="slm-dialog-actions">' +
       '    <button type="button" class="slm-dialog-btn slm-dialog-btn-ghost" id="slmDialogCancel">Cancel</button>' +
+      '    <button type="button" class="slm-dialog-btn slm-dialog-btn-ghost hidden" id="slmDialogSecondary">Don\'t save</button>' +
       '    <button type="button" class="slm-dialog-btn slm-dialog-btn-primary" id="slmDialogOk">OK</button>' +
       "  </div>" +
       "</div>";
     document.body.appendChild(root);
 
     root.addEventListener("click", function (e) {
-      if (e.target === root) finish(false);
+      if (e.target === root) finish(null);
     });
     document.getElementById("slmDialogCancel").addEventListener("click", function () {
-      finish(false);
+      finish(null);
+    });
+    document.getElementById("slmDialogSecondary").addEventListener("click", function () {
+      finish("secondary");
     });
     document.getElementById("slmDialogOk").addEventListener("click", function () {
-      finish(true);
+      finish("primary");
     });
     document.getElementById("slmDialogInput").addEventListener("keydown", function (e) {
       if (e.key === "Enter") {
         e.preventDefault();
-        finish(true);
+        finish("primary");
       }
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && root && !root.classList.contains("hidden")) {
         e.preventDefault();
-        finish(false);
+        finish(null);
       }
     });
     return root;
   }
 
-  function finish(ok) {
+  function finish(result) {
     if (!resolveFn) return;
     var root = document.getElementById(ROOT_ID);
     var mode = root && root.getAttribute("data-mode");
@@ -64,9 +70,11 @@
     resolveFn = null;
     if (root) root.classList.add("hidden");
     if (mode === "prompt") {
-      done(ok ? String(input.value || "") : null);
+      done(result === "primary" ? String(input.value || "") : null);
     } else if (mode === "confirm") {
-      done(!!ok);
+      done(result === "primary");
+    } else if (mode === "choice") {
+      done(result === "primary" || result === "secondary" ? result : null);
     } else {
       done();
     }
@@ -75,7 +83,7 @@
   function openDialog(opts) {
     opts = opts || {};
     var root = ensureDom();
-    if (resolveFn) finish(false);
+    if (resolveFn) finish(null);
 
     return new Promise(function (resolve) {
       resolveFn = resolve;
@@ -89,14 +97,20 @@
       var input = document.getElementById("slmDialogInput");
       var label = document.getElementById("slmDialogLabel");
       var cancel = document.getElementById("slmDialogCancel");
+      var secondary = document.getElementById("slmDialogSecondary");
       var ok = document.getElementById("slmDialogOk");
 
       var isPrompt = opts.mode === "prompt";
       var isAlert = opts.mode === "alert";
+      var isChoice = opts.mode === "choice";
       field.classList.toggle("hidden", !isPrompt);
       cancel.classList.toggle("hidden", isAlert);
+      secondary.classList.toggle("hidden", !isChoice);
       cancel.textContent = opts.cancelLabel || "Cancel";
-      ok.textContent = opts.okLabel || (isAlert ? "OK" : isPrompt ? "Continue" : "Confirm");
+      secondary.textContent = opts.secondaryLabel || "Don't save";
+      ok.textContent =
+        opts.okLabel ||
+        (isAlert ? "OK" : isPrompt ? "Continue" : isChoice ? "Save" : "Confirm");
       ok.classList.toggle("slm-dialog-btn-danger", !!opts.danger);
 
       if (isPrompt) {
@@ -132,6 +146,19 @@
         title: (opts && opts.title) || "Please confirm",
         message: (opts && opts.message) || "",
         okLabel: (opts && opts.okLabel) || "Confirm",
+        cancelLabel: (opts && opts.cancelLabel) || "Cancel",
+        danger: !!(opts && opts.danger),
+      });
+    },
+    /** Three-way: primary | secondary | null (cancel). */
+    choice: function (opts) {
+      if (typeof opts === "string") opts = { message: opts };
+      return openDialog({
+        mode: "choice",
+        title: (opts && opts.title) || "Please choose",
+        message: (opts && opts.message) || "",
+        okLabel: (opts && opts.okLabel) || "Save",
+        secondaryLabel: (opts && opts.secondaryLabel) || "Don't save",
         cancelLabel: (opts && opts.cancelLabel) || "Cancel",
         danger: !!(opts && opts.danger),
       });

@@ -361,73 +361,83 @@ button, input, select, textarea { font-family: inherit; }
     color: var(--ink);
 }
 
-.ws-map-pole-icon { background: transparent !important; border: none !important; }
+.ws-map-pole-icon,
+.slm-map-pole-icon {
+    background: transparent !important;
+    border: none !important;
+}
 
-/* Mobile-matching pole mark (SurveyMapRenderer) */
-.ws-pole {
-    width: 36px;
-    height: 36px;
+/* Android SurveyMapRenderer pole mark */
+.slm-pole {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
     pointer-events: none;
 }
-.ws-pole-mark {
-    width: 30px;
-    height: 30px;
+.slm-pole-mark {
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: var(--font-display);
-    font-size: 11px;
+    font-family: "Outfit", "Inter", system-ui, sans-serif;
+    font-size: 12px;
     font-weight: 800;
     line-height: 1;
     box-sizing: border-box;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
-.ws-pole-label {
+.slm-pole-label {
     display: block;
     line-height: 1;
+    letter-spacing: -0.02em;
 }
-.ws-pole.is-existing .ws-pole-mark {
+.slm-pole-label.is-dtr {
+    font-size: 10px;
+}
+.slm-pole-label.is-1np {
+    font-size: 8px;
+}
+.slm-pole.is-existing .slm-pole-mark {
     background: var(--pole, #388e3c);
     color: #fff;
     border: 2.5px solid #fff;
 }
-.ws-pole.is-proposed .ws-pole-mark {
+.slm-pole.is-proposed .slm-pole-mark {
     background: #fff;
     color: var(--pole, #388e3c);
-    border: 3px solid var(--pole, #388e3c);
+    border: 3.5px solid var(--pole, #388e3c);
 }
-.ws-pole.is-extra .ws-pole-mark {
-    border-radius: 4px;
+.slm-pole.is-extra .slm-pole-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
     transform: rotate(45deg);
     background: #fff;
     color: var(--pole, #388e3c);
     border: 3px solid var(--pole, #388e3c);
-    font-size: 9px;
 }
-.ws-pole.is-extra .ws-pole-label {
+.slm-pole.is-extra .slm-pole-label {
     transform: rotate(-45deg);
-    letter-spacing: -0.04em;
 }
-.ws-pole.is-selected .ws-pole-mark {
-    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #1565c0;
+.slm-pole.is-unverified.is-existing .slm-pole-mark {
+    border-color: #ff0000;
+    border-style: dashed;
 }
-.ws-map-span-wrap { background: transparent !important; border: none !important; }
-.ws-map-span {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 10px;
-    font-weight: 700;
-    color: #0f172a;
-    white-space: nowrap;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+.slm-pole.is-unverified.is-proposed .slm-pole-mark {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #ff0000;
+}
+.slm-pole.is-unverified.is-proposed.is-selected .slm-pole-mark,
+.slm-pole.is-selected .slm-pole-mark {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff6f00;
+}
+.slm-pole.is-unverified.is-proposed.is-selected .slm-pole-mark {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff6f00;
 }
 
+/* Legacy class aliases (older markup) */
 .ws-map-span-wrap { background: transparent !important; border: none !important; }
 .ws-map-span {
     display: inline-block;
@@ -439,7 +449,7 @@ button, input, select, textarea { font-family: inherit; }
     font-size: 10px;
     font-weight: 700;
     white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
 .ws-row.is-selected {

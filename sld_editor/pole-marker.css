@@ -1,0 +1,99 @@
+/* Android SurveyMapRenderer pole marks (shared by desk map + CAD) */
+.slm-map-pole-icon,
+.ws-map-pole-icon,
+.custom-map-icon.slm-map-pole-icon {
+    background: transparent !important;
+    border: none !important;
+}
+
+.slm-pole {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    margin: 0 auto;
+}
+.slm-pole-mark {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Outfit", "Inter", system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    box-sizing: border-box;
+}
+.slm-pole-label {
+    display: block;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+.slm-pole-label.is-dtr {
+    font-size: 10px;
+}
+.slm-pole-label.is-1np {
+    font-size: 8px;
+}
+.slm-pole.is-existing .slm-pole-mark {
+    background: var(--pole, #388e3c);
+    color: #fff;
+    border: 2.5px solid #fff;
+}
+.slm-pole.is-proposed .slm-pole-mark {
+    background: #fff;
+    color: var(--pole, #388e3c);
+    border: 3.5px solid var(--pole, #388e3c);
+}
+.slm-pole.is-extra .slm-pole-mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    transform: rotate(45deg);
+    background: #fff;
+    color: var(--pole, #388e3c);
+    border: 3px solid var(--pole, #388e3c);
+}
+.slm-pole.is-extra .slm-pole-label {
+    transform: rotate(-45deg);
+}
+.slm-pole.is-unverified.is-existing .slm-pole-mark {
+    border-color: #ff0000;
+    border-style: dashed;
+}
+.slm-pole.is-unverified.is-proposed .slm-pole-mark {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 5px #ff0000;
+}
+.slm-pole.is-selected .slm-pole-mark {
+    box-shadow: 0 0 0 3px #fff, 0 0 0 6px #ff6f00;
+}
+
+.map-pole-number {
+    margin-top: 2px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(15, 23, 42, 0.82);
+    color: #f8fafc;
+    font-family: "Outfit", "Inter", system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.map-pole-root {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 56px;
+    pointer-events: none;
+}
+.map-pole-root .slm-pole {
+    pointer-events: auto;
+}

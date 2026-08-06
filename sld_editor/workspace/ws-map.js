@@ -1,7 +1,5 @@
 /**
- * Job map — match Android SurveyMapRenderer:
- * centered structure circles on GPS, voltage colours, proposed hollow / existing filled,
- * network lines + span m labels.
+ * Job map — Android SurveyMapRenderer pole symbols via SlmPoleSymbol.
  */
 (function (global) {
   "use strict";
@@ -12,12 +10,12 @@
   var selectedId = null;
   var onSelect = null;
 
-  /** Same palette as app colors.xml (kv33 / kv11 / lt). */
+  function sym() {
+    return global.SlmPoleSymbol;
+  }
+
   function voltColor(v) {
-    var s = String(v || "");
-    if (s.indexOf("33") >= 0) return "#d32f2f";
-    if (s.indexOf("11") >= 0) return "#f9a825";
-    return "#388e3c";
+    return sym() ? sym().voltColor(v) : "#388e3c";
   }
 
   function latLngOf(asset) {
@@ -31,54 +29,10 @@
     return [la, ln];
   }
 
-  function structureLabel(asset) {
-    var s = asset && (asset.structure || asset.poleStructure);
-    if (!s) return "1P";
-    if (typeof s === "object" && s.label) return String(s.label);
-    var t = String(s);
-    if (t === "P1" || t === "1P") return "1P";
-    if (t === "P2" || t === "2P") return "2P";
-    if (t === "P3" || t === "3P") return "3P";
-    if (t === "P4" || t === "4P") return "4P";
-    if (t === "P1N" || t === "1NP" || t === "1N") return "1NP";
-    if (t.toUpperCase() === "DTR") return "DTR";
-    return t;
-  }
-
-  function isProposed(asset) {
-    return String((asset && asset.status) || "").toLowerCase() === "proposed";
-  }
-
-  function isExtra(struct) {
-    return struct === "1NP" || struct === "P1N";
-  }
-
   function formatSpan(m) {
     var n = Number(m);
     if (!Number.isFinite(n) || n <= 0) return "";
     return Math.round(n) + " m";
-  }
-
-  /** Mobile-style marker: structure text inside circle, anchored on GPS centre. */
-  function poleIconHtml(asset, isSel) {
-    var color = voltColor(asset.voltage);
-    var struct = structureLabel(asset);
-    var proposed = isProposed(asset);
-    var extra = isExtra(struct);
-    var classes =
-      "ws-pole" +
-      (proposed ? " is-proposed" : " is-existing") +
-      (extra ? " is-extra" : "") +
-      (isSel ? " is-selected" : "");
-    return (
-      '<div class="' +
-      classes +
-      '" style="--pole:' +
-      color +
-      '"><span class="ws-pole-mark"><span class="ws-pole-label">' +
-      struct +
-      "</span></span></div>"
-    );
   }
 
   function ensureMap(host) {
@@ -133,7 +87,6 @@
       byId[String(asset.id)] = asset;
     });
 
-    // Lines first (under poles), same as mobile.
     ((survey && survey.connections) || []).forEach(function (conn) {
       var a = byId[String(conn.fromAssetId)];
       var b = byId[String(conn.toAssetId)];
@@ -172,20 +125,22 @@
       }
     });
 
-    // Poles on top — icon centre = GPS (iconAnchor half of size).
     assets.forEach(function (asset) {
       var ll = latLngOf(asset);
       if (!ll) return;
       bounds.push(ll);
       var isSel = selectedId != null && String(asset.id) === String(selectedId);
-      var icon = L.divIcon({
-        className: "ws-map-pole-icon",
-        html: poleIconHtml(asset, isSel),
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-      });
+      var iconOpts =
+        sym() && sym().leafletIconOptions
+          ? sym().leafletIconOptions(asset, { selected: isSel })
+          : {
+              className: "slm-map-pole-icon",
+              html: "<div class='slm-pole is-existing'><span class='slm-pole-mark'><span class='slm-pole-label'>1P</span></span></div>",
+              iconSize: [40, 40],
+              iconAnchor: [20, 20],
+            };
       var marker = L.marker(ll, {
-        icon: icon,
+        icon: L.divIcon(iconOpts),
         zIndexOffset: isSel ? 900 : 700,
       });
       marker.on("click", function () {
@@ -218,8 +173,5 @@
     render: render,
     destroy: destroy,
     setSelected: setSelected,
-    invalidateSize: function () {
-      if (map) map.invalidateSize();
-    },
   };
-})(window);
+})(typeof window !== "undefined" ? window : globalThis);
