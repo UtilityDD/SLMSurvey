@@ -1008,6 +1008,109 @@ html {
     border-radius: 20px;
 }
 
+/* ── Simplified print desk (opened from Map · Print) ── */
+html.print-simple-pending body,
+body.print-simple {
+    overflow: hidden;
+}
+
+.print-simple-bar {
+    display: none;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    background: #0b1220;
+    color: #e8eef6;
+    flex-shrink: 0;
+    z-index: 20;
+}
+
+body.print-simple .print-simple-bar {
+    display: flex;
+}
+
+.print-simple-bar.hidden {
+    display: none !important;
+}
+
+body.print-simple .print-simple-bar.hidden {
+    display: flex !important;
+}
+
+.print-simple-back {
+    color: #7eb6f5;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.print-simple-back:hover { color: #fff; }
+
+.print-simple-title {
+    font-family: "Outfit", sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: -0.02em;
+}
+
+.print-simple-hint {
+    color: #7a8799;
+    font-size: 0.8rem;
+    margin-left: auto;
+}
+
+body.print-simple {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    margin: 0;
+}
+
+body.print-simple .app-container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    height: auto !important;
+}
+
+body.print-simple .sidebar,
+body.print-simple .slm-rail,
+body.print-simple .workspace-header,
+body.print-simple .app-menubar,
+body.print-simple .sidebar-backdrop {
+    display: none !important;
+}
+
+body.print-simple .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body.print-simple .print-simple-hide {
+    display: none !important;
+}
+
+body.print-simple .print-toolbar {
+    padding: 8px 14px;
+    gap: 10px;
+}
+
+body.print-simple .print-toolbar.is-print-active {
+    display: flex !important;
+}
+
+body.print-simple .viewer-viewport,
+body.print-simple #mapView {
+    flex: 1;
+    min-height: 0;
+}
+
 /* ── Print / CAD sheet toolbar (shown only when Print Layout is on) ── */
 .print-toolbar {
     display: none;

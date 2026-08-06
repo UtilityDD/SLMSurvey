@@ -38,11 +38,11 @@
     const STRUCTURE_COLOR = '#1565c0';
 
     /** Max ground width (m) across the printed map hole before Auto/Multi splits pages. */
-    const MAX_CLEAR_MAP_WIDTH_M = 700;
+    const MAX_CLEAR_MAP_WIDTH_M = 380;
     /** Overlap between adjacent atlas sheets (keeps edge poles readable). */
     const SHEET_OVERLAP = 0.06;
     /** Padding around network bounds when planning sheets (m). */
-    const NETWORK_BOUNDS_PAD_M = 45;
+    const NETWORK_BOUNDS_PAD_M = 20;
 
     let printEnabled = false;
     let frameLeft = 0;
@@ -61,6 +61,8 @@
     /** User-framed page 1 atlas (zoom/pan), used for review + PDF. */
     let manualAtlasLocked = false;
     let pageOneBounds = null;
+    /** Per-sheet custom frames: index → {south,west,north,east} */
+    let sheetOverrides = Object.create(null);
 
     function $(id) {
         return document.getElementById(id);
@@ -702,7 +704,10 @@
             }
             if (typeof hideMapSymbolEditModal === 'function') hideMapSymbolEditModal();
             if (!manualAtlasLocked) {
-                showToast('Zoom & drag to frame page 1, then click Set page 1.');
+                const target = getTargetPageCount();
+                showToast(target === 'auto'
+                    ? 'Choose Fit in pages, click Fit pages, then Print PDF.'
+                    : `Click Fit pages for ${target} page${target === 1 ? '' : 's'}, review, then Print PDF.`);
             }
         } else {
             syncReviewModeUi();
@@ -713,6 +718,117 @@
         const el = $('printPageMode');
         const v = el && el.value;
         return (v === 'single' || v === 'multi') ? v : 'auto';
+    }
+
+    /** User "Fit in" control: 'auto' or integer page count. */
+    function getTargetPageCount() {
+        const el = $('printPageCount');
+        const v = el && el.value;
+        if (!v || v === 'auto') return 'auto';
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) && n >= 1 ? Math.min(16, n) : 'auto';
+    }
+
+    function setLegacyModeFromPageCount(count) {
+        const modeEl = $('printPageMode');
+        if (!modeEl) return;
+        if (count === 'auto') modeEl.value = 'auto';
+        else if (count === 1) modeEl.value = 'single';
+        else modeEl.value = 'multi';
+    }
+
+    /**
+     * Choose rows×cols with cells ≤ targetPages that best matches network shape.
+     * Prefers using more pages (clearer) when aspect is similar.
+     */
+    function choosePageGrid(targetPages, netW, netH, pageAspect) {
+        const n = Math.max(1, targetPages | 0);
+        let best = null;
+        for (let cols = 1; cols <= n; cols++) {
+            for (let rows = 1; rows <= Math.floor(n / cols); rows++) {
+                const cells = rows * cols;
+                const tileAspect = (netW / cols) / Math.max(1e-6, netH / rows);
+                const aspectPenalty = Math.abs(Math.log(Math.max(1e-6, tileAspect / pageAspect)));
+                const underusePenalty = (n - cells) * 0.08;
+                const score = aspectPenalty + underusePenalty;
+                if (
+                    !best ||
+                    score < best.score - 1e-9 ||
+                    (Math.abs(score - best.score) < 1e-9 && cells > best.rows * best.cols)
+                ) {
+                    best = { rows, cols, score };
+                }
+            }
+        }
+        return best || { rows: 1, cols: 1, score: 0 };
+    }
+
+    /** Tile the whole network into ≤ N pages (fit-within-N). */
+    function buildSheetPlanForCount(targetPages) {
+        const net = getNetworkBounds();
+        if (!net) {
+            sheetPlan = [];
+            currentSheetIndex = 0;
+            return sheetPlan;
+        }
+        const n = Math.max(1, targetPages | 0);
+        if (n === 1) {
+            sheetPlan = [{
+                bounds: net,
+                row: 0,
+                col: 0,
+                rows: 1,
+                cols: 1,
+                index: 0
+            }];
+            currentSheetIndex = 0;
+            return sheetPlan;
+        }
+
+        let aspect = mapHoleAspect(n > 1);
+        if (!(aspect > 0.2 && aspect < 8)) aspect = mapHoleAspect(false);
+        if (!(aspect > 0.2 && aspect < 8)) {
+            const page = getPageMm();
+            aspect = page.w / (page.h * (1 - HEADER_FRAC - FOOTER_FRAC));
+        }
+
+        const size = boundsSizeMeters(net);
+        const grid = choosePageGrid(n, size.w, size.h, aspect);
+        const rows = grid.rows;
+        const cols = grid.cols;
+
+        // Cover the whole network: tile size so rows×cols spans net with overlap.
+        const tileW = size.w / Math.max(1e-6, cols - (cols - 1) * SHEET_OVERLAP);
+        const tileH = size.h / Math.max(1e-6, rows - (rows - 1) * SHEET_OVERLAP);
+        const stepW = tileW * (1 - SHEET_OVERLAP);
+        const stepH = tileH * (1 - SHEET_OVERLAP);
+        const { mLat, mLng } = metersPerDeg(size.midLat);
+        const west0 = net.getWest();
+        const north0 = net.getNorth();
+
+        const tiles = [];
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const west = west0 + (c * stepW) / mLng;
+                const east = west + tileW / mLng;
+                const north = north0 - (r * stepH) / mLat;
+                const south = north - tileH / mLat;
+                tiles.push({
+                    bounds: L.latLngBounds([south, west], [north, east]),
+                    row: r,
+                    col: c,
+                    rows,
+                    cols,
+                    index: tiles.length
+                });
+            }
+        }
+
+        // Drop empty edge tiles; keep full cover if everything has poles.
+        const nonempty = tiles.filter((t) => sheetStatsForBounds(t.bounds).poles > 0);
+        sheetPlan = (nonempty.length ? nonempty : tiles).map((t, i) => ({ ...t, index: i }));
+        currentSheetIndex = 0;
+        return sheetPlan;
     }
 
     function mapHoleAspect(includeKeyPlan) {
@@ -809,10 +925,17 @@
     }
 
     /**
-     * Build atlas tiles at a readable ground scale. Returns one sheet when the
-     * network fits, or a left→right / top→bottom grid with overlap.
+     * Build atlas tiles. Uses "Fit in N pages" when set; otherwise Auto scale tiling.
      */
     function buildSheetPlan(forceMulti) {
+        clearManualAtlasSoft();
+        const target = getTargetPageCount();
+        if (target !== 'auto') {
+            setLegacyModeFromPageCount(target);
+            return buildSheetPlanForCount(target);
+        }
+        setLegacyModeFromPageCount('auto');
+
         const net = getNetworkBounds();
         if (!net) {
             sheetPlan = [];
@@ -820,7 +943,7 @@
             return sheetPlan;
         }
 
-        const mode = getPrintMode();
+        const mode = forceMulti ? 'multi' : getPrintMode();
         // Tile aspect matches the clear framing area (legend / key plan reserved).
         const multiLikely = mode === 'multi' || forceMulti;
         let aspect = mapHoleAspect(multiLikely);
@@ -911,6 +1034,14 @@
         return sheetPlan;
     }
 
+    function clearManualAtlasSoft() {
+        // Drop per-page overrides when rebuilding from Fit in N / Auto — keep
+        // locked flag only if still using page-1 atlas path elsewhere.
+        sheetOverrides = Object.create(null);
+        manualAtlasLocked = false;
+        pageOneBounds = null;
+    }
+
     function currentSheet() {
         return sheetPlan[currentSheetIndex] || null;
     }
@@ -958,6 +1089,59 @@
             [bounds.getSouth() + dLat, bounds.getWest() + dLng],
             [bounds.getNorth() + dLat, bounds.getEast() + dLng]
         );
+    }
+
+    function boundsToPlain(b) {
+        if (!b || !b.isValid()) return null;
+        return {
+            south: b.getSouth(),
+            west: b.getWest(),
+            north: b.getNorth(),
+            east: b.getEast()
+        };
+    }
+
+    function plainToBounds(p) {
+        if (!p) return null;
+        const b = L.latLngBounds([p.south, p.west], [p.north, p.east]);
+        return b.isValid() ? b : null;
+    }
+
+    function applySheetOverrides() {
+        Object.keys(sheetOverrides).forEach((key) => {
+            const i = Number(key);
+            if (!sheetPlan[i]) return;
+            const b = plainToBounds(sheetOverrides[key]);
+            if (b) sheetPlan[i].bounds = b;
+        });
+    }
+
+    /**
+     * Save the current map view into the active sheet — only via Set page button.
+     * (Do not hook dragend/zoomend; that fights Leaflet and feels unstable.)
+     */
+    function captureCurrentSheetFromView(opts) {
+        const options = opts || {};
+        if (!printEnabled || !map) return false;
+        if (!sheetPlan.length) return false;
+        fitLegendPanelInFrame();
+        const bounds = getClearMapLatLngBounds();
+        if (!bounds || !bounds.isValid()) {
+            if (!options.quiet) showToast('Could not read the print frame.');
+            return false;
+        }
+        const i = currentSheetIndex;
+        if (!sheetPlan[i]) return false;
+        sheetPlan[i].bounds = bounds;
+        sheetOverrides[i] = boundsToPlain(bounds);
+        if (i === 0) pageOneBounds = bounds;
+        refreshFrameChrome();
+        updateSheetNavUI();
+        syncReviewModeUi();
+        if (!options.quiet) {
+            showToast(`Page ${i + 1} saved — go to the next page to adjust it.`);
+        }
+        return true;
     }
 
     /**
@@ -1034,6 +1218,7 @@
             cols: colMax - colMin + 1,
             index: i
         }));
+        applySheetOverrides();
         currentSheetIndex = 0;
         return sheetPlan;
     }
@@ -1041,25 +1226,55 @@
     function syncReviewModeUi() {
         const overlay = $('printOverlay');
         if (overlay) {
-            overlay.classList.toggle('is-sheet-review', !!manualAtlasLocked && sheetPlan.length > 1);
+            overlay.classList.toggle('is-sheet-review', sheetPlan.length > 1);
         }
         const hint = $('printWorkflowHint');
         if (hint) {
+            const target = getTargetPageCount();
             if (!printEnabled) {
-                hint.textContent = '1) Zoom & drag to frame page 1 · 2) Set page 1 · 3) Swipe ← → to review · 4) Print PDF';
-            } else if (!manualAtlasLocked) {
-                hint.textContent = 'Zoom & drag the map to frame page 1 (clear of legend), then click Set page 1.';
+                hint.textContent = 'Choose Fit in pages · Fit pages · review · Print PDF.';
+            } else if (manualAtlasLocked && sheetPlan.length > 1) {
+                const customized = sheetOverrides[currentSheetIndex] ? ' · saved' : '';
+                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length}${customized} — pan/zoom, then Set page ${currentSheetIndex + 1} (advanced).`;
             } else if (sheetPlan.length > 1) {
-                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length} — swipe ← → or use arrows to review, then Print PDF.`;
+                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length} — use ‹ › to review, then Print PDF.`;
+            } else if (target !== 'auto') {
+                hint.textContent = target === 1
+                    ? 'Fitted to 1 page — Print PDF when ready.'
+                    : `Fitted within ${target} pages — review, then Print PDF.`;
             } else {
-                hint.textContent = 'Page 1 set — adjust title/settings if needed, then Print PDF.';
+                hint.textContent = 'Choose how many pages, click Fit pages, review with ‹ ›, then Print PDF.';
             }
         }
         const setBtn = $('btnSetPrintPageOne');
         if (setBtn) {
-            setBtn.textContent = manualAtlasLocked ? 'Reset page 1' : 'Set page 1';
+            if (!manualAtlasLocked && sheetPlan.length <= 1) {
+                setBtn.textContent = 'Set page 1';
+                setBtn.title = 'Advanced: lock page 1 framing and build sheets from it. Shift-click later to reset.';
+            } else {
+                setBtn.textContent = `Set page ${currentSheetIndex + 1}`;
+                setBtn.title = 'Advanced: save this page’s map position. Shift-click to reset all pages.';
+            }
             setBtn.classList.toggle('is-active', !!manualAtlasLocked);
         }
+    }
+
+    function onSetPageButtonClick() {
+        if (sheetPlan.length > 1 || (manualAtlasLocked && sheetPlan.length)) {
+            if (!manualAtlasLocked) {
+                manualAtlasLocked = true;
+                if (sheetPlan[0] && sheetPlan[0].bounds) {
+                    pageOneBounds = sheetPlan[0].bounds;
+                    if (!sheetOverrides[0]) {
+                        sheetOverrides[0] = boundsToPlain(pageOneBounds);
+                    }
+                }
+            }
+            captureCurrentSheetFromView({ quiet: false });
+            syncReviewModeUi();
+            return;
+        }
+        setPageOneFromView();
     }
 
     function setPageOneFromView() {
@@ -1081,6 +1296,8 @@
 
         pageOneBounds = bounds;
         manualAtlasLocked = true;
+        sheetOverrides = Object.create(null);
+        sheetOverrides[0] = boundsToPlain(bounds);
         // Force multi page mode so key plan shows when useful
         const modeEl = $('printPageMode');
         if (modeEl && modeEl.value === 'single') modeEl.value = 'auto';
@@ -1094,7 +1311,7 @@
         const total = sheetPlan.length;
         showToast(
             total > 1
-                ? `Page 1 locked · ${total} sheets built — reviewing page 2…`
+                ? `Page 1 locked · ${total} sheets — adjust each page if needed, then Print PDF`
                 : 'Page 1 locked · network fits on one sheet'
         );
 
@@ -1109,20 +1326,22 @@
     function clearManualAtlas() {
         manualAtlasLocked = false;
         pageOneBounds = null;
+        sheetOverrides = Object.create(null);
         syncReviewModeUi();
     }
 
-    function fitBoundsToMapHole(bounds, animate) {
+    function fitBoundsToMapHole(bounds, animate, opts) {
         if (!map || !bounds || !bounds.isValid()) return;
+        const options = opts || {};
         const hole = getMapHoleRectInViewport();
         if (!hole || hole.w < 40 || hole.h < 40) {
-            map.fitBounds(bounds, { padding: [36, 36], animate: !!animate, maxZoom: 19 });
+            map.fitBounds(bounds, { padding: [16, 16], animate: !!animate, maxZoom: 19 });
             return;
         }
         // Frame the network into the CLEAR part of the map hole only — never under
         // the legend (BR) or key plan (TL). Keep-outs are capped so the clear
         // rect stays large enough for multipage tiles to stay distinct.
-        const edgePad = 12;
+        const edgePad = options.tight ? 6 : 10;
         const ko = getHoleKeepOutPads(hole, { includeKeyPlan: sheetPlan.length > 1 });
         let clearLeft = hole.left + edgePad + ko.left;
         let clearTop = hole.top + edgePad + ko.top;
@@ -1161,6 +1380,7 @@
     }
 
     function maybeCrowdingToast() {
+        if (getTargetPageCount() !== 'auto') return;
         if (getPrintMode() !== 'auto') return;
         if (sheetPlan.length <= 1) return;
         const key = `${(surveyData && surveyData.surveyId) || 'x'}:${sheetPlan.length}`;
@@ -1214,12 +1434,16 @@
         maybeCrowdingToast();
         updateSheetNavUI();
         const sheet = currentSheet();
-        if (sheet) fitBoundsToMapHole(sheet.bounds, options.animate !== false);
+        if (sheet) {
+            fitBoundsToMapHole(sheet.bounds, options.animate !== false, {
+                tight: !!options.autoFit,
+            });
+        }
         refreshFrameChrome();
         syncReviewModeUi();
     }
 
-    function fitNetworkInFrame(ev) {
+    function fitNetworkInFrame() {
         if (!map || !nodes || nodes.length === 0) {
             showToast('Load a survey with poles first.');
             return;
@@ -1230,15 +1454,32 @@
             showToast('Print frame is too small.');
             return;
         }
-        const shift = ev && ev.shiftKey;
-        if (shift || !sheetPlan.length || getPrintMode() !== 'single') {
-            rebuildSheetsAndShow({ animate: true, forceMulti: shift && getPrintMode() === 'multi' });
-            return;
+        lastCrowdingToastKey = '';
+        const target = getTargetPageCount();
+        setLegacyModeFromPageCount(target);
+        rebuildSheetsAndShow({
+            animate: true,
+            forceMulti: target === 'auto' ? false : target > 1,
+            autoFit: true,
+        });
+        const total = sheetPlan.length;
+        if (target === 'auto') {
+            showToast(total > 1
+                ? `Auto: ${total} pages — review with ‹ ›, then Print PDF`
+                : 'Auto: fits on 1 page');
+        } else {
+            showToast(total > 1
+                ? `Fitted in ${total} page${total === 1 ? '' : 's'} — review, then Print PDF`
+                : 'Fitted on 1 page');
         }
-        // Single mode: fit whole network
-        const net = getNetworkBounds();
-        if (net) fitBoundsToMapHole(net, true);
-        refreshFrameChrome();
+    }
+
+    function onPrintPageCountChanged() {
+        lastCrowdingToastKey = '';
+        setLegacyModeFromPageCount(getTargetPageCount());
+        if (!printEnabled) setPrintEnabled(true);
+        else rebuildSheetsAndShow({ animate: true, autoFit: true });
+        syncReviewModeUi();
     }
 
     function getMapHoleRectInViewport() {
@@ -1282,7 +1523,7 @@
             if (!target.closest('.print-frame-chrome')) return;
             e.preventDefault();
             e.stopPropagation();
-            const reviewSwipe = manualAtlasLocked && sheetPlan.length > 1;
+            const reviewSwipe = sheetPlan.length > 1;
             dragState = {
                 startX: e.clientX,
                 startY: e.clientY,
@@ -1301,7 +1542,7 @@
         // Touch swipe for sheet review
         let touchState = null;
         frame.addEventListener('touchstart', (e) => {
-            if (!printEnabled || !manualAtlasLocked || sheetPlan.length <= 1) return;
+            if (!printEnabled || sheetPlan.length <= 1) return;
             if (!e.target.closest('.print-frame-chrome')) return;
             const t = e.touches[0];
             if (!t) return;
@@ -1386,27 +1627,28 @@
             goToSheet(0, true);
             syncReviewModeUi();
         } else {
-            rebuildSheetsAndShow({ animate: true });
+            rebuildSheetsAndShow({ animate: true, autoFit: true });
         }
     }
 
-    function onSetPageOneClick() {
-        if (manualAtlasLocked) {
+    function onSetPageOneClick(ev) {
+        // Shift-click resets the atlas and clears per-page positions.
+        if (manualAtlasLocked && ev && ev.shiftKey) {
             clearManualAtlas();
             buildSheetPlan(false);
             updateSheetNavUI();
             const sheet = currentSheet();
             if (sheet) fitBoundsToMapHole(sheet.bounds, true);
             refreshFrameChrome();
-            showToast('Page 1 cleared — zoom & drag, then Set page 1 again.');
+            showToast('Pages reset — choose Fit in and click Fit pages.');
             return;
         }
-        setPageOneFromView();
+        onSetPageButtonClick();
     }
 
     function initSheetKeyboardNav() {
         document.addEventListener('keydown', (e) => {
-            if (!printEnabled || !manualAtlasLocked || sheetPlan.length <= 1) return;
+            if (!printEnabled || sheetPlan.length <= 1) return;
             const tag = (e.target && e.target.tagName) || '';
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
             if (e.key === 'ArrowLeft') {
@@ -2603,13 +2845,8 @@
         maybeCrowdingToast();
         updateSheetNavUI();
         if (!sheetPlan.length) {
-            showToast(manualAtlasLocked
-                ? 'Set page 1 first (zoom/pan, then Set page 1).'
-                : 'Nothing to print — load poles first.');
+            showToast('Nothing to print — load poles first, then Fit pages.');
             return;
-        }
-        if (!manualAtlasLocked && sheetPlan.length > 1) {
-            showToast('Tip: Set page 1 by zoom/pan for better multipage framing.');
         }
 
         const { jsPDF } = jsPdfNs;
@@ -2710,7 +2947,11 @@
     function onWorkspaceLoaded() {
         lastCrowdingToastKey = '';
         syncMetaFromSurvey();
-        buildSheetPlan(false);
+        if (manualAtlasLocked && pageOneBounds) {
+            buildSheetPlanFromPageOne(pageOneBounds);
+        } else {
+            buildSheetPlan(false);
+        }
         updateSheetNavUI();
         refreshFrameChrome();
     }
@@ -2750,6 +2991,8 @@
         });
         const modeEl = $('printPageMode');
         if (modeEl) modeEl.addEventListener('change', onPrintModeChanged);
+        const pageCountEl = $('printPageCount');
+        if (pageCountEl) pageCountEl.addEventListener('change', onPrintPageCountChanged);
         ['printDrawingTitle', 'printSurveyor', 'printCompany', 'printDrawingNo', 'printScale'].forEach((id) => {
             const el = $(id);
             if (el) {

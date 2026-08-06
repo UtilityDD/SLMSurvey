@@ -6,31 +6,28 @@ Browser CAD + estimate tooling for SLM survey workspaces. Lives under `sld_edito
 
 ## Current focus
 
-Two desks for day-to-day use:
+**Primary UI:** three desks in `desk/` — open `sld_editor/` (redirects) or `sld_editor/desk/`.
 
-1. **Workspace** (`workspace/`) — one survey job: import → review → estimate  
-2. **Library** (`structure/`) — browse kits + edit recipes (Builder merged here)
-3. Job workspace for survey → estimate
+1. **Map** (`#map`) — import / open / demo map, verify poles, print, live estimate  
+2. **Structures** (`#structures`) — browse kits by voltage; edit recipes via embed  
+3. **Rates** (`#rates`) — materials, labour, turnkey schedules  
+
+Print CAD still uses `index.html?cad=1` (Fit in N pages · simple print chrome). Legacy shells remain at `workspace/legacy.html`, `structure/legacy.html`, `schedules/legacy.html`.
 
 Phone named presets are parked — do not block desktop cleanup on that work.
 
-### Structure gallery
+### Structures gallery
 
 - Loads `estimate/kit-matrix.json` + demo turnkey SoR (`demo_contract_schedule.json`)
-- Groups by **33kV / 11kV / LT**, then by type (1P, 2P, …)
-- Cards show location · arrangement · conductor + **SoR** chip when linked
-- Status: Final / Suggested (local) / Draft / Empty / Schedule linked
-- Detail drawer → Mark suggested · Edit kit (same Library desk)
+- Filter by **33kV / 11kV / LT**
+- Detail panel → Edit kit (opens `estimate/?embed=1`)
 
-### Workspace
+### Map desk
 
-- Catalog loader restored: `workspace/ws-catalog.js` (`SlmCatalog`)
-- Nav: Survey → Assemblies → Rates → Contract → Estimate (presets parked)
-
-### CAD chrome cleanup
-
-- Print toolbar hidden until Print Layout is on
-- Top menubar wired; **Send survey** → Workspace
+- Map via `workspace/ws-map.js` (mobile-matched poles)
+- Pole chips via `network-catalog.js`; overrides in workspace store
+- Print handoff → CAD (`?cad=1&print=1&simple=1`)
+- Live Materials / Labour / Scheme / Estimated; kit modal with optional admin edit
 
 ---
 
@@ -38,13 +35,14 @@ Phone named presets are parked — do not block desktop cleanup on that work.
 
 | Path | Role |
 |------|------|
-| `index.html` + `app.js` | Main CAD editor (Leaflet map, import survey JSON, SLD tools) |
-| `structure/` | **Library** — browse gallery + edit kits (Builder) |
-| `estimate/` | Kit editor engine (opens inside Library · Edit; `?embed=1`) |
-| `workspace/` | Job hub: survey → assemblies → rates → estimate |
-| `style.css`, `ui-dialog.js`, `ui-dialog.css` | UI + confirm/prompt modals |
+| `desk/` | **Primary shell** — Map · Structures · Rates |
+| `index.html` + `app.js` | Print CAD (`?cad=1`); otherwise redirects to `desk/` |
+| `estimate/` | Kit editor engine (`?embed=1` from Structures / kit modal) |
+| `workspace/` | Engines (`ws-store`, `ws-map`, catalog); `index.html` → desk |
+| `structure/`, `schedules/` | Redirect to desk; `legacy.html` keeps old UI |
+| `style.css`, `ui-dialog.js`, `ui-dialog.css` | CAD UI + confirm/prompt modals |
 | `license.js`, `license-config.js` | License gate (same codes as Android) |
-| `print_layout.js` | Print layouts |
+| `print_layout.js` | Print layouts (Fit in N pages) |
 | `estimate/README.md` | Kit matrix / publish details (read next) |
 
 Repo root also has `supabase/` for schema + edge functions used by license + catalog publish.
@@ -53,9 +51,10 @@ Repo root also has `supabase/` for schema + edge functions used by license + cat
 
 ## How to run
 
-1. Serve `sld_editor/` over HTTP (or open via Pages). Relative assets assume the folder URL (GitHub Pages script in `index.html` fixes missing trailing slash).
-2. For license/catalog: configure Supabase URL/anon key the same way as the Android `local.properties` (see `license-config.js` / estimate publish UI).
-3. Library: open `sld_editor/structure/` — use **Browse** / **Edit** on the left (Builder is merged here).
+1. Serve `sld_editor/` over HTTP (or open via Pages). Relative assets assume the folder URL.
+2. Open `sld_editor/` or `sld_editor/desk/` — three desks only.
+3. For license/catalog: configure Supabase URL/anon key the same way as the Android `local.properties`.
+4. Print: from Map → Print (opens CAD with map handoff).
 
 ---
 

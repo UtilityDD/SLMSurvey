@@ -18,10 +18,15 @@
                 location.replace(path + '/' + location.search + location.hash);
                 return;
             }
-            /* Primary desk is Job (map + poles + estimate). Keep ?cad=1 for print CAD. */
+            /* Primary desk is the clean 3-page shell. Keep ?cad=1 for print CAD. */
             var q = new URLSearchParams(location.search);
-            if (q.get('cad') === '1' || q.get('embed') === '1') return;
-            location.replace('./workspace/#survey');
+            if (q.get('cad') === '1' || q.get('embed') === '1') {
+                if (q.get('simple') === '1') {
+                    document.documentElement.classList.add('print-simple-pending');
+                }
+                return;
+            }
+            location.replace('./desk/#map');
         })();
     </script>
     <!-- Google Fonts -->
@@ -33,6 +38,12 @@
     <link rel="stylesheet" href="./ui-dialog.css">
 </head>
 <body>
+    <div id="printSimpleBar" class="print-simple-bar hidden">
+        <a class="print-simple-back" href="./desk/#map">← Map</a>
+        <strong class="print-simple-title">Print map</strong>
+        <span class="print-simple-hint">Fit in N pages · review · Print PDF</span>
+    </div>
+
     <!-- Same rental license as the Android app -->
     <div id="licenseGate" class="license-gate hidden" aria-modal="true" role="dialog">
         <div class="license-gate-card">
@@ -259,7 +270,7 @@
 
             <!-- Print / CAD Sheet Toolbar -->
             <div class="print-toolbar" id="printToolbar">
-                <div class="print-toolbar-group">
+                <div class="print-toolbar-group print-simple-keep">
                     <label class="print-field-label" for="printPageSize">Size</label>
                     <select id="printPageSize" class="print-select" title="Page size">
                         <option value="A4" selected>A4</option>
@@ -273,49 +284,58 @@
                         <option value="landscape" selected>Landscape</option>
                         <option value="portrait">Portrait</option>
                     </select>
-                    <label class="print-field-label" for="printDpi">DPI</label>
-                    <select id="printDpi" class="print-select" title="Export resolution">
+                    <label class="print-field-label" for="printPageCount">Fit in</label>
+                    <select id="printPageCount" class="print-select" title="Fit the whole network into this many pages">
+                        <option value="auto" selected>Auto</option>
+                        <option value="1">1 page</option>
+                        <option value="2">2 pages</option>
+                        <option value="3">3 pages</option>
+                        <option value="4">4 pages</option>
+                        <option value="6">6 pages</option>
+                        <option value="8">8 pages</option>
+                    </select>
+                    <label class="print-field-label print-simple-hide" for="printDpi">DPI</label>
+                    <select id="printDpi" class="print-select print-simple-hide" title="Export resolution">
                         <option value="150">150</option>
                         <option value="200" selected>200</option>
                         <option value="300">300</option>
                     </select>
-                    <label class="print-field-label" for="printPageMode">Pages</label>
-                    <select id="printPageMode" class="print-select" title="Auto splits large networks across clear sheets">
+                    <select id="printPageMode" class="print-select hidden" title="Legacy" aria-hidden="true">
                         <option value="auto" selected>Auto</option>
                         <option value="single">Single</option>
                         <option value="multi">Multi</option>
                     </select>
-                    <button type="button" class="btn print-toolbar-btn print-layout-toggle" id="btnTogglePrintLayout" title="Show printable page frame on map">
+                    <button type="button" class="btn print-toolbar-btn print-layout-toggle print-simple-hide" id="btnTogglePrintLayout" title="Show printable page frame on map">
                         <span>▦</span> Print preview
                     </button>
-                    <div class="print-zoom-stepper" id="printZoomStepper" title="Fine map zoom for framing">
-                        <button type="button" class="print-zoom-btn" id="btnMapZoomOut" title="Zoom out (fine step)">−</button>
-                        <button type="button" class="print-zoom-btn" id="btnMapZoomIn" title="Zoom in (fine step)">+</button>
+                    <div class="print-zoom-stepper" id="printZoomStepper" title="Fine map zoom">
+                        <button type="button" class="print-zoom-btn" id="btnMapZoomOut" title="Zoom out">−</button>
+                        <button type="button" class="print-zoom-btn" id="btnMapZoomIn" title="Zoom in">+</button>
                     </div>
                 </div>
-                <div class="print-toolbar-divider"></div>
-                <div class="print-toolbar-group print-meta-group">
+                <div class="print-toolbar-divider print-simple-hide"></div>
+                <div class="print-toolbar-group print-meta-group print-simple-hide">
                     <input type="text" id="printDrawingTitle" class="print-input" placeholder="Drawing title" title="Drawing title">
                     <input type="text" id="printSurveyor" class="print-input" placeholder="Surveyor" title="Surveyor / lineman">
                     <input type="text" id="printCompany" class="print-input print-input-sm" placeholder="Org / Utility" title="Organization">
                     <input type="text" id="printDrawingNo" class="print-input print-input-sm" placeholder="Drg No." title="Drawing number">
                     <input type="text" id="printScale" class="print-input print-input-xs" placeholder="Scale" value="NTS" title="Scale">
                 </div>
-                <div class="print-toolbar-divider"></div>
-                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Swipe or use arrows to review sheets">
+                <div class="print-toolbar-divider print-simple-hide"></div>
+                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Review sheets">
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetPrev" title="Previous sheet">‹</button>
                     <div class="print-sheet-strip" id="printSheetStrip"></div>
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetNext" title="Next sheet">›</button>
                 </div>
                 <div class="print-toolbar-group print-toolbar-actions">
-                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnSetPrintPageOne" title="Zoom/pan the map to frame page 1, then click this">Set page 1</button>
-                    <button type="button" class="btn print-toolbar-btn" id="btnFitPrintFrame" title="Fit whole network (auto pages)">Auto fit</button>
-                    <button type="button" class="btn print-toolbar-btn" id="btnCenterPrintFrame" title="Center print frame on screen">Center</button>
-                    <button type="button" class="btn print-toolbar-btn" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
-                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Print PDF from reviewed sheets">Print PDF</button>
+                    <button type="button" class="btn btn-primary print-toolbar-btn" id="btnFitPrintFrame" title="Fit network into the selected page count">Fit pages</button>
+                    <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnSetPrintPageOne" title="Advanced: lock page 1 framing">Set page 1</button>
+                    <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnCenterPrintFrame" title="Center print frame on screen">Center</button>
+                    <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
+                    <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Print PDF">Print PDF</button>
                 </div>
                 <p class="print-workflow-hint" id="printWorkflowHint">
-                    1) Zoom &amp; drag to frame page 1 · 2) Set page 1 · 3) Swipe ← → to review · 4) Print PDF
+                    Choose how many pages, click Fit pages, review with ‹ ›, then Print PDF.
                 </p>
             </div>
 

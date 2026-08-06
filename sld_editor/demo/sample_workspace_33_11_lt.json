@@ -1,6 +1,6 @@
 {
   "surveyId": 9001,
-  "title": "Sample demo \u00b7 33kV feeder + 11kV with DTRs + LT from DTR",
+  "title": "Sample demo · 33kV feeder + 11kV with DTRs + LT from DTR",
   "linemanName": "Demo Surveyor",
   "linemanMobile": "9000000001",
   "createdAt": 1720000000000,
@@ -10,13 +10,13 @@
     "grade": "A",
     "poleCount": 35,
     "verifiedCount": 35,
-    "verifiedPercent": 100.0,
+    "verifiedPercent": 100,
     "avgAccuracyM": 4.2,
-    "minAccuracyM": 3.0,
-    "maxAccuracyM": 6.0,
+    "minAccuracyM": 3,
+    "maxAccuracyM": 6,
     "avgDistanceFromDeviceM": 3.1,
-    "avgSatsUsed": 14.0,
-    "avgSnrDb": 32.0,
+    "avgSatsUsed": 14,
+    "avgSnrDb": 32,
     "mockCount": 0
   },
   "assets": [
@@ -55,7 +55,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 2,
@@ -92,7 +92,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 3,
@@ -129,7 +129,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 4,
@@ -152,7 +152,7 @@
       "structure": "2P",
       "seriesId": 1,
       "kitLocation": "Angular",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "With ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -166,7 +166,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 5,
@@ -203,7 +203,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 6,
@@ -226,7 +226,7 @@
       "structure": "1P",
       "seriesId": 1,
       "kitLocation": "Tangent",
-      "kitArrangement": "Sectional",
+      "kitArrangement": "In-line",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -240,7 +240,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 7,
@@ -263,7 +263,7 @@
       "structure": "2P",
       "seriesId": 1,
       "kitLocation": "Tangent",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -277,7 +277,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 8,
@@ -314,7 +314,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 9,
@@ -351,7 +351,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 10,
@@ -388,7 +388,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 11,
@@ -411,7 +411,7 @@
       "structure": "2P",
       "seriesId": 1,
       "kitLocation": "Tangent",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -425,7 +425,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 12,
@@ -448,7 +448,7 @@
       "structure": "4P",
       "seriesId": 1,
       "kitLocation": "T-Off",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -462,7 +462,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 13,
@@ -499,7 +499,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 14,
@@ -522,7 +522,7 @@
       "structure": "2P",
       "seriesId": 1,
       "kitLocation": "Angular",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -536,7 +536,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 15,
@@ -573,7 +573,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 16,
@@ -610,7 +610,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 17,
@@ -647,7 +647,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 18,
@@ -684,7 +684,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 19,
@@ -707,7 +707,7 @@
       "structure": "2P",
       "seriesId": 2,
       "kitLocation": "Angular",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "3W",
@@ -721,7 +721,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 20,
@@ -744,7 +744,7 @@
       "structure": "DTR",
       "seriesId": 2,
       "kitLocation": "Tangent",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": "2P",
       "kitWire": "3W",
@@ -758,7 +758,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 21,
@@ -795,7 +795,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 22,
@@ -832,7 +832,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 23,
@@ -851,11 +851,11 @@
       "dtCapacityKva": "250",
       "stayType": null,
       "earthingType": null,
-      "remarks": "DTR 250 kVA \u2014 LT take-off here",
+      "remarks": "DTR 250 kVA — LT take-off here",
       "structure": "DTR",
       "seriesId": 2,
       "kitLocation": "Tangent",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": "4P",
       "kitWire": "3W",
@@ -869,7 +869,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 24,
@@ -906,7 +906,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 25,
@@ -943,7 +943,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 26,
@@ -966,7 +966,7 @@
       "structure": "DTR",
       "seriesId": 2,
       "kitLocation": "Tangent",
-      "kitArrangement": "In-line",
+      "kitArrangement": "Sectional",
       "kitExtension": "No ext",
       "dtrMount": "2P",
       "kitWire": "3W",
@@ -980,7 +980,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 27,
@@ -1017,7 +1017,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 28,
@@ -1054,7 +1054,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 29,
@@ -1091,7 +1091,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 30,
@@ -1128,7 +1128,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 31,
@@ -1165,7 +1165,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 32,
@@ -1185,7 +1185,7 @@
       "stayType": null,
       "earthingType": null,
       "remarks": "ABC stretch",
-      "structure": "1P",
+      "structure": "3P",
       "seriesId": 3,
       "kitLocation": "Tangent",
       "kitArrangement": "In-line",
@@ -1202,7 +1202,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 33,
@@ -1239,7 +1239,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 34,
@@ -1263,7 +1263,7 @@
       "seriesId": 3,
       "kitLocation": "Tangent",
       "kitArrangement": "Sectional",
-      "kitExtension": "With ext",
+      "kitExtension": "No ext",
       "dtrMount": null,
       "kitWire": "2W",
       "guarding": true,
@@ -1276,7 +1276,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     },
     {
       "id": 35,
@@ -1313,7 +1313,7 @@
       "locationVerified": true,
       "satsUsedInFix": 14,
       "satsVisible": 18,
-      "avgSnrDb": 32.0
+      "avgSnrDb": 32
     }
   ],
   "connections": [
@@ -1599,5 +1599,5 @@
       "sourceSubstation": "DTR 250 kVA (seq 27)"
     }
   ],
-  "_sampleNote": "Synthetic phone-style workspace. Span lengths = GPS haversine between poles, placed under ContinueSpanGuidance limits (LT ABC \u226440 m; HT 9m PCC \u226470 m; HT Rail \u226480 m)."
+  "_sampleNote": "Synthetic phone-style workspace. Span lengths = GPS haversine between poles, placed under ContinueSpanGuidance limits (LT ABC ≤40 m; HT 9m PCC ≤70 m; HT Rail ≤80 m)."
 }

@@ -369,6 +369,62 @@ let activeEditNode = null;
 
 // Init Event Listeners on Load (after rental license gate)
 window.addEventListener('DOMContentLoaded', async () => {
+    // Register print handoff early — opener may post before license resolves.
+    const printParams = new URLSearchParams(location.search);
+    const simplePrintEarly = printParams.get('simple') === '1' || printParams.get('print') === '1';
+    let printHandoffDone = false;
+    let pendingPrintPacket = null;
+
+    function stashPrintPacket(packet) {
+        if (!packet || printHandoffDone) return;
+        pendingPrintPacket = packet;
+    }
+
+    function peekPrintHandoff() {
+        try {
+            const nm = String(window.name || '');
+            if (nm.indexOf('slmprint:') === 0) {
+                const rawName = nm.slice('slmprint:'.length);
+                window.name = '';
+                return JSON.parse(rawName);
+            }
+        } catch (e) {
+            try {
+                window.name = '';
+            } catch (e2) {
+                /* ignore */
+            }
+        }
+        try {
+            let raw = sessionStorage.getItem('slm_job_print_map_v1');
+            if (!raw) raw = localStorage.getItem('slm_job_print_map_v1');
+            if (raw) return JSON.parse(raw);
+        } catch (e) {
+            /* ignore */
+        }
+        return null;
+    }
+
+    // Capture handoff before any await (license gate) so data is not lost.
+    if (simplePrintEarly) {
+        stashPrintPacket(peekPrintHandoff());
+    }
+
+    window.addEventListener('message', (ev) => {
+        if (!ev.data || ev.data.type !== 'slm_print_map') return;
+        stashPrintPacket(ev.data.payload);
+        if (typeof window.__slmApplyPrintHandoff === 'function') {
+            window.__slmApplyPrintHandoff(ev.data.payload);
+        }
+    });
+    try {
+        if (simplePrintEarly && window.opener && !window.opener.closed) {
+            window.opener.postMessage({ type: 'slm_print_ready' }, '*');
+        }
+    } catch (e) {
+        /* ignore */
+    }
+
     const licensed = window.SlmLicense
         ? await window.SlmLicense.ensureLicensed()
         : true;
@@ -392,43 +448,153 @@ window.addEventListener('DOMContentLoaded', async () => {
     initBasemapControls();
     initResponsiveUi();
 
-    // Job desk can hand off the current survey for print CAD (?cad=1).
+    // Map desk handoff for print (?cad=1&print=1&simple=1).
     try {
-        const raw = sessionStorage.getItem('slm_job_print_map_v1');
-        if (raw) {
-            sessionStorage.removeItem('slm_job_print_map_v1');
-            const packet = JSON.parse(raw);
-            const data = packet && packet.survey ? packet.survey : packet;
-            const settings = (packet && packet.settings) || {};
-            const exportKind = (packet && packet.exportKind) || new URLSearchParams(location.search).get('export') || '';
-            if (data && Array.isArray(data.assets)) {
-                if (!Array.isArray(data.connections)) data.connections = [];
+        const params = printParams;
+        const simplePrint = params.get('simple') === '1';
+        if (simplePrint) {
+            document.documentElement.classList.remove('print-simple-pending');
+            document.body.classList.add('print-simple');
+            const bar = document.getElementById('printSimpleBar');
+            if (bar) bar.classList.remove('hidden');
+            document.title = 'Print map · SLM';
+        }
+
+        function applyPrintHandoff(packet) {
+            if (printHandoffDone || !packet) return false;
+            const data = packet.survey && Array.isArray(packet.survey.assets)
+                ? packet.survey
+                : Array.isArray(packet.assets)
+                  ? packet
+                  : null;
+            if (!data || !Array.isArray(data.assets) || !data.assets.length) return false;
+            printHandoffDone = true;
+            pendingPrintPacket = null;
+            try {
+                sessionStorage.removeItem('slm_job_print_map_v1');
+                localStorage.removeItem('slm_job_print_map_v1');
+            } catch (e) {
+                /* ignore */
+            }
+            if (!Array.isArray(data.connections)) data.connections = [];
+            try {
                 loadWorkspace(data);
-                const params = new URLSearchParams(location.search);
-                const wantPrint = params.get('print') === '1' || !!exportKind;
-                if (wantPrint && window.PrintLayout) {
-                    setTimeout(() => {
-                        const setVal = (id, v) => {
-                            const el = document.getElementById(id);
-                            if (el && v != null && v !== '') el.value = v;
-                        };
-                        setVal('printPageSize', settings.pageSize);
-                        setVal('printOrientation', settings.orientation);
-                        setVal('printDpi', settings.dpi);
-                        setVal('printPageMode', settings.pageMode);
-                        setVal('printDrawingTitle', settings.title);
-                        setVal('printSurveyor', settings.surveyor);
-                        setVal('printCompany', settings.company);
-                        setVal('printDrawingNo', settings.drawingNo);
-                        setVal('printScale', settings.scale);
-                        window.PrintLayout.setEnabled(true);
-                        if (exportKind === 'pdf' && typeof window.PrintLayout.exportPdf === 'function') {
-                            setTimeout(() => window.PrintLayout.exportPdf(), 700);
-                        } else if (exportKind === 'png' && typeof window.PrintLayout.exportPng === 'function') {
-                            setTimeout(() => window.PrintLayout.exportPng(), 700);
-                        }
-                    }, 450);
+            } catch (err) {
+                console.error('Print handoff loadWorkspace failed', err);
+                printHandoffDone = false;
+                return false;
+            }
+
+            const settings = (packet && packet.settings) || {};
+            const exportKind = (packet && packet.exportKind) || params.get('export') || '';
+            const wantPrint = params.get('print') === '1' || !!exportKind || simplePrint;
+
+            requestAnimationFrame(() => {
+                if (typeof map !== 'undefined' && map) {
+                    try {
+                        map.invalidateSize(false);
+                    } catch (e) {
+                        /* ignore */
+                    }
                 }
+            });
+
+            if (wantPrint && window.PrintLayout) {
+                setTimeout(() => {
+                    const setVal = (id, v) => {
+                        const el = document.getElementById(id);
+                        if (el && v != null && v !== '') el.value = v;
+                    };
+                    setVal('printPageSize', settings.pageSize);
+                    setVal('printOrientation', settings.orientation);
+                    setVal('printDpi', settings.dpi);
+                    setVal('printPageMode', settings.pageMode);
+                    setVal('printDrawingTitle', settings.title);
+                    setVal('printSurveyor', settings.surveyor);
+                    setVal('printCompany', settings.company);
+                    setVal('printDrawingNo', settings.drawingNo);
+                    setVal('printScale', settings.scale);
+                    window.PrintLayout.setEnabled(true);
+                    if (typeof map !== 'undefined' && map) {
+                        try {
+                            map.invalidateSize(false);
+                        } catch (e) {
+                            /* ignore */
+                        }
+                    }
+                    if (exportKind === 'pdf' && typeof window.PrintLayout.exportPdf === 'function') {
+                        setTimeout(() => window.PrintLayout.exportPdf(), 700);
+                    } else if (exportKind === 'png' && typeof window.PrintLayout.exportPng === 'function') {
+                        setTimeout(() => window.PrintLayout.exportPng(), 700);
+                    }
+                }, 450);
+            }
+            return true;
+        }
+
+        window.__slmApplyPrintHandoff = applyPrintHandoff;
+
+        function readStoredHandoff() {
+            // Already captured into pendingPrintPacket before license; also re-check storage.
+            if (pendingPrintPacket) return pendingPrintPacket;
+
+            // Hash payload (legacy)
+            try {
+                const hash = location.hash || "";
+                const marker = "#slmprint=";
+                const idx = hash.indexOf(marker);
+                if (idx >= 0) {
+                    const encoded = hash.slice(idx + marker.length);
+                    const parsed = JSON.parse(decodeURIComponent(encoded));
+                    try {
+                        history.replaceState(
+                            null,
+                            "",
+                            location.pathname + location.search
+                        );
+                    } catch (e) {
+                        /* ignore */
+                    }
+                    return parsed;
+                }
+            } catch (e) {
+                console.warn("Print hash handoff failed", e);
+            }
+
+            let raw = null;
+            try {
+                raw = sessionStorage.getItem("slm_job_print_map_v1");
+            } catch (e) {
+                /* ignore */
+            }
+            if (!raw) {
+                try {
+                    raw = localStorage.getItem("slm_job_print_map_v1");
+                } catch (e) {
+                    /* ignore */
+                }
+            }
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        try {
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage({ type: 'slm_print_ready' }, '*');
+            }
+        } catch (e) {
+            /* ignore */
+        }
+
+        if (!applyPrintHandoff(pendingPrintPacket) && !applyPrintHandoff(readStoredHandoff())) {
+            if (simplePrint && window.PrintLayout) {
+                setTimeout(() => {
+                    if (!printHandoffDone) window.PrintLayout.setEnabled(true);
+                }, 800);
             }
         }
     } catch (err) {
@@ -660,20 +826,22 @@ async function loadDemoWorkspace() {
 function loadWorkspace(data) {
     surveyData = data;
 
-    // Display survey details
-    document.getElementById('infoTitle').textContent = data.title || 'N/A';
-    document.getElementById('infoLineman').textContent = data.linemanName || 'N/A';
-    document.getElementById('infoMobile').textContent = data.linemanMobile || 'N/A';
-    document.getElementById('infoStatus').textContent = data.isLiveAtSite ? 'Live GPS Verified' : 'Standard Drawing';
-    const railDoc = document.getElementById('mapRailDocTitle');
-    if (railDoc) railDoc.textContent = data.title || 'Survey loaded';
-    const menuDoc = document.getElementById('menubarDocTitle');
-    if (menuDoc) menuDoc.textContent = data.title || 'Survey loaded';
+    // Display survey details (elements may be hidden in simple print mode)
+    const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    setText('infoTitle', data.title || 'N/A');
+    setText('infoLineman', data.linemanName || 'N/A');
+    setText('infoMobile', data.linemanMobile || 'N/A');
+    setText('infoStatus', data.isLiveAtSite ? 'Live GPS Verified' : 'Standard Drawing');
+    setText('mapRailDocTitle', data.title || 'Survey loaded');
+    setText('menubarDocTitle', data.title || 'Survey loaded');
 
     // Show sections
-    document.getElementById('infoCard').classList.remove('hidden');
-    document.getElementById('toolsCard').classList.remove('hidden');
-    document.getElementById('actionsCard').classList.remove('hidden');
+    document.getElementById('infoCard')?.classList.remove('hidden');
+    document.getElementById('toolsCard')?.classList.remove('hidden');
+    document.getElementById('actionsCard')?.classList.remove('hidden');
     const btnEst = document.getElementById('btnGenerateEstimate');
     if (btnEst) {
         btnEst.disabled = false;
@@ -705,7 +873,7 @@ function loadWorkspace(data) {
         nodes.push({
             id: asset.id,
             sequence: asset.sequence,
-            label: `P-${asset.sequence.toString().padStart(2, '0')}`,
+            label: `P-${String(asset.sequence != null ? asset.sequence : asset.id).padStart(2, '0')}`,
             structure: asset.structure || '1P',
             material: asset.poleMaterial || 'PCC-9M',
             remarks: asset.remarks || '',
@@ -720,6 +888,7 @@ function loadWorkspace(data) {
         if (asset.surveyLongitude == null) asset.surveyLongitude = asset.longitude;
     });
 
+    data.connections = Array.isArray(data.connections) ? data.connections : [];
     data.connections.forEach(conn => {
         edges.push({
             id: conn.id,

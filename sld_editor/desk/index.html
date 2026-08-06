@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SLM Desktop</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="../ui-dialog.css">
+  <link rel="stylesheet" href="./desk.css">
+</head>
+<body>
+  <div id="licenseGate" class="dk-gate hidden" aria-modal="true" role="dialog">
+    <div class="dk-gate-card">
+      <div class="dk-gate-brand">SLM</div>
+      <h1>Activate license</h1>
+      <p>Same rental code as the phone app. Survey files stay on this computer.</p>
+      <label for="licenseCodeInput">License code</label>
+      <input id="licenseCodeInput" type="text" autocomplete="off" spellcheck="false" placeholder="SLM-…">
+      <p id="licenseStatus" class="dk-gate-status"></p>
+      <p id="licenseError" class="dk-gate-error"></p>
+      <button type="button" id="licenseActivateBtn" class="dk-btn dk-btn-primary">Activate</button>
+      <button type="button" id="licenseSignOutBtn" class="dk-btn dk-btn-ghost">Sign out</button>
+      <div id="licenseProgress" class="dk-gate-progress hidden">Checking…</div>
+    </div>
+  </div>
+
+  <div class="dk-shell">
+    <aside class="dk-rail" aria-label="Desks">
+      <a class="dk-brand" href="#map">
+        <span class="dk-brand-mark">SLM</span>
+        <span class="dk-brand-name">Desktop</span>
+      </a>
+
+      <nav class="dk-nav" aria-label="Main">
+        <section class="dk-block is-active" data-desk="map">
+          <button type="button" class="dk-block-head" data-desk="map">
+            <span class="dk-nav-label">Map</span>
+          </button>
+          <div class="dk-block-body" id="dkItems-map"></div>
+        </section>
+
+        <section class="dk-block" data-desk="structures">
+          <button type="button" class="dk-block-head" data-desk="structures">
+            <span class="dk-nav-label">Structures</span>
+          </button>
+          <div class="dk-block-body" id="dkItems-structures"></div>
+        </section>
+
+        <section class="dk-block" data-desk="rates">
+          <button type="button" class="dk-block-head" data-desk="rates">
+            <span class="dk-nav-label">Rates</span>
+          </button>
+          <div class="dk-block-body" id="dkItems-rates"></div>
+        </section>
+      </nav>
+    </aside>
+
+    <main class="dk-main" id="dkMain"></main>
+  </div>
+
+  <div class="dk-toast hidden" id="dkToast"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="../ui-dialog.js"></script>
+  <script src="../license-config.js"></script>
+  <script src="../license.js"></script>
+  <script src="../seal.js"></script>
+  <script src="../estimate/estimate-match.js"></script>
+  <script src="../estimate/schedule-books.js"></script>
+  <script src="../workspace/ws-store.js"></script>
+  <script src="../workspace/ws-catalog.js"></script>
+  <script src="../workspace/ws-map.js"></script>
+  <script src="../workspace/network-catalog.js"></script>
+  <script src="./desk.js"></script>
+  <script src="./job.js"></script>
+  <script src="./structures.js"></script>
+  <script src="./rates.js"></script>
+  <script src="./boot.js"></script>
+</body>
+</html>

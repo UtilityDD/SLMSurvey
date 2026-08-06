@@ -24,24 +24,25 @@ tools/               Misc assets/scripts
 
 ## Current focus
 
-**Desktop UI cleanup** — two desks:
+**Desktop UI** — three desks in `sld_editor/desk/`:
 
 | Desk | Path | Role |
 |------|------|------|
-| **Workspace** | `sld_editor/workspace/` | Job: import survey map, preview/print (via CAD), review poles, estimate |
-| **Structure** | `sld_editor/structure/` | Visual catalog: voltage-grouped structure cards, draft/suggested/final status |
+| **Map** | `sld_editor/desk/#map` | Import / open / demo map, verify poles, print, live estimate |
+| **Structures** | `sld_editor/desk/#structures` | Browse / edit kits |
+| **Rates** | `sld_editor/desk/#rates` | Materials, labour, turnkey schedules |
+
+`sld_editor/` redirects into the desk shell; print CAD stays on `index.html?cad=1`.
 
 Phone **survey presets** are parked (`PresetPreferences.FEATURE_ENABLED = false`); see [`app/README.md`](app/README.md).
-
-CAD print toolbar is off until Print Layout is enabled; menubar is wired; survey handoff goes to Workspace.
 
 ## Build notes
 
 - Android Gradle: use **JDK 21** (Java 25 fails).
 - Android secrets: root `local.properties` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
-- Desktop: serve `sld_editor/`; Assembly Builder at `sld_editor/estimate/`; workspace hub at `sld_editor/workspace/`.
+- Desktop: serve `sld_editor/` (opens Map desk) or `sld_editor/desk/` directly.
 
 ## Data flow (one line)
 
-Phone survey JSON (poles + kit tags) → desktop CAD / Estimate tab → BOQ from published kits.  
-Kits built in Assembly Builder → **Publish to app** → phones pull catalog for optional field check.
+Phone survey JSON (poles + kit tags) → Map desk → print / estimate from kits.  
+Kits built in Structures → **Publish to app** → phones pull catalog for optional field check.

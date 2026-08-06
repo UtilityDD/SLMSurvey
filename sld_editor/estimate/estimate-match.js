@@ -914,6 +914,7 @@
     buildContractReportFromHits,
     hitsFromCounts,
     collectKitHits,
+    findStructureKit,
     reportAsText,
     computeAbstract,
     defaultExtras,
