@@ -599,12 +599,28 @@
     }
   }
 
-  function kitLineRowsHtml(lines) {
+  function lineIsLabour(line, rate) {
+    var typ = String((line && line.type) || (rate && rate.type) || "").toLowerCase();
+    if (typ === "labour" || typ === "lab") return true;
+    var code = String((line && (line.itemId || line.code || line.matCode)) || "");
+    return /^L/i.test(code);
+  }
+
+  /** Mat/Lab schedule-style rows: Sl · Code · Description · Unit · Qty (no rate/₹). */
+  function kitScheduleTableHtml(lines, emptyLabel) {
     if (!lines || !lines.length) {
-      return '<tr><td colspan="4" class="dk-sched-empty">No recipe lines</td></tr>';
+      return (
+        '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
+        '<table class="dk-sched-table"><thead><tr>' +
+        "<th>Sl.</th><th>Code</th><th>Description</th><th>Unit</th>" +
+        '<th class="dk-num">Qty</th></tr></thead><tbody>' +
+        '<tr><td colspan="5" class="dk-sched-empty">' +
+        esc(emptyLabel || "No items") +
+        "</td></tr></tbody></table></div>"
+      );
     }
-    return lines
-      .map(function (l) {
+    var body = lines
+      .map(function (l, i) {
         var code = l.itemId || l.code || l.matCode || "—";
         var rate = Cat && Cat.rateFor ? Cat.rateFor(code) : null;
         var desc =
@@ -613,33 +629,67 @@
           l.name ||
           "";
         var unit = (rate && rate.unit) || l.unit || "";
-        var typ = l.type || (rate && rate.type) || "";
         return (
-          "<tr>" +
-          "<td><code class=\"dk-kit-code\">" +
+          "<tr><td>" +
+          esc(String(i + 1)) +
+          "</td><td>" +
           esc(code) +
-          "</code>" +
-          (desc
-            ? '<div class="dk-kit-line-desc">' + esc(desc) + "</div>"
-            : "") +
-          "</td>" +
-          "<td>" +
-          esc(typ) +
-          "</td>" +
-          '<td class="dk-num">' +
-          esc(String(kitLineQty(l))) +
-          "</td>" +
-          "<td>" +
-          esc(unit) +
+          "</td><td>" +
+          esc(desc || "—") +
+          "</td><td>" +
+          esc(unit || "—") +
+          '</td><td class="dk-num">' +
+          esc(fmtQty(kitLineQty(l))) +
           "</td></tr>"
         );
       })
       .join("");
+    return (
+      '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
+      '<table class="dk-sched-table"><thead><tr>' +
+      "<th>Sl.</th><th>Code</th><th>Description</th><th>Unit</th>" +
+      '<th class="dk-num">Qty</th></tr></thead><tbody>' +
+      body +
+      "</tbody></table></div>"
+    );
+  }
+
+  function kitRecipeSchedulesHtml(lines) {
+    var mats = [];
+    var labs = [];
+    (lines || []).forEach(function (l) {
+      var code = l.itemId || l.code || l.matCode || "";
+      var rate = Cat && Cat.rateFor ? Cat.rateFor(code) : null;
+      if (lineIsLabour(l, rate)) labs.push(l);
+      else mats.push(l);
+    });
+    return (
+      '<div class="dk-kit-sched-block">' +
+      '<div class="dk-kit-sched-head">' +
+      "<h3>Schedule of materials</h3>" +
+      '<span class="dk-kit-sched-count">' +
+      mats.length +
+      " item" +
+      (mats.length === 1 ? "" : "s") +
+      "</span></div>" +
+      kitScheduleTableHtml(mats, "No materials in this kit") +
+      "</div>" +
+      '<div class="dk-kit-sched-block">' +
+      '<div class="dk-kit-sched-head">' +
+      "<h3>Schedule of labour</h3>" +
+      '<span class="dk-kit-sched-count">' +
+      labs.length +
+      " item" +
+      (labs.length === 1 ? "" : "s") +
+      "</span></div>" +
+      kitScheduleTableHtml(labs, "No labour in this kit") +
+      "</div>"
+    );
   }
 
   /**
    * Single-kit modal from Map → View kit.
-   * view: clean recipe card
+   * view: Mat/Lab schedule-style recipe (no rate/₹)
    * edit: Structure kit editor (solo embed) inside the same modal
    */
   function openKitModal(kit, opts) {
@@ -713,7 +763,7 @@
         "</div></div>";
     } else {
       root.innerHTML =
-        '<div class="dk-modal-card dk-kit-view-card">' +
+        '<div class="dk-modal-card dk-modal-wide dk-kit-view-card">' +
         '<div class="dk-modal-head">' +
         '<div class="dk-modal-head-text">' +
         "<h2>" +
@@ -723,7 +773,9 @@
         esc(live.id || "") +
         " · " +
         lines.length +
-        " lines</p>" +
+        " line" +
+        (lines.length === 1 ? "" : "s") +
+        "</p>" +
         "</div>" +
         '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
         "</div>" +
@@ -737,12 +789,7 @@
               .join("") +
             "</div>"
           : "") +
-        '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
-        '<table class="dk-sched-table"><thead><tr>' +
-        "<th>Item</th><th>Type</th><th class=\"dk-num\">Qty</th><th>Unit</th>" +
-        "</tr></thead><tbody>" +
-        kitLineRowsHtml(lines) +
-        "</tbody></table></div>" +
+        kitRecipeSchedulesHtml(lines) +
         '<div class="dk-modal-actions">' +
         (admin
           ? '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitEdit">Edit kit</button>'
