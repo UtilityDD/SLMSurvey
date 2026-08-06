@@ -41,6 +41,42 @@ body {
     /* Nested inside Library iframe — no second Job/Map/Library chrome */
 }
 
+/* Solo kit editor (Map View kit → Edit): only the Structure kit editor panel */
+html.est-solo-page,
+html.est-solo-page body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: #fff;
+}
+.est-shell.est-solo {
+    height: 100vh;
+    height: 100dvh;
+    max-width: none;
+}
+.est-shell.est-solo .est-embed-rail,
+.est-shell.est-solo .est-menubar,
+.est-shell.est-solo #boardPanel,
+.est-shell.est-solo #boqPanel,
+.est-shell.est-solo #ratebookPanel,
+.est-shell.est-solo #schedulesPanel,
+.est-shell.est-solo #guideModal,
+.est-shell.est-solo #customModal {
+    display: none !important;
+}
+.est-shell.est-solo .est-main {
+    width: 100%;
+    flex: 1;
+}
+.est-shell.est-solo #editorPanel {
+    display: flex !important;
+    flex: 1;
+    min-height: 0;
+}
+.est-shell.est-solo .ed-back {
+    display: none; /* parent modal owns Back / Close */
+}
+
 .est-embed-rail {
     --slm-rail-width: 200px;
 }

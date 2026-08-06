@@ -638,10 +638,11 @@
   }
 
   /**
-   * Clean single-kit recipe modal (Map → View kit).
-   * View-only here — editing stays on the Structures desk.
+   * Single-kit modal from Map → View kit.
+   * view: clean recipe card
+   * edit: Structure kit editor (solo embed) inside the same modal
    */
-  function openKitModal(kit) {
+  function openKitModal(kit, opts) {
     if (!kit) {
       if (global.SlmDialog && global.SlmDialog.alert) {
         global.SlmDialog.alert({
@@ -653,6 +654,8 @@
       }
       return;
     }
+    opts = opts || {};
+    var editing = !!opts.edit && canEditKits();
     var Match = global.SlmEstimateMatch;
     var live = refreshKitFromCatalog(kit.id) || kit;
     var title =
@@ -687,61 +690,134 @@
       });
     }
 
-    root.innerHTML =
-      '<div class="dk-modal-card dk-kit-view-card">' +
-      '<div class="dk-modal-head">' +
-      '<div class="dk-modal-head-text">' +
-      "<h2>" +
-      esc(title) +
-      "</h2>" +
-      '<p class="dk-modal-sub">' +
-      esc(live.id || "") +
-      " · " +
-      lines.length +
-      " lines</p>" +
-      "</div>" +
-      '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
-      "</div>" +
-      '<div class="dk-modal-body dk-kit-view-body">' +
-      (chips.length
-        ? '<div class="dk-kit-attr-chips">' +
-          chips
-            .map(function (c) {
-              return '<span class="dk-kit-attr-chip">' + esc(c) + "</span>";
-            })
-            .join("") +
-          "</div>"
-        : "") +
-      '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
-      '<table class="dk-sched-table"><thead><tr>' +
-      "<th>Item</th><th>Type</th><th class=\"dk-num\">Qty</th><th>Unit</th>" +
-      "</tr></thead><tbody>" +
-      kitLineRowsHtml(lines) +
-      "</tbody></table></div>" +
-      '<div class="dk-modal-actions">' +
-      (admin
-        ? '<button type="button" class="dk-btn dk-btn-sm" id="dkKitEdit">Edit in Structures</button>'
-        : "") +
-      '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitDone">Close</button>' +
-      "</div></div></div>";
+    openKitModal._kitId = live.id;
+
+    if (editing) {
+      root.innerHTML =
+        '<div class="dk-modal-card dk-kit-edit-card">' +
+        '<div class="dk-modal-head">' +
+        '<div class="dk-modal-head-text">' +
+        "<h2>Edit kit</h2>" +
+        '<p class="dk-modal-sub">' +
+        esc(title) +
+        "</p></div>" +
+        '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
+        "</div>" +
+        '<div class="dk-modal-body is-embed">' +
+        '<iframe class="dk-kit-embed" id="dkKitEmbed" title="Edit kit" src="../estimate/?embed=1&solo=1&kit=' +
+        encodeURIComponent(live.id || "") +
+        '"></iframe></div>' +
+        '<div class="dk-modal-actions dk-modal-actions-bar">' +
+        '<button type="button" class="dk-btn dk-btn-sm" id="dkKitBack">← Recipe</button>' +
+        '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitDone">Done</button>' +
+        "</div></div>";
+    } else {
+      root.innerHTML =
+        '<div class="dk-modal-card dk-kit-view-card">' +
+        '<div class="dk-modal-head">' +
+        '<div class="dk-modal-head-text">' +
+        "<h2>" +
+        esc(title) +
+        "</h2>" +
+        '<p class="dk-modal-sub">' +
+        esc(live.id || "") +
+        " · " +
+        lines.length +
+        " lines</p>" +
+        "</div>" +
+        '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
+        "</div>" +
+        '<div class="dk-modal-body dk-kit-view-body">' +
+        (chips.length
+          ? '<div class="dk-kit-attr-chips">' +
+            chips
+              .map(function (c) {
+                return '<span class="dk-kit-attr-chip">' + esc(c) + "</span>";
+              })
+              .join("") +
+            "</div>"
+          : "") +
+        '<div class="dk-sched-scroll dk-kit-recipe-scroll">' +
+        '<table class="dk-sched-table"><thead><tr>' +
+        "<th>Item</th><th>Type</th><th class=\"dk-num\">Qty</th><th>Unit</th>" +
+        "</tr></thead><tbody>" +
+        kitLineRowsHtml(lines) +
+        "</tbody></table></div>" +
+        '<div class="dk-modal-actions">' +
+        (admin
+          ? '<button type="button" class="dk-btn dk-btn-primary dk-btn-sm" id="dkKitEdit">Edit kit</button>'
+          : "") +
+        '<button type="button" class="dk-btn dk-btn-sm" id="dkKitDone">Close</button>' +
+        "</div></div></div>";
+    }
 
     root.classList.remove("hidden");
 
+    function backToRecipe() {
+      var id = openKitModal._kitId || live.id;
+      if (Cat && Cat.load) {
+        Cat.load()
+          .then(function () {
+            openKitModal(refreshKitFromCatalog(id) || live, { edit: false });
+          })
+          .catch(function () {
+            openKitModal(refreshKitFromCatalog(id) || live, { edit: false });
+          });
+      } else {
+        openKitModal(refreshKitFromCatalog(id) || live, { edit: false });
+      }
+    }
+
     var closeBtn = root.querySelector("#dkKitClose");
     var doneBtn = root.querySelector("#dkKitDone");
+    var backBtn = root.querySelector("#dkKitBack");
     var editBtn = root.querySelector("#dkKitEdit");
     if (closeBtn) closeBtn.addEventListener("click", closeKitModal);
-    if (doneBtn) doneBtn.addEventListener("click", closeKitModal);
+    if (doneBtn) {
+      doneBtn.addEventListener("click", function () {
+        if (editing) backToRecipe();
+        else closeKitModal();
+      });
+    }
+    if (backBtn) backBtn.addEventListener("click", backToRecipe);
     if (editBtn) {
       editBtn.addEventListener("click", function () {
-        closeKitModal();
-        if (global.SlmStructuresDesk && global.SlmStructuresDesk.openKitEdit) {
-          global.SlmStructuresDesk.openKitEdit(live.id);
+        openKitModal(live, { edit: true });
+      });
+    }
+
+    if (!openKitModal._msg) {
+      openKitModal._msg = true;
+      window.addEventListener("message", function (ev) {
+        if (!ev.data) return;
+        if (
+          ev.data.type !== "slm_kit_solo_done" &&
+          ev.data.type !== "slm_kit_solo_saved"
+        ) {
+          return;
+        }
+        var m = document.getElementById("dkKitModal");
+        if (!m || m.classList.contains("hidden")) return;
+        if (ev.data.type === "slm_kit_solo_saved") {
+          Desk.toast("Kit saved");
+          return;
+        }
+        var id = ev.data.kitId || openKitModal._kitId;
+        if (!id) return;
+        if (Cat && Cat.load) {
+          Cat.load()
+            .then(function () {
+              openKitModal(refreshKitFromCatalog(id) || { id: id }, { edit: false });
+            })
+            .catch(function () {
+              openKitModal(refreshKitFromCatalog(id) || { id: id }, { edit: false });
+            });
         } else {
-          Desk.go("structures");
+          openKitModal(refreshKitFromCatalog(id) || { id: id }, { edit: false });
         }
       });
     }
+
     if (!openKitModal._esc) {
       openKitModal._esc = true;
       document.addEventListener("keydown", function (e) {

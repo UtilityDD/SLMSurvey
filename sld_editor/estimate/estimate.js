@@ -1170,6 +1170,22 @@
     return !!(state.draft && state.draft._dirty);
   }
 
+  function isSoloEmbed() {
+    return new URLSearchParams(location.search).get("solo") === "1";
+  }
+
+  function notifySoloParent(type, extra) {
+    if (!isSoloEmbed() || window.parent === window) return;
+    try {
+      window.parent.postMessage(
+        Object.assign({ type: type, kitId: state.activeKitId }, extra || {}),
+        "*"
+      );
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   async function closeEditor(opts) {
     opts = opts || {};
     if (!opts.force && isDraftDirty()) {
@@ -1181,6 +1197,10 @@
         danger: true,
       });
       if (!leave) return;
+    }
+    if (isSoloEmbed()) {
+      notifySoloParent("slm_kit_solo_done", { dirty: false });
+      return;
     }
     state.activeKitId = null;
     state.draft = null;
@@ -1432,6 +1452,7 @@
     renderStats();
     renderEditorSummary();
     toast(kit.complete ? "Saved · Final" : "Saved · Draft");
+    notifySoloParent("slm_kit_solo_saved", { complete: !!kit.complete });
   }
 
   function seedConductor() {
@@ -2978,14 +2999,23 @@
     const params = new URLSearchParams(location.search);
     const startTab = params.get("tab");
     const kitId = params.get("kit");
+    const solo = params.get("solo") === "1";
+    if (solo) {
+      document.documentElement.classList.add("est-solo-page");
+      $("estShell")?.classList.add("est-solo");
+    }
     const fromSession = tryLoadBoqFromSession();
-    if (startTab === "boq" || fromSession) {
+    if (solo && kitId) {
+      // Focused single-kit editor — skip board tabs.
+      if (kitId && state.kitsById[kitId]) openEditor(kitId);
+      else toast("Kit not found in catalog");
+    } else if (startTab === "boq" || fromSession) {
       showTab("boq");
       if (fromSession && state.boqSurvey) generateBoq();
     } else {
       showTab("structure");
     }
-    if (kitId && state.kitsById[kitId]) {
+    if (!solo && kitId && state.kitsById[kitId]) {
       openEditor(kitId);
     }
 
