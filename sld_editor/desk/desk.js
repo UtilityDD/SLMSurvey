@@ -141,20 +141,67 @@
       });
   }
 
+  /**
+   * APK download URL for the desk rail button.
+   * - Non-Drive URLs (GitHub Releases, Supabase Storage, CDN) are used as-is (true direct download).
+   * - Drive share/view links open Drive’s export page where the user must click
+   *   “Download anyway” — Google always shows that for large executables; silent
+   *   confirm=t bypass does not work for APKs over the virus-scan size limit.
+   */
+  function apkDownloadUrl(raw) {
+    var s = String(raw || "").trim();
+    if (!s) return { href: "", kind: "none" };
+    var isDrive = /drive\.google\.com|drive\.usercontent\.google\.com/i.test(s);
+    if (!isDrive) return { href: s, kind: "direct" };
+
+    var id = "";
+    var m =
+      s.match(/\/file\/d\/([^/]+)/) ||
+      s.match(/[?&]id=([^&]+)/) ||
+      s.match(/\/d\/([^/]+)/);
+    if (m) id = decodeURIComponent(m[1]);
+    else if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) id = s;
+    if (!id) return { href: s, kind: "drive" };
+    return {
+      href:
+        "https://drive.google.com/uc?export=download&id=" +
+        encodeURIComponent(id),
+      kind: "drive",
+    };
+  }
+
   function wireApkDownload() {
     var link = $("dkApkDownload");
     if (!link) return;
     var cfg = global.SLM_LICENSE_CONFIG || {};
-    var url = String(cfg.PHONE_APK_DRIVE_URL || "").trim();
+    var raw = cfg.PHONE_APK_URL || cfg.PHONE_APK_DRIVE_URL || "";
+    var info = apkDownloadUrl(raw);
     var L = global.SlmLicense;
     var allowed =
       !L || !L.enabled || !!(L.canApprove && L.canApprove());
-    if (!url || !allowed) {
+    if (!info.href || !allowed) {
       link.classList.add("hidden");
       link.removeAttribute("href");
+      link.onclick = null;
       return;
     }
-    link.href = url;
+    link.href = info.href;
+    link.target = "_blank";
+    link.rel = "noopener";
+    if (info.kind === "direct") {
+      link.setAttribute("download", "SLMSurvey.apk");
+      link.title = "Download phone APK";
+      link.textContent = "Download phone APK";
+      link.onclick = null;
+    } else {
+      link.removeAttribute("download");
+      link.title =
+        "Google Drive blocks silent APK download — click Download anyway on the next page";
+      link.textContent = "Download phone APK";
+      link.onclick = function () {
+        toast("On the next page, click “Download anyway”");
+      };
+    }
     link.classList.remove("hidden");
   }
 

@@ -179,7 +179,14 @@
   function kitType(k) {
     if (kitFamily(k) === "conductor") return "Conductor";
     if (kitFamily(k) === "addon") return k.addonType || k.label || "Add-on";
-    return k.structureLabel || k.structure || "?";
+    var st = String(k.structure || k.structureLabel || "").trim();
+    if (/^DTR/i.test(st) || k.isDtr) return "DTR";
+    if (/^1NP$/i.test(st) || /^P1N$/i.test(st)) return "1NP";
+    var m = st.match(/^(1P|2P|3P|4P)\b/i);
+    if (m) return m[1].toUpperCase();
+    // Fall back: structureLabel like "DTR on 2P" already handled; plain ids next.
+    if (TYPE_ORDER.indexOf(st) >= 0) return st;
+    return st || "?";
   }
 
   function kitVoltage(k) {
@@ -412,7 +419,7 @@
   }
 
   /**
-   * Tree: Voltage → Position → Arrangement → Pole → kits
+   * Tree: Voltage → Type (1P…DTR) → Position → Arrangement → Pole → kits
    * (voltage is the selected rail filter; shown as root for the path)
    */
   function buildTree(kits) {
@@ -440,21 +447,33 @@
         return;
       }
 
+      var type = kitType(k);
       var pos = posLabel(k);
       var arr = arrLabel(k.arrangement);
       var mats = kitPoleMaterials(k);
       if (!mats.length) mats = ["Unspecified pole"];
 
-      if (!root.children[pos]) {
-        root.children[pos] = {
-          key: root.key + "/p:" + pos,
+      if (!root.children[type]) {
+        root.children[type] = {
+          key: root.key + "/t:" + type,
+          label: type,
+          kits: [],
+          children: Object.create(null),
+          kind: "type",
+        };
+      }
+      var typeNode = root.children[type];
+
+      if (!typeNode.children[pos]) {
+        typeNode.children[pos] = {
+          key: typeNode.key + "/p:" + pos,
           label: pos,
           kits: [],
           children: Object.create(null),
           kind: "position",
         };
       }
-      var posNode = root.children[pos];
+      var posNode = typeNode.children[pos];
 
       if (!posNode.children[arr]) {
         posNode.children[arr] = {
@@ -516,28 +535,37 @@
       });
     }
 
-    root.ordered = childList(root, POS_ORDER.concat(["Conductors", "Add-ons"]), function (n, k) {
-      return n.kind === "other" ? n.label : k;
-    });
-    root.ordered.forEach(function (posNode) {
-      if (posNode.kind === "other") return;
-      posNode.ordered = childList(posNode, ARR_ORDER, function (n) {
+    root.ordered = childList(
+      root,
+      TYPE_ORDER.concat(["Conductors", "Add-ons"]),
+      function (n, k) {
+        return n.kind === "other" ? n.label : k;
+      }
+    );
+    root.ordered.forEach(function (typeNode) {
+      if (typeNode.kind === "other") return;
+      typeNode.ordered = childList(typeNode, POS_ORDER, function (n) {
         return n.label;
       });
-      posNode.ordered.forEach(function (arrNode) {
-        var poleOrder = poleMaterialsForVoltage(state.voltage);
-        arrNode.ordered = childList(arrNode, poleOrder, function (n) {
-          return n.poleMaterial || n.label;
+      typeNode.ordered.forEach(function (posNode) {
+        posNode.ordered = childList(posNode, ARR_ORDER, function (n) {
+          return n.label;
         });
-        arrNode.ordered.forEach(function (poleNode) {
-          poleNode.kits.sort(function (a, b) {
-            var ta = typeSortKey(kitType(a));
-            var tb = typeSortKey(kitType(b));
-            if (ta !== tb) return ta < tb ? -1 : 1;
-            var ca = String(a.conductorShort || "");
-            var cb = String(b.conductorShort || "");
-            if (ca !== cb) return ca.localeCompare(cb);
-            return String(a.id || "").localeCompare(String(b.id || ""));
+        posNode.ordered.forEach(function (arrNode) {
+          var poleOrder = poleMaterialsForVoltage(state.voltage);
+          arrNode.ordered = childList(arrNode, poleOrder, function (n) {
+            return n.poleMaterial || n.label;
+          });
+          arrNode.ordered.forEach(function (poleNode) {
+            poleNode.kits.sort(function (a, b) {
+              var ca = String(a.conductorShort || "");
+              var cb = String(b.conductorShort || "");
+              if (ca !== cb) return ca.localeCompare(cb);
+              var ma = String(a.dtrCapacity || a.dtrCapacityLabel || "");
+              var mb = String(b.dtrCapacity || b.dtrCapacityLabel || "");
+              if (ma !== mb) return ma.localeCompare(mb);
+              return String(a.id || "").localeCompare(String(b.id || ""));
+            });
           });
         });
       });
@@ -588,6 +616,7 @@
       .split("/")
       .map(function (p) {
         if (p.indexOf("v:") === 0) return p.slice(2);
+        if (p.indexOf("t:") === 0) return p.slice(2);
         if (p.indexOf("p:") === 0) return p.slice(2);
         if (p.indexOf("a:") === 0) return p.slice(2);
         if (p.indexOf("pole:") === 0) {
@@ -718,6 +747,7 @@
     if (kitFamily(k) !== "structure") return kitTitle(k);
     return [
       kitVoltage(k) || state.voltage,
+      kitType(k),
       posLabel(k),
       arrLabel(k.arrangement),
       poleLabel(k),
@@ -864,6 +894,8 @@
       state.focusKey =
         "v:" +
         state.voltage +
+        "/t:" +
+        kitType(hit) +
         "/p:" +
         posLabel(hit) +
         "/a:" +

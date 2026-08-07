@@ -221,16 +221,18 @@
       '">' +
       options
         .map(function (o) {
-          var on = String(o) === String(selected);
+          var val = typeof o === "string" ? o : o.id || o.label;
+          var lab = typeof o === "string" ? o : o.label || o.id;
+          var on = String(val) === String(selected);
           return (
             '<button type="button" class="ws-chip' +
             (on ? " is-on" : "") +
             '"' +
             (locked ? " disabled" : "") +
             ' data-value="' +
-            esc(o) +
+            esc(val) +
             '">' +
-            esc(o) +
+            esc(lab) +
             "</button>"
           );
         })
@@ -254,6 +256,16 @@
       kitExtension: ov.kitExtension != null ? ov.kitExtension : asset.kitExtension,
       conductor: ov.conductor != null ? ov.conductor : asset.conductor,
       poleMaterial: asset.poleMaterial || asset.material,
+      dtrMount:
+        ov.dtrMount != null
+          ? ov.dtrMount
+          : String(asset.dtrMount || "")
+              .replace(/^DTR/i, "")
+              .trim(),
+      dtCapacityKva:
+        ov.dtCapacityKva != null
+          ? String(ov.dtCapacityKva).replace(/\D/g, "")
+          : String(asset.dtCapacityKva || "").replace(/\D/g, ""),
     };
 
     function paint() {
@@ -265,10 +277,31 @@
             arrangements: ["In-line", "Sectional"],
             extensions: ["No ext"],
             conductors: [],
+            dtrMounts: [
+              { id: "2P", label: "On 2P" },
+              { id: "4P", label: "On 4P" },
+            ],
+            dtrCapacities: ["16", "25", "63", "100", "160", "250"],
             draft: stateDraft,
           };
       stateDraft = Object.assign(stateDraft, pack.draft);
       var structLabel = voltage === "LT" ? "Phase" : "Structure";
+      var isDtr = String(stateDraft.structure) === "DTR";
+      var mountOpts =
+        pack.dtrMounts && pack.dtrMounts.length
+          ? pack.dtrMounts
+          : [
+              { id: "2P", label: "On 2P" },
+              { id: "4P", label: "On 4P" },
+            ];
+      var capOpts = (
+        pack.dtrCapacities && pack.dtrCapacities.length
+          ? pack.dtrCapacities
+          : ["16", "25", "63", "100", "160", "250"]
+      ).map(function (c) {
+        var id = String(c).replace(/\D/g, "") || String(c);
+        return { id: id, label: id + " kVA" };
+      });
 
       panel.innerHTML =
         '<div class="ws-pole-edit">' +
@@ -282,6 +315,10 @@
         chipRow("Voltage", "voltage", [voltage], voltage, true) +
         chipRow("Conductor", "conductor", pack.conductors, stateDraft.conductor, false) +
         chipRow(structLabel, "structure", pack.structures, stateDraft.structure, false) +
+        (isDtr
+          ? chipRow("DTR mount", "dtrMount", mountOpts, stateDraft.dtrMount, false) +
+            chipRow("DTR kVA", "dtCapacityKva", capOpts, stateDraft.dtCapacityKva, false)
+          : "") +
         chipRow("Location", "kitLocation", pack.locations, stateDraft.kitLocation, false) +
         chipRow(
           "Arrangement",
@@ -312,12 +349,27 @@
       });
       panel.querySelector("#wsPoleSave").addEventListener("click", function () {
         var next = {};
-        ["structure", "kitLocation", "kitArrangement", "kitExtension", "conductor"].forEach(
-          function (key) {
-            var val = String(stateDraft[key] || "").trim();
-            if (val && val !== String(asset[key] || "")) next[key] = val;
+        [
+          "structure",
+          "kitLocation",
+          "kitArrangement",
+          "kitExtension",
+          "conductor",
+          "dtrMount",
+          "dtCapacityKva",
+        ].forEach(function (key) {
+          var val = String(stateDraft[key] || "").trim();
+          var prev = String(asset[key] || "").trim();
+          if (key === "dtrMount" || key === "dtCapacityKva") {
+            if (String(stateDraft.structure || "") !== "DTR") {
+              if (prev) next[key] = "";
+              return;
+            }
+            val =
+              key === "dtrMount" ? val.replace(/^DTR/i, "") : val.replace(/\D/g, "");
           }
-        );
+          if (val && val !== prev) next[key] = val;
+        });
         WS.update(function (w) {
           if (Object.keys(next).length) w.poleOverrides[asset.id] = next;
           else delete w.poleOverrides[asset.id];

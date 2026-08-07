@@ -29,6 +29,12 @@ Phone named presets are parked — do not block desktop cleanup on that work.
 - Print handoff → CAD (`?cad=1&print=1&simple=1`)
 - Live Materials / Labour / Scheme / Estimated; kit modal with optional admin edit
 
+### Phone APK download (desk rail)
+
+Admin **Download phone APK** uses `PHONE_APK_URL` in `license-config.js`.  
+For a true one-click link, host the APK on **GitHub Releases** (not Drive).  
+Guide: [`docs/PHONE_APK_GITHUB_RELEASE.md`](../docs/PHONE_APK_GITHUB_RELEASE.md).
+
 ---
 
 ## What’s in this folder

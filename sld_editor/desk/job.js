@@ -346,6 +346,8 @@
           kitExtension: draft.kitExtension,
           conductor: draft.conductor,
           poleMaterial: draft.poleMaterial,
+          dtrMount: draft.dtrMount,
+          dtCapacityKva: draft.dtCapacityKva,
         })
       );
     });
@@ -551,6 +553,8 @@
       kitExtension: asset.kitExtension,
       conductor: asset.conductor,
       poleMaterial: asset.poleMaterial,
+      dtrMount: asset.dtrMount,
+      dtCapacityKva: asset.dtCapacityKva,
     };
     if (Net && Net.optionsFor) return Net.optionsFor(asset.voltage, draft);
     return {
@@ -560,6 +564,11 @@
       arrangements: ["In-line", "Sectional"],
       extensions: ["No ext", "With ext"],
       conductors: [],
+      dtrMounts: [
+        { id: "2P", label: "On 2P" },
+        { id: "4P", label: "On 4P" },
+      ],
+      dtrCapacities: ["16", "25", "63", "100", "160", "250"],
       draft: draft,
     };
   }
@@ -950,6 +959,31 @@
           state.poleMaterial || draft.poleMaterial
         ) +
         chipRow("Structure", "structure", pack.structures, draft.structure) +
+        (String(draft.structure) === "DTR"
+          ? chipRow(
+              "DTR mount",
+              "dtrMount",
+              pack.dtrMounts && pack.dtrMounts.length
+                ? pack.dtrMounts
+                : [
+                    { id: "2P", label: "On 2P" },
+                    { id: "4P", label: "On 4P" },
+                  ],
+              state.dtrMount || draft.dtrMount
+            ) +
+            chipRow(
+              "DTR kVA",
+              "dtCapacityKva",
+              (pack.dtrCapacities && pack.dtrCapacities.length
+                ? pack.dtrCapacities
+                : ["16", "25", "63", "100", "160", "250"]
+              ).map(function (c) {
+                var id = String(c).replace(/\D/g, "") || String(c);
+                return { id: id, label: id + " kVA" };
+              }),
+              String(state.dtCapacityKva || draft.dtCapacityKva || "").replace(/\D/g, "")
+            )
+          : "") +
         chipRow("Location", "kitLocation", pack.locations, draft.kitLocation) +
         chipRow("Arrange", "kitArrangement", pack.arrangements, draft.kitArrangement) +
         chipRow("Ext", "kitExtension", pack.extensions, draft.kitExtension) +
@@ -1008,12 +1042,27 @@
         var next = panel._draft || state;
         if (!raw) return;
         var patch = {};
-        ["structure", "kitLocation", "kitArrangement", "kitExtension", "conductor", "poleMaterial"].forEach(
-          function (k) {
-            var v = String(next[k] || "").trim();
-            if (v && v !== String(raw[k] || "")) patch[k] = v;
+        [
+          "structure",
+          "kitLocation",
+          "kitArrangement",
+          "kitExtension",
+          "conductor",
+          "poleMaterial",
+          "dtrMount",
+          "dtCapacityKva",
+        ].forEach(function (k) {
+          var v = String(next[k] || "").trim();
+          var prev = String(raw[k] || "").trim();
+          if (k === "dtrMount" || k === "dtCapacityKva") {
+            if (String(next.structure || "") !== "DTR") {
+              if (prev) patch[k] = "";
+              return;
+            }
+            v = k === "dtrMount" ? v.replace(/^DTR/i, "") : v.replace(/\D/g, "");
           }
-        );
+          if (v && v !== prev) patch[k] = v;
+        });
         WS.update(function (w) {
           if (Object.keys(patch).length) w.poleOverrides[raw.id] = patch;
           else delete w.poleOverrides[raw.id];
@@ -1038,7 +1087,24 @@
         asset.poleMaterial ||
         (pack.draft && pack.draft.poleMaterial) ||
         "",
+      dtrMount:
+        String(draft.dtrMount || asset.dtrMount || (pack.draft && pack.draft.dtrMount) || "")
+          .replace(/^DTR/i, "")
+          .trim(),
+      dtCapacityKva: String(
+        draft.dtCapacityKva ||
+          asset.dtCapacityKva ||
+          (pack.draft && pack.draft.dtCapacityKva) ||
+          ""
+      ).replace(/\D/g, ""),
     };
+    if (String(state.structure) === "DTR") {
+      if (!state.dtrMount) state.dtrMount = "2P";
+      if (!state.dtCapacityKva) state.dtCapacityKva = "63";
+    } else {
+      state.dtrMount = "";
+      state.dtCapacityKva = "";
+    }
     panel._draft = state;
     panel._assetId = asset.id;
 

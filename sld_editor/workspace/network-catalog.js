@@ -19,11 +19,12 @@
 
   function normStructure(s) {
     var t = String(s || "").trim().toUpperCase();
-    if (t === "DTR" || t === "DT") return "DTR";
+    if (t === "DTR" || t === "DT" || t.indexOf("DTR") === 0) return "DTR";
     if (t === "1" || t === "P1" || t === "1P" || t === "1-PHASE") return "1P";
     if (t === "2" || t === "P2" || t === "2P" || t === "2-PHASE") return "2P";
     if (t === "3" || t === "P3" || t === "3P" || t === "3-PHASE") return "3P";
     if (t === "4" || t === "P4" || t === "4P") return "4P";
+    if (t === "1NP" || t === "P1N" || t === "1N") return "1NP";
     return s || "";
   }
 
@@ -249,9 +250,35 @@
     return allowsPoleExtension(voltage, material) ? EXTENSIONS.slice() : ["No ext"];
   }
 
+  /** DTR mount chips — same labels as Android DtrMount. */
+  function dtrMounts() {
+    var pack = rulesPack();
+    var ids =
+      pack && Array.isArray(pack.dtrMounts) && pack.dtrMounts.length
+        ? pack.dtrMounts.slice()
+        : ["2P", "4P"];
+    return ids.map(function (id) {
+      return { id: id, label: "On " + id };
+    });
+  }
+
+  /** Common field kVA first; optional “more” list for 315/630. */
+  function dtrCapacities(includeMore) {
+    var pack = rulesPack();
+    var common =
+      pack && Array.isArray(pack.dtrCapacitiesCommon) && pack.dtrCapacitiesCommon.length
+        ? pack.dtrCapacitiesCommon.slice()
+        : ["16", "25", "63", "100", "160", "250"];
+    var more =
+      pack && Array.isArray(pack.dtrCapacitiesMore) && pack.dtrCapacitiesMore.length
+        ? pack.dtrCapacitiesMore.slice()
+        : ["315", "630"];
+    return includeMore ? common.concat(more) : common;
+  }
+
   /**
    * Cascading options for a draft. Voltage is fixed from survey.
-   * draft: { structure, kitLocation, kitArrangement, kitExtension, conductor, poleMaterial }
+   * draft: { structure, kitLocation, kitArrangement, kitExtension, conductor, poleMaterial, dtrMount, dtCapacityKva }
    */
   function optionsFor(voltage, draft) {
     draft = draft || {};
@@ -296,6 +323,32 @@
 
     var conductors = conductorsFor(voltage);
 
+    var dtrMount = String(draft.dtrMount || "").replace(/^DTR/i, "").trim();
+    var dtCapacityKva = String(draft.dtCapacityKva || "").trim();
+    var mounts = structure === "DTR" ? dtrMounts() : [];
+    var caps = structure === "DTR" ? dtrCapacities(false) : [];
+    if (structure === "DTR") {
+      var mountIds = mounts.map(function (m) {
+        return m.id;
+      });
+      if (!dtrMount || mountIds.indexOf(dtrMount) === -1) dtrMount = mountIds[0] || "2P";
+      var capDigits = dtCapacityKva.replace(/\D/g, "");
+      var capHit = caps.filter(function (c) {
+        return String(c) === capDigits || String(c) === dtCapacityKva;
+      })[0];
+      if (!capHit) {
+        // Keep uncommon capacities (315/630…) even when “more” is collapsed.
+        var allCaps = dtrCapacities(true);
+        capHit = allCaps.filter(function (c) {
+          return String(c) === capDigits;
+        })[0];
+      }
+      dtCapacityKva = capHit || caps[2] || caps[0] || "63";
+    } else {
+      dtrMount = "";
+      dtCapacityKva = "";
+    }
+
     return {
       voltage: voltage,
       materials: materials,
@@ -304,6 +357,8 @@
       arrangements: arrangements,
       extensions: extensions,
       conductors: conductors,
+      dtrMounts: mounts,
+      dtrCapacities: caps,
       draft: {
         structure: structure,
         kitLocation: location,
@@ -311,6 +366,8 @@
         kitExtension: extension,
         conductor: conductor,
         poleMaterial: material,
+        dtrMount: dtrMount,
+        dtCapacityKva: dtCapacityKva,
       },
     };
   }
@@ -329,6 +386,8 @@
     kitLocationsFor: kitLocationsFor,
     kitArrangementsFor: kitArrangementsFor,
     kitExtensionsFor: kitExtensionsFor,
+    dtrMounts: dtrMounts,
+    dtrCapacities: dtrCapacities,
     optionsFor: optionsFor,
     coerce: coerce,
     /** Load shared survey-rules.json (desktop). Safe to call multiple times. */
