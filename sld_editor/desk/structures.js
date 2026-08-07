@@ -199,12 +199,6 @@
     return String(a).replace(/Arr$/, "") || "Other";
   }
 
-  function extLabel(e) {
-    if (!e || e === "NoExt") return "";
-    if (e === "WithExt") return "With ext";
-    return String(e);
-  }
-
   function posLabel(k) {
     return (
       (k && (k.locationLabel || k.location || k.position || k.positionLabel)) ||
@@ -231,20 +225,45 @@
   }
 
   function kitTitle(k) {
+    var KN = global.SlmKitName;
+    if (KN && KN.displayName) return KN.displayName(k);
     if (kitFamily(k) === "conductor") {
       return k.conductorShort || k.conductorName || k.label || k.id || "Conductor";
     }
     if (kitFamily(k) === "addon") {
       return k.label || k.addonType || k.id || "Add-on";
     }
-    // Leaf under Position → Arrangement → Pole: show structure + conductor
-    var bits = [kitType(k)];
-    var cond = k.conductorShort || k.conductorFamily || "";
-    if (cond) bits.push(cond);
-    var ext = extLabel(k.extension);
-    if (ext) bits.push(ext);
-    if (k.wireLabel || k.wireCount) bits.push(k.wireLabel || k.wireCount);
-    return bits.join(" · ") || k.id || "Kit";
+    return k.code || k.id || "Kit";
+  }
+
+  function namingGuideHtml() {
+    var KN = global.SlmKitName;
+    var rows =
+      KN && KN.guide
+        ? KN.guide
+            .map(function (g) {
+              return (
+                "<tr><th>" +
+                esc(g.token) +
+                "</th><td>" +
+                esc(g.meaning) +
+                "</td></tr>"
+              );
+            })
+            .join("")
+        : "";
+    var example = (KN && KN.guideExample && KN.guideExample()) || "11kV-1P-Tan-Sec-NoExt-DOG";
+    return (
+      '<details class="dk-st-name-guide">' +
+      "<summary>Naming guide</summary>" +
+      '<p class="dk-st-name-guide-ex"><code>' +
+      esc(example) +
+      "</code></p>" +
+      '<p class="dk-st-name-guide-note">Fixed order. Pole is chosen as a variant (not in the name). HT omits wire — always 3-wire.</p>' +
+      '<table class="dk-st-name-guide-table"><tbody>' +
+      rows +
+      "</tbody></table></details>"
+    );
   }
 
   function kitSearchText(k) {
@@ -730,14 +749,17 @@
     var selected =
       state.selected && String(state.selected.id) === String(k.id);
     var n = (k.lines || []).length;
+    var title = kitTitle(k);
     return (
       '<button type="button" class="dk-st-leaf' +
       (selected ? " is-selected" : "") +
       '" data-id="' +
       esc(k.id) +
+      '" title="' +
+      esc(title) +
       '">' +
       '<span class="dk-st-leaf-title">' +
-      esc(kitTitle(k)) +
+      esc(title) +
       '</span><span class="dk-st-leaf-n">' +
       n +
       "</span></button>"
@@ -832,7 +854,9 @@
       esc(focusPath(focusNode)) +
       " · " +
       focusKits.length +
-      "</span></div>" +
+      "</span>" +
+      namingGuideHtml() +
+      "</div>" +
       '<div class="dk-st-kit-list" id="dkKitList">' +
       (focusKits.length
         ? focusKits.map(leafHtml).join("")

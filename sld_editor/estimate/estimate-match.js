@@ -110,6 +110,9 @@
   }
 
   function kitTitle(kit) {
+    if (typeof globalThis !== "undefined" && globalThis.SlmKitName && globalThis.SlmKitName.displayName) {
+      return globalThis.SlmKitName.displayName(kit);
+    }
     if (kit.family === "conductor") {
       const wire = kit.wireLabel ? ` · ${kit.wireLabel}` : "";
       return `${kit.voltage} · ${kit.conductorShort || kit.conductorName || kit.conductorId}${wire}`;

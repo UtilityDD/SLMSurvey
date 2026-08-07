@@ -709,6 +709,7 @@
     var Match = global.SlmEstimateMatch;
     var live = refreshKitFromCatalog(kit.id) || kit;
     var title =
+      (global.SlmKitName && global.SlmKitName.displayName && global.SlmKitName.displayName(live)) ||
       (Match && Match.kitTitle && Match.kitTitle(live)) ||
       live.name ||
       live.label ||
@@ -915,6 +916,11 @@
     function paint(kit) {
       matchedKit = kit;
       var seq = String(asset.sequence != null ? asset.sequence : asset.id);
+      var KN = global.SlmKitName;
+      var structureName =
+        (KN && KN.forPole && KN.forPole(Object.assign({}, asset, state), kit)) ||
+        (KN && KN.displayName && kit && KN.displayName(kit)) ||
+        "";
       panel.innerHTML =
         '<div class="dk-pole-head">' +
         "<h3>P" +
@@ -922,6 +928,15 @@
         '</h3><span class="dk-volt-pill">' +
         esc(asset.voltage || "—") +
         '</span><button type="button" class="dk-icon-btn" id="dkPoleClose" title="Close">×</button></div>' +
+        (structureName
+          ? '<div class="dk-pole-kit-name' +
+            (kit ? "" : " is-unmatched") +
+            '" title="' +
+            esc(structureName) +
+            '">' +
+            esc(structureName) +
+            "</div>"
+          : "") +
         chipRow("Structure", "structure", pack.structures, draft.structure) +
         chipRow("Location", "kitLocation", pack.locations, draft.kitLocation) +
         chipRow("Arrange", "kitArrangement", pack.arrangements, draft.kitArrangement) +

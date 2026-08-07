@@ -457,6 +457,25 @@ a { color: inherit; text-decoration: none; }
   margin-bottom: 4px;
 }
 .dk-pole-head h3 { flex: 0 0 auto; }
+.dk-pole-kit-name {
+  margin: 0 0 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  border: 1px solid var(--dk-line);
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  color: var(--dk-ink);
+  word-break: break-word;
+}
+.dk-pole-kit-name.is-unmatched {
+  color: var(--dk-muted);
+  font-weight: 600;
+  border-style: dashed;
+}
 .dk-volt-pill {
   font-size: 0.68rem;
   font-weight: 700;
@@ -1020,13 +1039,91 @@ body.dk-st-resizing iframe { pointer-events: none; }
   box-shadow: inset 3px 0 0 var(--dk-accent);
 }
 .dk-st-leaf-title {
-  font-size: 0.82rem;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.74rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--dk-ink);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dk-st-detail h2 {
+  margin: 4px 0 0;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+/* Kit naming guide */
+.dk-st-name-guide {
+  margin-top: 6px;
+  border: 1px solid var(--dk-line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 0;
+}
+.dk-st-name-guide > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dk-accent);
+  user-select: none;
+}
+.dk-st-name-guide > summary::-webkit-details-marker { display: none; }
+.dk-st-name-guide > summary::before {
+  content: "▸ ";
+  color: var(--dk-muted);
+  font-weight: 600;
+}
+.dk-st-name-guide[open] > summary::before { content: "▾ "; }
+.dk-st-name-guide-ex {
+  margin: 0 8px 4px;
+  font-size: 0.72rem;
+}
+.dk-st-name-guide-ex code {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-weight: 700;
+  color: var(--dk-ink);
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.dk-st-name-guide-note {
+  margin: 0 8px 6px;
+  font-size: 0.68rem;
+  color: var(--dk-muted);
+  line-height: 1.35;
+}
+.dk-st-name-guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 8px;
+  font-size: 0.68rem;
+}
+.dk-st-name-guide-table th,
+.dk-st-name-guide-table td {
+  padding: 3px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid #eef2f7;
+}
+.dk-st-name-guide-table th {
+  width: 3.6rem;
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-weight: 700;
+  color: var(--dk-accent);
+  white-space: nowrap;
+}
+.dk-st-name-guide-table td {
+  color: var(--dk-muted);
+  line-height: 1.35;
 }
 .dk-st-leaf-n {
   flex-shrink: 0;
@@ -1047,14 +1144,6 @@ body.dk-st-resizing iframe { pointer-events: none; }
   justify-content: space-between;
   gap: 6px;
   margin-bottom: 2px;
-}
-.dk-st-detail h2 {
-  margin: 4px 0 0;
-  font-family: var(--dk-font-display);
-  font-size: 1rem;
-  font-weight: 750;
-  letter-spacing: -0.02em;
-  line-height: 1.25;
 }
 .dk-st-detail-top {
   display: flex;

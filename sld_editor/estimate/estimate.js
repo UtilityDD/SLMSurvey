@@ -71,6 +71,9 @@
   }
 
   function kitTitle(kit) {
+    if (window.SlmKitName && window.SlmKitName.displayName) {
+      return window.SlmKitName.displayName(kit);
+    }
     if (kit.custom) {
       const name = kit.customLabel || kit.label || kit.id;
       return `${kit.voltage || "—"} · ${name} · Custom`;
@@ -93,8 +96,6 @@
             : "";
       const ext = kit.extensionLabel ? ` · ${kit.extensionLabel}` : "";
       const dtr = kit.dtrCapacityLabel ? ` · ${kit.dtrCapacityLabel}` : "";
-      // Pole is a variant (code + chips), not part of the config name — avoid
-      // "9m PCC" in the title when 8M/RL/… are also allowed on the same kit.
       return `${kit.voltage} · ${kit.structureLabel} · ${loc}${arr}${cond}${fam}${wire}${ext}${dtr}`;
     }
     if (kit.family === "conductor") {
