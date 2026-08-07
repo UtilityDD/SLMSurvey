@@ -51,6 +51,9 @@ Set a publish secret (desktop/CLI only — never the service role key in the bro
 
 ```bash
 supabase secrets set CATALOG_PUBLISH_KEY=your-long-random-string
+
+# Optional — separate key for Phone rules → Publish to app (keeps CATALOG_PUBLISH_KEY unchanged)
+supabase secrets set SURVEY_RULES_PUBLISH_KEY=another-long-random-string
 ```
 
 Functions use `SUPABASE_SERVICE_ROLE_KEY` automatically in hosted Supabase.
@@ -69,10 +72,11 @@ If these are **empty**, the app runs in **dev mode** (no license gate; catalog s
 ## Step 4 — Publish phone rules / catalog
 
 **Phone structure combinations (usual):**  
-Desktop → **Rates → Phone rules → Publish to app** (rules-only; uses `license-config.js`; prompts for publish key if blank).
+Desktop → **Rates → Phone rules → Publish to app**  
+Uses Supabase secret **`SURVEY_RULES_PUBLISH_KEY`** (does not change `CATALOG_PUBLISH_KEY`).
 
 **Full Mat/Lab + kits archive:**  
-`sld_editor/estimate/` → **Publish full catalog**, or CLI:
+`sld_editor/estimate/` → **Publish full catalog** (uses **`CATALOG_PUBLISH_KEY`**), or CLI:
 
 ```bash
 set SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -89,7 +93,8 @@ Flow: **Suggest** → **Accept/Reject** → **Publish full catalog** (accepted m
 |------|----------------|-----|
 | Suggestor | `can_suggest` | Kit editor → **Suggest change** |
 | Approver | `can_approve` | **Suggestions** tab → Accept into maker / Reject |
-| Publisher | `CATALOG_PUBLISH_KEY` | **Phone rules → Publish to app** / **Publish full catalog** |
+| Publisher (phone rules) | `SURVEY_RULES_PUBLISH_KEY` | **Phone rules → Publish to app** |
+| Publisher (full catalog) | `CATALOG_PUBLISH_KEY` | **Publish full catalog** |
 
 Activate/validate responses include `can_suggest` and `can_approve` so the desktop UI shows the right controls.
 
@@ -119,7 +124,7 @@ Errors: `not_activated`, `expired`, `blocked`, `no_catalog`
 
 ### POST `/functions/v1/catalog-publish`
 
-**Rules-only** (phone structure combinations):
+**Rules-only** (phone structure combinations) — auth with `SURVEY_RULES_PUBLISH_KEY`:
 
 ```json
 {
@@ -133,7 +138,7 @@ Errors: `not_activated`, `expired`, `blocked`, `no_catalog`
 
 Copies previous ratebook/kits so a rules push does not wipe the estimate archive.
 
-**Full catalog:**
+**Full catalog** — auth with `CATALOG_PUBLISH_KEY`:
 
 ```json
 {

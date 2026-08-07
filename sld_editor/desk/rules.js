@@ -80,10 +80,11 @@
 
   function resolvePublishKey() {
     var cfg = global.SLM_LICENSE_CONFIG || {};
-    var key = String(cfg.CATALOG_PUBLISH_KEY || "").trim();
+    // Dedicated rules key — do not reuse / overwrite CATALOG_PUBLISH_KEY.
+    var key = String(cfg.SURVEY_RULES_PUBLISH_KEY || "").trim();
     if (key) return Promise.resolve(key);
     try {
-      key = String(sessionStorage.getItem("slm_catalog_publish_key") || "").trim();
+      key = String(sessionStorage.getItem("slm_survey_rules_publish_key") || "").trim();
     } catch (e) {
       key = "";
     }
@@ -91,9 +92,11 @@
     var Dialog = global.SlmDialog;
     if (!Dialog || !Dialog.prompt) return Promise.resolve("");
     return Dialog.prompt({
-      title: "Publish key",
-      message: "Enter the Supabase secret CATALOG_PUBLISH_KEY.",
-      inputLabel: "Publish key",
+      title: "Phone rules publish key",
+      message:
+        "Enter SURVEY_RULES_PUBLISH_KEY (Supabase secret). " +
+        "This is separate from CATALOG_PUBLISH_KEY and does not change it.",
+      inputLabel: "Rules publish key",
       inputType: "password",
       placeholder: "Secret key…",
       okLabel: "Continue",
@@ -102,7 +105,7 @@
       key = String(entered || "").trim();
       if (key) {
         try {
-          sessionStorage.setItem("slm_catalog_publish_key", key);
+          sessionStorage.setItem("slm_survey_rules_publish_key", key);
         } catch (e) {
           /* ignore */
         }

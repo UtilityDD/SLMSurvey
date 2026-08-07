@@ -1,31 +1,39 @@
 // Deno Edge Function: publish survey rules and/or full estimate catalog.
 // Deploy: supabase functions deploy catalog-publish --no-verify-jwt
-// Secret: CATALOG_PUBLISH_KEY
+// Secrets:
+//   CATALOG_PUBLISH_KEY — full catalog (Mat/Lab + kits + rules); leave as-is if already set
+//   SURVEY_RULES_PUBLISH_KEY — phone structure combinations only (rules mode)
 //
 // Modes:
-// - rules (default when only survey_rules sent / body.mode=rules):
-//     Push phone structure combinations. Copies ratebook/kits from current row if omitted.
+// - rules (body.mode=rules or rules-only payload):
+//     Push phone structure combinations. Auth: SURVEY_RULES_PUBLISH_KEY
+//     (falls back to CATALOG_PUBLISH_KEY if rules key unset). Copies kits from current row.
 // - full (body.mode=full or ratebook+kit_matrix provided):
-//     Full catalog archive for desktop + rules for phones.
+//     Full catalog archive. Auth: CATALOG_PUBLISH_KEY only.
 
 import { cors, json, supabaseAdmin } from "../_shared/catalog_auth.ts";
+
+function rulesPublishAllowed(publish_key: string): boolean {
+  const rulesKey = Deno.env.get("SURVEY_RULES_PUBLISH_KEY") || "";
+  const catalogKey = Deno.env.get("CATALOG_PUBLISH_KEY") || "";
+  if (rulesKey && publish_key === rulesKey) return true;
+  // Fallback only when no dedicated rules key is configured yet.
+  if (!rulesKey && catalogKey && publish_key === catalogKey) return true;
+  return false;
+}
+
+function fullPublishAllowed(publish_key: string): boolean {
+  const catalogKey = Deno.env.get("CATALOG_PUBLISH_KEY") || "";
+  return !!(catalogKey && publish_key === catalogKey);
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ ok: false, error: "method_not_allowed" }, 405);
 
   try {
-    const expected = Deno.env.get("CATALOG_PUBLISH_KEY") || "";
-    if (!expected) {
-      return json({ ok: false, error: "publish_key_not_configured" }, 500);
-    }
-
     const body = await req.json();
     const publish_key = String(body?.publish_key || "");
-    if (publish_key !== expected) {
-      return json({ ok: false, error: "unauthorized" }, 401);
-    }
-
     const version_label = String(body?.version_label || "").trim();
     const notes = String(body?.notes || "").trim();
     const survey_rules = body?.survey_rules ?? {};
@@ -46,6 +54,24 @@ Deno.serve(async (req) => {
       modeRaw === "rules" ||
       modeRaw === "survey_rules" ||
       (modeRaw !== "full" && !hasFullPayload);
+
+    if (rulesOnly) {
+      const rulesKey = Deno.env.get("SURVEY_RULES_PUBLISH_KEY") || "";
+      const catalogKey = Deno.env.get("CATALOG_PUBLISH_KEY") || "";
+      if (!rulesKey && !catalogKey) {
+        return json({ ok: false, error: "publish_key_not_configured" }, 500);
+      }
+      if (!rulesPublishAllowed(publish_key)) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+    } else {
+      if (!Deno.env.get("CATALOG_PUBLISH_KEY")) {
+        return json({ ok: false, error: "publish_key_not_configured" }, 500);
+      }
+      if (!fullPublishAllowed(publish_key)) {
+        return json({ ok: false, error: "unauthorized" }, 401);
+      }
+    }
 
     const supabase = supabaseAdmin();
 
