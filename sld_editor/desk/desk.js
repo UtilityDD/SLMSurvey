@@ -1,5 +1,5 @@
 /**
- * SLM Desktop shell — Map | Structures | Rates.
+ * SLM Desktop shell — Map | Structures | Rates | Licenses (admin).
  * Each desk’s actions live under its own nav block (active only).
  */
 (function (global) {
@@ -205,6 +205,15 @@
     link.classList.remove("hidden");
   }
 
+  function syncAdminNav() {
+    var block = $("dkBlockLicenses");
+    if (!block) return;
+    var Lic = global.SlmDeskLicenses;
+    var show = Lic && Lic.canAdmin ? Lic.canAdmin() : false;
+    block.classList.toggle("hidden", !show);
+    if (!show && activeId === "licenses") go("map");
+  }
+
   function wireShell() {
     document.querySelectorAll(".dk-block-head").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -216,7 +225,11 @@
   function start() {
     wireShell();
     wireApkDownload();
-    window.addEventListener("slm-license-changed", wireApkDownload);
+    syncAdminNav();
+    window.addEventListener("slm-license-changed", function () {
+      wireApkDownload();
+      syncAdminNav();
+    });
     window.addEventListener("hashchange", function () {
       var hash = (location.hash || "").replace(/^#/, "");
       go(hash);

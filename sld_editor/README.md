@@ -10,7 +10,8 @@ Browser CAD + estimate tooling for SLM survey workspaces. Lives under `sld_edito
 
 1. **Map** (`#map`) — import / open / demo map, verify poles, print, live estimate  
 2. **Structures** (`#structures`) — browse kits by voltage; edit recipes via embed  
-3. **Rates** (`#rates`) — materials, labour, turnkey schedules  
+3. **Rates** (`#rates`) — materials, labour, turnkey schedules, phone rules  
+4. **Licenses** (`#licenses`) — admin only (`can_approve`): create / extend / block rental codes  
 
 Print CAD still uses `index.html?cad=1` (Fit in N pages · simple print chrome). Legacy shells remain at `workspace/legacy.html`, `structure/legacy.html`, `schedules/legacy.html`.
 
