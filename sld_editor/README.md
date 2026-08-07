@@ -72,7 +72,8 @@ Phone survey (GPS + kit tags)
     → Desktop Map import (edit / print / estimate)
 
 Assembly Builder / Structures
-    → Publish to app (Supabase): survey-rules (+ kits for desktop archive)
+    → Phone rules → Publish to app (Supabase): survey-rules only (structure combinations)
+    → Estimate → Publish full catalog: Mat/Lab + kits archive (+ rules)
     → Phones pull survey-rules only (combinations); estimate stays on PC
 ```
 
@@ -107,7 +108,8 @@ Read [`estimate/README.md`](estimate/README.md) for kit families and publish ste
 | `kit-matrix.json` | Structure / conductor / add-on kit shells |
 | UI tabs | Build kits, mark Final, disable invalid combos |
 | **Estimate** tab | Import phone JSON → match kits → BOQ |
-| **Publish to app** | Push catalog to Supabase for phones |
+| **Publish to app** | Desk → Rates → Phone rules — push structure combinations to phones |
+| **Publish full catalog** | Estimate — archive Mat/Lab + kits (+ rules) |
 
 ### Kit axes (must stay aligned with Android tags)
 

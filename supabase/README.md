@@ -66,14 +66,13 @@ SUPABASE_ANON_KEY=your_anon_key
 
 If these are **empty**, the app runs in **dev mode** (no license gate; catalog sync skipped).
 
-## Step 4 — Publish the estimate catalog
+## Step 4 — Publish phone rules / catalog
 
-After Assembly Builder kits look good, publish so phones can download:
+**Phone structure combinations (usual):**  
+Desktop → **Rates → Phone rules → Publish to app** (rules-only; uses `license-config.js`; prompts for publish key if blank).
 
-**Option A — Desktop UI**  
-Open `sld_editor/estimate/` → **Publish to app** (uses `license-config.js`; prompts for publish key if blank).
-
-**Option B — CLI**
+**Full Mat/Lab + kits archive:**  
+`sld_editor/estimate/` → **Publish full catalog**, or CLI:
 
 ```bash
 set SUPABASE_URL=https://YOUR_PROJECT.supabase.co
@@ -84,13 +83,13 @@ python supabase/scripts/publish_catalog.py --notes "initial seed"
 
 ## Kit suggestions (estimate maker)
 
-Flow: **Suggest** → **Accept/Reject** → **Publish to app** (accepted merges into local kit edits only; phones update on publish).
+Flow: **Suggest** → **Accept/Reject** → **Publish full catalog** (accepted merges into local kit edits only). Phone combinations update from **Phone rules → Publish to app**.
 
 | Role | License flag | UI |
 |------|----------------|-----|
 | Suggestor | `can_suggest` | Kit editor → **Suggest change** |
 | Approver | `can_approve` | **Suggestions** tab → Accept into maker / Reject |
-| Publisher | `CATALOG_PUBLISH_KEY` | **Publish to app** |
+| Publisher | `CATALOG_PUBLISH_KEY` | **Phone rules → Publish to app** / **Publish full catalog** |
 
 Activate/validate responses include `can_suggest` and `can_approve` so the desktop UI shows the right controls.
 
@@ -119,14 +118,33 @@ Success (same version): `{ "ok": true, "unchanged": true, "version_label": "..."
 Errors: `not_activated`, `expired`, `blocked`, `no_catalog`
 
 ### POST `/functions/v1/catalog-publish`
+
+**Rules-only** (phone structure combinations):
+
 ```json
 {
+  "mode": "rules",
+  "publish_key": "...",
+  "version_label": "rules-v1-2026-08-07",
+  "notes": "",
+  "survey_rules": { ... }
+}
+```
+
+Copies previous ratebook/kits so a rules push does not wipe the estimate archive.
+
+**Full catalog:**
+
+```json
+{
+  "mode": "full",
   "publish_key": "...",
   "version_label": "seed-1-2026-07-25",
   "notes": "",
   "ratebook": { ... },
   "kit_matrix": { ... },
-  "kit_edits": { ... }
+  "kit_edits": { ... },
+  "survey_rules": { ... }
 }
 ```
 

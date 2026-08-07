@@ -79,9 +79,10 @@ Uses the **same** Supabase project as rental licensing.
 1. Run `supabase/schema_estimate.sql` once in the SQL editor.
 2. Deploy `catalog-current` and `catalog-publish` (see `supabase/README.md`).
 3. Set secret `CATALOG_PUBLISH_KEY`.
-4. Click **Publish to app** in this UI (or run `python supabase/scripts/publish_catalog.py`).
+4. **Phone structure combinations:** Desktop → **Rates → Phone rules → Publish to app** (rules-only).
+5. **Full Mat/Lab + kits archive:** this Estimate UI → **Publish full catalog** (or `python supabase/scripts/publish_catalog.py`).
 
-Activated Android devices pull the catalog after license activate/validate and cache it offline.
+Activated Android devices pull **survey-rules** after license activate/validate (`need=rules`) and cache them offline.
 
 ## Custom structures
 
@@ -89,7 +90,7 @@ Use **+ Custom structure** on the Structure kits tab for non-matrix poles/struct
 
 - Stored separately (`customKits` in catalog + browser `slm_estimate_custom_kits_v1`)
 - Not wiped when `_gen_catalog.py` regenerates the matrix
-- Included when you **Publish to app**
+- Included when you **Publish full catalog**
 - Filter: Structure = Custom, or Origin = Custom only
 
 ## Related

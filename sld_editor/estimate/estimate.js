@@ -2895,9 +2895,9 @@
     }
     const notes = String(notesEntered || "").trim();
     const go = await window.SlmDialog.confirm({
-      title: "Publish to app?",
-      message: `Upload rate book + kits + survey rules as “${version_label}”?\nPhones download survey rules; desktop keeps full kits.`,
-      okLabel: "Publish",
+      title: "Publish full catalog?",
+      message: `Upload rate book + kits + survey rules as “${version_label}”?\n\nPhone structure combinations also update.\nFor rules-only pushes, use Desktop → Rates → Phone rules → Publish to app.`,
+      okLabel: "Publish catalog",
     });
     if (!go) return;
 
@@ -2939,6 +2939,7 @@
           apikey: anon,
         },
         body: JSON.stringify({
+          mode: "full",
           publish_key: key,
           version_label,
           notes,
@@ -2966,7 +2967,7 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = "Publish to app";
+        btn.textContent = "Publish full catalog";
         updatePermissionUi();
       }
     }

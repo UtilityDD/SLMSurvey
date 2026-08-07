@@ -108,7 +108,7 @@
                     <div class="slm-rail-tools">
                         <button type="button" class="slm-rail-tool" id="btnExportKits">Export kits</button>
                         <button type="button" class="slm-rail-tool" id="btnImportKits">Import kits</button>
-                        <button type="button" class="slm-rail-tool" id="btnPublishCatalog" disabled>Publish to app</button>
+                        <button type="button" class="slm-rail-tool" id="btnPublishCatalog" disabled title="Archive Mat/Lab + kits online (phone rules publish from desk Phone rules)">Publish full catalog</button>
                         <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnResetKits">Reset edits</button>
                         <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnGuide">User guide</button>
                         <button type="button" class="slm-rail-tool slm-rail-tool-quiet" id="btnSignOutLicense">Sign out</button>
@@ -425,7 +425,8 @@
                 <li><strong>Accept / Reject</strong> (approver) — Suggestions tab. Accept merges as Draft; tick Final when you approve the content.</li>
                 <li><strong>Final</strong> — preferred for estimates; Draft kits are still used if no Final match.</li>
                 <li><strong>Estimate tab</strong> — import phone workspace JSON and generate the final BOQ on desktop (primary).</li>
-                <li><strong>Publish to app</strong> (admin) — uploads Mat/Lab + kits online so phones can download.</li>
+                <li><strong>Publish to app</strong> (admin) — from Desktop → Rates → <em>Phone rules</em>: pushes structure combinations to phones.</li>
+                <li><strong>Publish full catalog</strong> (admin) — uploads Mat/Lab + kits archive online (also refreshes phone rules).</li>
                 <li><strong>Licenses</strong> (admin) — create / extend / block rental codes in the app (server checks <code>can_approve</code>).</li>
             </ol>
 
@@ -438,7 +439,8 @@
                 <tr><td>Suggest change</td><td>Send one kit for approval</td><td><code>can_suggest</code></td></tr>
                 <tr><td>Suggestions tab</td><td>Review pending kit edits</td><td><code>can_approve</code> (or own list if suggestor)</td></tr>
                 <tr><td>Estimate tab</td><td>Import survey → generate BOQ from Draft or Final kits</td><td>Anyone unlocked</td></tr>
-                <tr><td>Publish to app</td><td>Push catalog to phones</td><td><code>can_approve</code> + publish key</td></tr>
+                <tr><td>Publish to app</td><td>Phone structure combinations (desk Phone rules)</td><td><code>can_approve</code> + publish key</td></tr>
+                <tr><td>Publish full catalog</td><td>Mat/Lab + kits archive (+ rules)</td><td><code>can_approve</code> + publish key</td></tr>
                 <tr><td>Licenses tab</td><td>Create, extend, block codes; set suggest/approve flags</td><td><code>can_approve</code></td></tr>
             </table>
 
@@ -446,7 +448,7 @@
             <ul class="est-guide-list">
                 <li><strong>Unlocked only</strong> — edit kits locally; Export / Import / Reset.</li>
                 <li><strong>Suggest</strong> — also Suggest change.</li>
-                <li><strong>Approve (admin)</strong> — Suggestions, Publish to app, Licenses tab.</li>
+                <li><strong>Approve (admin)</strong> — Suggestions, Publish full catalog, Licenses tab. Phone rules publish is on the desk.</li>
             </ul>
             <p class="est-modal-sub">Greyed-out buttons mean your license does not include that permission. Ask the seller to turn on <code>can_suggest</code> or <code>can_approve</code>.</p>
 
