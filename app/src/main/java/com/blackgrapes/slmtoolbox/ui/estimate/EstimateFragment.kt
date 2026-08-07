@@ -49,6 +49,15 @@ class EstimateFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        if (!com.blackgrapes.slmtoolbox.PhoneFeatures.ESTIMATE_ENABLED) {
+            Toast.makeText(
+                requireContext(),
+                "Estimate runs on desktop after you export the survey.",
+                Toast.LENGTH_LONG
+            ).show()
+            findNavController().navigateUp()
+            return
+        }
         binding.toolbar.setNavigationOnClickListener { findNavController().navigateUp() }
         binding.toolbar.setOnMenuItemClickListener { item ->
             when (item.itemId) {

@@ -11,6 +11,10 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const device_id = body?.device_id;
     const known_version = body?.version_label ? String(body.version_label) : "";
+    // "rules" = phone survey combinations only (no heavy kit_matrix/ratebook)
+    // "full" / omitted = desktop-style full catalog
+    const need = String(body?.need || body?.mode || "full").toLowerCase();
+    const rulesOnly = need === "rules" || need === "survey_rules";
 
     if (!device_id) return json({ ok: false, error: "missing_fields" }, 400);
 
@@ -44,11 +48,13 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "expired" }, 403);
     }
 
+    const selectCols = rulesOnly
+      ? "id, version_label, published_at, notes, survey_rules"
+      : "id, version_label, published_at, notes, ratebook, kit_matrix, kit_edits, survey_rules";
+
     const { data: catalog, error } = await supabase
       .from("estimate_catalogs")
-      .select(
-        "id, version_label, published_at, notes, ratebook, kit_matrix, kit_edits",
-      )
+      .select(selectCols)
       .eq("is_current", true)
       .maybeSingle();
 
@@ -69,6 +75,18 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (rulesOnly) {
+      return json({
+        ok: true,
+        unchanged: false,
+        id: catalog.id,
+        version_label: catalog.version_label,
+        published_at: catalog.published_at,
+        notes: catalog.notes ?? "",
+        survey_rules: catalog.survey_rules ?? {},
+      });
+    }
+
     return json({
       ok: true,
       unchanged: false,
@@ -79,6 +97,7 @@ Deno.serve(async (req) => {
       ratebook: catalog.ratebook,
       kit_matrix: catalog.kit_matrix,
       kit_edits: catalog.kit_edits ?? {},
+      survey_rules: catalog.survey_rules ?? {},
     });
   } catch (e) {
     return json({ ok: false, error: "server_error", detail: String(e) }, 500);

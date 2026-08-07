@@ -1,5 +1,6 @@
 package com.blackgrapes.slmtoolbox.domain
 
+import android.content.Context
 import com.blackgrapes.slmtoolbox.domain.model.AssetType
 import com.blackgrapes.slmtoolbox.domain.model.DtrMount
 import com.blackgrapes.slmtoolbox.domain.model.KitArrangement
@@ -54,41 +55,56 @@ data class PlacementDraft(
 )
 
 object NetworkCatalog {
-    fun materialsFor(voltage: VoltageLevel): List<PoleMaterial> = when (voltage) {
-        VoltageLevel.KV_33 -> listOf(
-            PoleMaterial.H_POLE,
-            PoleMaterial.RAIL,
-            PoleMaterial.PCC_9M
-        )
-        VoltageLevel.KV_11 -> listOf(
-            PoleMaterial.PCC_8M,
-            PoleMaterial.PCC_9M,
-            PoleMaterial.H_POLE,
-            PoleMaterial.RAIL
-        )
-        VoltageLevel.LT -> listOf(PoleMaterial.PCC_8M)
+    /** Optional Context so rules from PC publish / APK asset can override builtins. */
+    @Volatile
+    var appContext: Context? = null
+
+    private fun rules(): SurveyRulesStore {
+        appContext?.let { SurveyRulesStore.ensureLoaded(it) }
+        return SurveyRulesStore
     }
 
-    fun structuresFor(voltage: VoltageLevel): List<PoleStructure> = when (voltage) {
-        VoltageLevel.KV_33 -> listOf(
-            PoleStructure.P1,
-            PoleStructure.P2,
-            PoleStructure.P3,
-            PoleStructure.P4
-        )
-        VoltageLevel.KV_11 -> listOf(
-            PoleStructure.P1,
-            PoleStructure.P2,
-            PoleStructure.P3,
-            PoleStructure.P4,
-            PoleStructure.DTR
-        )
-        // LT bare conductor: 1-phase / 2-phase / 3-phase line (not pole structure like HT).
-        VoltageLevel.LT -> listOf(
-            PoleStructure.P1,
-            PoleStructure.P2,
-            PoleStructure.P3
-        )
+    fun materialsFor(voltage: VoltageLevel): List<PoleMaterial> {
+        rules().materialsForPhone(voltage)?.let { return it }
+        return when (voltage) {
+            VoltageLevel.KV_33 -> listOf(
+                PoleMaterial.H_POLE,
+                PoleMaterial.RAIL,
+                PoleMaterial.PCC_9M
+            )
+            VoltageLevel.KV_11 -> listOf(
+                PoleMaterial.PCC_8M,
+                PoleMaterial.PCC_9M,
+                PoleMaterial.H_POLE,
+                PoleMaterial.RAIL
+            )
+            VoltageLevel.LT -> listOf(PoleMaterial.PCC_8M)
+        }
+    }
+
+    fun structuresFor(voltage: VoltageLevel): List<PoleStructure> {
+        rules().structuresFor(voltage)?.let { return it }
+        return when (voltage) {
+            VoltageLevel.KV_33 -> listOf(
+                PoleStructure.P1,
+                PoleStructure.P2,
+                PoleStructure.P3,
+                PoleStructure.P4
+            )
+            VoltageLevel.KV_11 -> listOf(
+                PoleStructure.P1,
+                PoleStructure.P2,
+                PoleStructure.P3,
+                PoleStructure.P4,
+                PoleStructure.DTR
+            )
+            // LT bare conductor: 1-phase / 2-phase / 3-phase line (not pole structure like HT).
+            VoltageLevel.LT -> listOf(
+                PoleStructure.P1,
+                PoleStructure.P2,
+                PoleStructure.P3
+            )
+        }
     }
 
     /**
@@ -97,6 +113,7 @@ object NetworkCatalog {
      */
     fun allowsDeadEnd(voltage: VoltageLevel, structure: PoleStructure?): Boolean {
         if (structure == null) return true
+        rules().deadEndStructures(voltage)?.let { return structure in it }
         return when (voltage) {
             VoltageLevel.LT -> true
             VoltageLevel.KV_33 -> structure in listOf(
@@ -123,10 +140,13 @@ object NetworkCatalog {
         return base.filter { allowsDeadEnd(voltage, it) }
     }
 
-    fun conductorsFor(voltage: VoltageLevel): List<String> = when (voltage) {
-        VoltageLevel.KV_33 -> listOf("100", "150", "200")
-        VoltageLevel.KV_11 -> listOf("30", "50", "100", "ABC")
-        VoltageLevel.LT -> listOf("30", "50", "ABC", "PVC")
+    fun conductorsFor(voltage: VoltageLevel): List<String> {
+        rules().conductorsFor(voltage)?.let { return it }
+        return when (voltage) {
+            VoltageLevel.KV_33 -> listOf("100", "150", "200")
+            VoltageLevel.KV_11 -> listOf("30", "50", "100", "ABC")
+            VoltageLevel.LT -> listOf("30", "50", "ABC", "PVC")
+        }
     }
 
     fun isAbcConductor(conductor: String?): Boolean =
@@ -201,6 +221,7 @@ object NetworkCatalog {
      * 8m PCC and LT: No-ext only (field practice).
      */
     fun allowsPoleExtension(voltage: VoltageLevel, material: PoleMaterial?): Boolean {
+        rules().extensionAllowed(voltage, material)?.let { return it }
         if (material == null) return false
         return when (voltage) {
             VoltageLevel.KV_33, VoltageLevel.KV_11 -> material in listOf(

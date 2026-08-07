@@ -113,6 +113,7 @@ create table if not exists survey.estimate_catalogs (
   ratebook jsonb not null,
   kit_matrix jsonb not null,
   kit_edits jsonb not null default '{}'::jsonb,
+  survey_rules jsonb not null default '{}'::jsonb,
   notes text not null default '',
   published_at timestamptz not null default now()
 );

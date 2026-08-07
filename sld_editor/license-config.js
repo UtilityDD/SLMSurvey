@@ -5,10 +5,16 @@
  * CATALOG_PUBLISH_KEY: set to the same value as Supabase secret CATALOG_PUBLISH_KEY
  * (or leave blank to be prompted / read from supabase/.catalog_publish_key.local).
  * Never put the service-role key here.
+ *
+ * PHONE_APK_DRIVE_URL: Google Drive share link for the phone APK (admin download on desk).
+ * Use a Drive “Anyone with the link” file link, or restrict to your Google accounts.
+ * Leave blank to hide the download button.
  */
 window.SLM_LICENSE_CONFIG = {
   SUPABASE_URL: "https://wkunyvomogeazjwtenck.supabase.co",
   SUPABASE_ANON_KEY:
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndrdW55dm9tb2dlYXpqd3RlbmNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MDIwMDgsImV4cCI6MjA4MTA3ODAwOH0.iY8BjqhUn8rvOwul9a0625LQ_TGmauth5Ltml5mTcR0",
   CATALOG_PUBLISH_KEY: "",
+  PHONE_APK_DRIVE_URL:
+    "https://drive.google.com/file/d/16zdX8FruxR9ufo3tcLhyMGVbJ47jIcm1/view?usp=sharing",
 };

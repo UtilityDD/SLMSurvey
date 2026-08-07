@@ -2,7 +2,7 @@
 
 Scan top → bottom. Legend: **✓** allowed · **✗** blocked · **★** default · **🔒** locked · **—** N/A
 
-Source of truth: `NetworkCatalog.kt` → then this file. Wizard: `SurveyBubbleWizard.kt`. Desktop matrix: `_gen_catalog.py`.
+Source of truth: `sld_editor/estimate/survey-rules.json` (published to phones) · human board: this file · Wizard: `SurveyBubbleWizard.kt` · Desktop chips: `network-catalog.js` · Kit matrix: `_gen_catalog.py` (must stay aligned).
 
 ---
 

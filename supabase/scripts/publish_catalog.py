@@ -44,6 +44,24 @@ def main() -> int:
 
     ratebook = json.loads((EST / "ratebook.json").read_text(encoding="utf-8"))
     matrix = json.loads((EST / "kit-matrix.json").read_text(encoding="utf-8"))
+    rules_path = EST / "survey-rules.json"
+    survey_rules = {}
+    if rules_path.is_file():
+        survey_rules = json.loads(rules_path.read_text(encoding="utf-8"))
+        validate = EST / "validate_survey_rules.py"
+        if validate.is_file():
+            import subprocess
+
+            check = subprocess.run(
+                [sys.executable, str(validate)],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+            )
+            if check.returncode != 0:
+                print(check.stdout or check.stderr, file=sys.stderr)
+                print("survey-rules validation failed; abort publish", file=sys.stderr)
+                return 1
     kit_edits: dict = {}
     if args.edits:
         raw = json.loads(Path(args.edits).read_text(encoding="utf-8"))
@@ -59,6 +77,7 @@ def main() -> int:
         "ratebook": ratebook,
         "kit_matrix": matrix,
         "kit_edits": kit_edits,
+        "survey_rules": survey_rules,
     }
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(

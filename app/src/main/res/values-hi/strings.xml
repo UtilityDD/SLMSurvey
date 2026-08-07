@@ -251,9 +251,9 @@
     <string name="bubble_dtr_mount_hint">Transformer 2P या 4P पर</string>
     <string name="bubble_dtr_capacity">DTR capacity</string>
     <string name="bubble_dtr_more_sizes">और साइज़</string>
-    <string name="bubble_change_kit">Estimate kit बदलें</string>
-    <string name="bubble_kit_ready">Estimate के लिए तैयार</string>
-    <string name="bubble_kit_incomplete">Kit विवरण चाहिए</string>
+    <string name="bubble_change_kit">Location टैग बदलें</string>
+    <string name="bubble_kit_ready">टैग पूरे</string>
+    <string name="bubble_kit_incomplete">Location टैग चाहिए</string>
     <string name="bubble_place">पोल रखें</string>
     <string name="place_continue">Place &amp; Continue</string>
     <string name="place_end">Place &amp; End</string>

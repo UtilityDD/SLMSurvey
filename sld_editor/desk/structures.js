@@ -21,6 +21,8 @@
     voltage: "11kV",
     q: "",
     selected: null,
+    selectedPoleMaterial: null,
+    selectedPoleToken: null,
     focusKey: null, // tree node key whose kits show in the middle pane
     mode: "browse", // browse | edit
     pendingKitId: null,
@@ -160,7 +162,6 @@
   var TYPE_ORDER = ["1P", "2P", "3P", "4P", "1NP", "DTR"];
   var POS_ORDER = ["Tangent", "Angular", "Dead-end", "T-Off", "Tap"];
   var ARR_ORDER = ["In-line", "Sectional", "Other"];
-  var POLE_ORDER = ["8M", "9M", "T9", "T95", "T11", "RL", "WF"];
 
   function allKits() {
     var m = state.matrix;
@@ -206,21 +207,115 @@
     );
   }
 
+  function poleMaterialsForVoltage(voltage) {
+    var Net = global.SlmNetworkCatalog;
+    var v = voltage || state.voltage;
+    if (Net && Net.materialsFor) {
+      return Net.materialsFor(v).map(function (m) {
+        return m.id || m.label || m;
+      });
+    }
+    if (v === "33kV") return ["9m PCC", "Rail", "H-Pole"];
+    if (v === "11kV") {
+      return [
+        "8m PCC",
+        "9m PCC",
+        "Rail",
+        "H-Pole",
+        "Steel pole 9m",
+        "Steel pole 11m",
+      ];
+    }
+    return ["8m PCC"];
+  }
+
+  /** Map catalog pole tokens → field pole-type labels (by voltage). */
+  function materialForToken(token, voltage) {
+    var t = String(token || "").trim().toUpperCase();
+    var v = voltage || state.voltage;
+    if (t === "8M") return "8m PCC";
+    if (t === "9M") return "9m PCC";
+    if (t === "RL") return "Rail";
+    if (v === "33kV") {
+      if (t === "T9" || t === "T95" || t === "T11" || t === "WF") return "H-Pole";
+    } else if (v === "11kV") {
+      if (t === "WF") return "H-Pole";
+      if (t === "T9" || t === "T95") return "Steel pole 9m";
+      if (t === "T11") return "Steel pole 11m";
+    } else if (t === "T9" || t === "T95" || t === "T11" || t === "WF") {
+      return "H-Pole";
+    }
+    return "";
+  }
+
+  function preferredTokenForMaterial(material, kit) {
+    var want = String(material || "");
+    var variants = (kit && kit.poleVariants) || [];
+    var order = {
+      "8m PCC": ["8M"],
+      "9m PCC": ["9M"],
+      Rail: ["RL"],
+      "H-Pole": ["WF", "T9", "T95", "T11"],
+      "Steel pole 9m": ["T9", "T95"],
+      "Steel pole 11m": ["T11"],
+    };
+    var prefs = order[want] || [];
+    for (var i = 0; i < prefs.length; i += 1) {
+      for (var j = 0; j < variants.length; j += 1) {
+        if (String(variants[j].poleToken || "") === prefs[i]) {
+          return prefs[i];
+        }
+      }
+    }
+    // Fallback: any variant that maps to this material
+    for (j = 0; j < variants.length; j += 1) {
+      var tok = variants[j].poleToken;
+      if (materialForToken(tok, kitVoltage(kit) || state.voltage) === want) {
+        return tok;
+      }
+    }
+    return prefs[0] || poleToken(kit);
+  }
+
+  /** Materials this kit supports for the current voltage filter. */
+  function kitPoleMaterials(k) {
+    var allowed = poleMaterialsForVoltage(kitVoltage(k) || state.voltage);
+    var seen = Object.create(null);
+    var out = [];
+    var variants = (k && k.poleVariants) || [];
+    if (!variants.length) {
+      var one = materialForToken(poleToken(k), kitVoltage(k) || state.voltage);
+      if (one && allowed.indexOf(one) >= 0) return [one];
+      return allowed.slice(0, 1);
+    }
+    variants.forEach(function (v) {
+      var mat = materialForToken(v.poleToken, kitVoltage(k) || state.voltage);
+      if (mat && allowed.indexOf(mat) >= 0 && !seen[mat]) {
+        seen[mat] = true;
+        out.push(mat);
+      }
+    });
+    return out;
+  }
+
   function poleLabel(k) {
+    if (k && k._poleMaterial) return k._poleMaterial;
+    if (state.selectedPoleMaterial && state.selected && k && state.selected.id === k.id) {
+      return state.selectedPoleMaterial;
+    }
+    var mats = kitPoleMaterials(k);
+    if (mats.length) return mats[0];
     var t = (k && (k.poleToken || k.activePoleToken || k.poleLabel)) || "";
     t = String(t).trim();
     if (!t) return "Unspecified pole";
-    if (t === "8M") return "8m PCC";
-    if (t === "9M") return "9m PCC";
-    if (t === "T9") return "Tubular 9m";
-    if (t === "T95") return "Tubular 9.5m";
-    if (t === "T11") return "Tubular 11m";
-    if (t === "RL") return "Rail";
-    if (t === "WF") return "Wide flange";
-    return t;
+    return materialForToken(t, kitVoltage(k) || state.voltage) || t;
   }
 
   function poleToken(k) {
+    if (k && k._poleToken) return String(k._poleToken);
+    if (state.selectedPoleToken && state.selected && k && state.selected.id === k.id) {
+      return state.selectedPoleToken;
+    }
     return String((k && (k.poleToken || k.activePoleToken)) || "").trim() || "_";
   }
 
@@ -259,7 +354,12 @@
       '<p class="dk-st-name-guide-ex"><code>' +
       esc(example) +
       "</code></p>" +
-      '<p class="dk-st-name-guide-note">Fixed order. Pole is chosen as a variant (not in the name). HT omits wire — always 3-wire.</p>' +
+      '<p class="dk-st-name-guide-note">Fixed order includes pole after type (e.g. 1P-9M). HT omits wire — always 3-wire.</p>' +
+      '<p class="dk-st-name-guide-note"><strong>Pole types · ' +
+      esc(state.voltage) +
+      ":</strong> " +
+      esc(poleMaterialsForVoltage(state.voltage).join(" · ")) +
+      " → 8M · 9M · RL · HP · S9 · S11</p>" +
       '<table class="dk-st-name-guide-table"><tbody>' +
       rows +
       "</tbody></table></details>"
@@ -279,6 +379,8 @@
       k.conductorFamily,
       k.extension,
       k.poleToken,
+      k.poleLabel,
+      kitPoleMaterials(k).join(" "),
       k.label,
       k.addonType,
     ]
@@ -340,8 +442,8 @@
 
       var pos = posLabel(k);
       var arr = arrLabel(k.arrangement);
-      var pole = poleLabel(k);
-      var poleKey = poleToken(k);
+      var mats = kitPoleMaterials(k);
+      if (!mats.length) mats = ["Unspecified pole"];
 
       if (!root.children[pos]) {
         root.children[pos] = {
@@ -365,18 +467,29 @@
       }
       var arrNode = posNode.children[arr];
 
-      var pk = poleKey + "|" + pole;
-      if (!arrNode.children[pk]) {
-        arrNode.children[pk] = {
-          key: arrNode.key + "/pole:" + poleKey,
-          label: pole,
-          kits: [],
-          children: Object.create(null),
-          kind: "pole",
-          poleToken: poleKey,
-        };
-      }
-      arrNode.children[pk].kits.push(k);
+      mats.forEach(function (mat) {
+        var tok = preferredTokenForMaterial(mat, k);
+        var pk = mat;
+        if (!arrNode.children[pk]) {
+          arrNode.children[pk] = {
+            key: arrNode.key + "/pole:" + encodeURIComponent(mat),
+            label: mat,
+            kits: [],
+            children: Object.create(null),
+            kind: "pole",
+            poleMaterial: mat,
+            poleToken: tok,
+          };
+        }
+        // Stamp material on a shallow copy so list/detail know the pole type.
+        arrNode.children[pk].kits.push(
+          Object.assign({}, k, {
+            _poleMaterial: mat,
+            _poleToken: tok,
+            activePoleToken: tok,
+          })
+        );
+      });
     });
 
     function countNode(node) {
@@ -412,8 +525,9 @@
         return n.label;
       });
       posNode.ordered.forEach(function (arrNode) {
-        arrNode.ordered = childList(arrNode, POLE_ORDER, function (n) {
-          return n.poleToken || n.label;
+        var poleOrder = poleMaterialsForVoltage(state.voltage);
+        arrNode.ordered = childList(arrNode, poleOrder, function (n) {
+          return n.poleMaterial || n.label;
         });
         arrNode.ordered.forEach(function (poleNode) {
           poleNode.kits.sort(function (a, b) {
@@ -476,7 +590,13 @@
         if (p.indexOf("v:") === 0) return p.slice(2);
         if (p.indexOf("p:") === 0) return p.slice(2);
         if (p.indexOf("a:") === 0) return p.slice(2);
-        if (p.indexOf("pole:") === 0) return node.label;
+        if (p.indexOf("pole:") === 0) {
+          try {
+            return decodeURIComponent(p.slice(5));
+          } catch (e) {
+            return node.label || p.slice(5);
+          }
+        }
         if (p.indexOf("o:") === 0) return p.slice(2);
         return "";
       })
@@ -604,6 +724,23 @@
     ].join(" · ");
   }
 
+  function activePoleMaterial(k) {
+    return (
+      (k && k._poleMaterial) ||
+      state.selectedPoleMaterial ||
+      poleLabel(k)
+    );
+  }
+
+  function activePoleToken(k) {
+    return (
+      (k && k._poleToken) ||
+      state.selectedPoleToken ||
+      preferredTokenForMaterial(activePoleMaterial(k), k) ||
+      poleToken(k)
+    );
+  }
+
   function renderDetail(host) {
     var k = state.selected;
     if (!k) {
@@ -627,6 +764,9 @@
         '<div class="dk-st-edit-bar-meta">' +
         '<span class="dk-st-type-pill">' +
         esc(kitType(k)) +
+        "</span>" +
+        '<span class="dk-st-band-pill">' +
+        esc(activePoleMaterial(k)) +
         "</span>" +
         '<strong class="dk-st-edit-title">' +
         esc(kitTitle(k)) +
@@ -666,6 +806,9 @@
       '<div class="dk-st-detail-top">' +
       '<span class="dk-st-type-pill">' +
       esc(type) +
+      "</span>" +
+      '<span class="dk-st-band-pill">' +
+      esc(activePoleMaterial(k)) +
       "</span></div></div>" +
       "<h2>" +
       esc(kitTitle(k)) +
@@ -675,7 +818,9 @@
       "</p>" +
       '<p class="dk-st-detail-meta">' +
       lines.length +
-      " lines</p>" +
+      " lines · Pole " +
+      esc(activePoleMaterial(k)) +
+      "</p>" +
       '<div class="dk-st-detail-actions">' +
       (canEdit()
         ? '<button type="button" class="dk-btn dk-btn-primary" id="dkEditKit">Edit kit</button>'
@@ -703,6 +848,11 @@
     });
     if (!hit) return false;
     state.selected = hit;
+    var mats = kitPoleMaterials(hit);
+    state.selectedPoleMaterial = mats[0] || null;
+    state.selectedPoleToken = state.selectedPoleMaterial
+      ? preferredTokenForMaterial(state.selectedPoleMaterial, hit)
+      : null;
     var v = kitVoltage(hit);
     if (v) {
       if (/^LT$/i.test(v)) state.voltage = "LT";
@@ -719,7 +869,7 @@
         "/a:" +
         arrLabel(hit.arrangement) +
         "/pole:" +
-        poleToken(hit);
+        encodeURIComponent(state.selectedPoleMaterial || "Unspecified pole");
     } else {
       state.focusKey =
         "v:" +
@@ -747,7 +897,10 @@
 
   function leafHtml(k) {
     var selected =
-      state.selected && String(state.selected.id) === String(k.id);
+      state.selected &&
+      String(state.selected.id) === String(k.id) &&
+      (!k._poleMaterial ||
+        String(state.selectedPoleMaterial || "") === String(k._poleMaterial || ""));
     var n = (k.lines || []).length;
     var title = kitTitle(k);
     return (
@@ -755,8 +908,12 @@
       (selected ? " is-selected" : "") +
       '" data-id="' +
       esc(k.id) +
+      '" data-pole="' +
+      esc(k._poleMaterial || "") +
+      '" data-pole-token="' +
+      esc(k._poleToken || "") +
       '" title="' +
-      esc(title) +
+      esc(title + (k._poleMaterial ? " · " + k._poleMaterial : "")) +
       '">' +
       '<span class="dk-st-leaf-title">' +
       esc(title) +
@@ -816,6 +973,8 @@
     if (!v) return;
     state.voltage = v;
     state.selected = null;
+    state.selectedPoleMaterial = null;
+    state.selectedPoleToken = null;
     state.focusKey = "v:" + v;
     state.mode = "browse";
     state.pendingKitId = null;
@@ -896,21 +1055,35 @@
     page.querySelectorAll(".dk-st-leaf").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.getAttribute("data-id");
+        var poleMat = btn.getAttribute("data-pole") || "";
+        var poleTok = btn.getAttribute("data-pole-token") || "";
         var next = allKits().find(function (k) {
           return String(k.id) === String(id);
         });
         if (!next) return;
+        var stamped = Object.assign({}, next, {
+          _poleMaterial: poleMat || null,
+          _poleToken: poleTok || null,
+          activePoleToken: poleTok || next.poleToken,
+        });
+        var same =
+          state.selected &&
+          String(state.selected.id) === String(id) &&
+          String(state.selectedPoleMaterial || "") === String(poleMat || "");
         // While editing, switch the in-pane editor to the clicked kit.
         if (state.mode === "edit") {
-          state.selected = next;
+          state.selected = stamped;
+          state.selectedPoleMaterial = poleMat || null;
+          state.selectedPoleToken = poleTok || null;
           state.pendingKitId = next.id;
-        } else if (
-          state.selected &&
-          String(state.selected.id) === String(next.id)
-        ) {
+        } else if (same) {
           state.selected = null;
+          state.selectedPoleMaterial = null;
+          state.selectedPoleToken = null;
         } else {
-          state.selected = next;
+          state.selected = stamped;
+          state.selectedPoleMaterial = poleMat || null;
+          state.selectedPoleToken = poleTok || null;
         }
         Desk.refresh();
       });

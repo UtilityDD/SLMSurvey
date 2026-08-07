@@ -248,7 +248,7 @@
     <string name="conductor_abc_label">ABC (bundled)</string>
     <string name="conductor_bare_size">Bare %1$s</string>
     <string name="bubble_conductor">Conductor size</string>
-    <string name="bubble_kit_suggest">Estimate kit for this pole</string>
+    <string name="bubble_kit_suggest">Location tags for this pole</string>
     <string name="bubble_kit_suggest_hint">Tap Use if this is right. Change only when this pole differs.</string>
     <string name="bubble_kit_use">Use: %1$s</string>
     <string name="bubble_kit_change">Change kit details</string>
@@ -285,9 +285,9 @@
     <string name="bubble_dtr_mount_hint">Transformer on 2P or 4P</string>
     <string name="bubble_dtr_capacity">DTR capacity</string>
     <string name="bubble_dtr_more_sizes">More sizes</string>
-    <string name="bubble_change_kit">Change estimate kit</string>
-    <string name="bubble_kit_ready">Ready for estimate</string>
-    <string name="bubble_kit_incomplete">Needs kit details</string>
+    <string name="bubble_change_kit">Change location tags</string>
+    <string name="bubble_kit_ready">Tags complete</string>
+    <string name="bubble_kit_incomplete">Needs location tags</string>
     <string name="bubble_place">Place pole</string>
     <string name="place_continue">Place &amp; Continue</string>
     <string name="place_end">Place &amp; End</string>

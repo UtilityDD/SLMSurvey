@@ -2896,7 +2896,7 @@
     const notes = String(notesEntered || "").trim();
     const go = await window.SlmDialog.confirm({
       title: "Publish to app?",
-      message: `Upload rate book + kits as “${version_label}”?\nActivated phones will download this version.`,
+      message: `Upload rate book + kits + survey rules as “${version_label}”?\nPhones download survey rules; desktop keeps full kits.`,
       okLabel: "Publish",
     });
     if (!go) return;
@@ -2924,6 +2924,13 @@
           };
         }),
       };
+      let survey_rules = {};
+      try {
+        const rr = await fetch("./survey-rules.json", { cache: "no-store" });
+        if (rr.ok) survey_rules = await rr.json();
+      } catch (e) {
+        console.warn("survey-rules.json missing; publishing empty rules", e);
+      }
       const res = await fetch(`${base}/functions/v1/catalog-publish`, {
         method: "POST",
         headers: {
@@ -2938,6 +2945,7 @@
           ratebook: state.ratebook,
           kit_matrix,
           kit_edits: loadEdits(),
+          survey_rules,
         }),
       });
       const data = await res.json().catch(() => ({}));

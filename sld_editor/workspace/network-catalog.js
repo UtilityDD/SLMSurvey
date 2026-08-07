@@ -58,8 +58,41 @@
     return v === "33kV" || v === "11kV";
   }
 
+  function materialsFor(voltage) {
+    voltage = normVoltage(voltage);
+    if (voltage === "33kV") {
+      // No 8m PCC on 33kV
+      return ["9m PCC", "Rail", "H-Pole"];
+    }
+    if (voltage === "11kV") {
+      return [
+        "8m PCC",
+        "9m PCC",
+        "Rail",
+        "H-Pole",
+        "Steel pole 9m",
+        "Steel pole 11m",
+      ];
+    }
+    return ["8m PCC"]; // LT
+  }
+
+  function rulesPack() {
+    return global.SlmSurveyRules || null;
+  }
+
+  function rulesVoltage(voltage) {
+    var pack = rulesPack();
+    if (!pack || !pack.byVoltage) return null;
+    return pack.byVoltage[normVoltage(voltage)] || null;
+  }
+
   function structuresFor(voltage) {
     voltage = normVoltage(voltage);
+    var rv = rulesVoltage(voltage);
+    if (rv && Array.isArray(rv.structures) && rv.structures.length) {
+      return rv.structures.slice();
+    }
     if (voltage === "33kV") return ["1P", "2P", "3P", "4P"];
     if (voltage === "11kV") return ["1P", "2P", "3P", "4P", "DTR"];
     return ["1P", "2P", "3P"]; // LT phases
@@ -69,6 +102,10 @@
     structure = normStructure(structure);
     if (!structure) return true;
     voltage = normVoltage(voltage);
+    var rv = rulesVoltage(voltage);
+    if (rv && Array.isArray(rv.deadEndStructures)) {
+      return rv.deadEndStructures.indexOf(structure) >= 0;
+    }
     if (voltage === "LT") return true;
     if (voltage === "33kV") return structure === "2P" || structure === "3P" || structure === "4P";
     if (voltage === "11kV")
@@ -87,9 +124,79 @@
 
   function conductorsFor(voltage) {
     voltage = normVoltage(voltage);
+    var rv = rulesVoltage(voltage);
+    if (rv && Array.isArray(rv.conductors) && rv.conductors.length) {
+      return rv.conductors.slice();
+    }
     if (voltage === "33kV") return ["100", "150", "200"];
     if (voltage === "11kV") return ["30", "50", "100", "ABC"];
     return ["30", "50", "ABC", "PVC"];
+  }
+
+  /**
+   * Field pole types (survey Mat). Prefer survey-rules.json when loaded.
+   * Desktop includes phone:false options (e.g. Steel pole 9m / 11m).
+   */
+  function materialsFor(voltage) {
+    voltage = normVoltage(voltage);
+    var rv = rulesVoltage(voltage);
+    if (rv && Array.isArray(rv.materials) && rv.materials.length) {
+      return rv.materials.map(function (m) {
+        if (typeof m === "string") return { id: m, label: m };
+        return { id: m.id || m.label, label: m.label || m.id };
+      });
+    }
+    if (voltage === "33kV") {
+      return [
+        { id: "9m PCC", label: "9m PCC" },
+        { id: "Rail", label: "Rail" },
+        { id: "H-Pole", label: "H-Pole" },
+      ];
+    }
+    if (voltage === "11kV") {
+      return [
+        { id: "8m PCC", label: "8m PCC" },
+        { id: "9m PCC", label: "9m PCC" },
+        { id: "Rail", label: "Rail" },
+        { id: "H-Pole", label: "H-Pole" },
+        { id: "Steel pole 9m", label: "Steel pole 9m" },
+        { id: "Steel pole 11m", label: "Steel pole 11m" },
+      ];
+    }
+    return [{ id: "8m PCC", label: "8m PCC" }];
+  }
+
+  function materialIdsFor(voltage) {
+    return materialsFor(voltage).map(function (m) {
+      return m.id;
+    });
+  }
+
+  function normMaterial(s, voltage) {
+    var t = String(s || "").trim();
+    if (!t) return "";
+    var allowed = materialIdsFor(voltage);
+    if (allowed.indexOf(t) !== -1) return t;
+    var lower = t.toLowerCase();
+    if (lower.indexOf("8") !== -1 && lower.indexOf("pcc") !== -1) return "8m PCC";
+    if (lower.indexOf("9") !== -1 && lower.indexOf("pcc") !== -1) return "9m PCC";
+    if (lower.indexOf("rail") !== -1) return "Rail";
+    if (lower.indexOf("steel") !== -1 && lower.indexOf("11") !== -1) {
+      return "Steel pole 11m";
+    }
+    if (
+      lower.indexOf("steel") !== -1 ||
+      lower.indexOf("tubular") !== -1 ||
+      lower.indexOf("9.5") !== -1
+    ) {
+      if (lower.indexOf("11") !== -1) return "Steel pole 11m";
+      if (normVoltage(voltage) === "11kV") return "Steel pole 9m";
+      return "H-Pole";
+    }
+    if (lower.indexOf("h") === 0 || lower.indexOf("h-pole") !== -1) return "H-Pole";
+    if (lower === "pcc-8m" || lower === "pcc_8m") return "8m PCC";
+    if (lower === "pcc-9m" || lower === "pcc_9m") return "9m PCC";
+    return allowed[0] || t;
   }
 
   function ltPhasesForConductor(conductor) {
@@ -115,11 +222,23 @@
   }
 
   function allowsPoleExtension(voltage, material) {
-    if (normVoltage(voltage) === "LT") return false;
+    voltage = normVoltage(voltage);
+    var pack = rulesPack();
+    var mat = String(material || "").trim();
+    if (pack && pack.rules && pack.rules.extensionAllowedMaterials) {
+      var allowed = pack.rules.extensionAllowedMaterials[voltage] || [];
+      if (!mat) return allowed.length > 0;
+      return allowed.indexOf(mat) >= 0;
+    }
+    if (voltage === "LT") return false;
     var m = String(material || "").toUpperCase();
+    if (!m) return true;
+    if (m.indexOf("8") !== -1 && m.indexOf("PCC") !== -1) return false;
     return (
       m.indexOf("H") === 0 ||
       m.indexOf("RAIL") !== -1 ||
+      m.indexOf("STEEL") !== -1 ||
+      m.indexOf("TUBULAR") !== -1 ||
       m.indexOf("9") !== -1 ||
       m === "PCC-9M" ||
       m === "PCC_9M"
@@ -140,7 +259,9 @@
     var location = normLocation(draft.kitLocation);
     var structure = normStructure(draft.structure);
     var conductor = draft.conductor || "";
-    var material = draft.poleMaterial || draft.material || "";
+    var materials = materialsFor(voltage);
+    var material = normMaterial(draft.poleMaterial || draft.material || "", voltage);
+    if (!material && materials.length) material = materials[0].id;
 
     var structures =
       voltage === "LT" && conductor
@@ -177,6 +298,7 @@
 
     return {
       voltage: voltage,
+      materials: materials,
       structures: structures,
       locations: locations,
       arrangements: arrangements,
@@ -188,6 +310,7 @@
         kitArrangement: arrangement,
         kitExtension: extension,
         conductor: conductor,
+        poleMaterial: material,
       },
     };
   }
@@ -202,10 +325,34 @@
     normStructure: normStructure,
     structuresFor: structuresFor,
     conductorsFor: conductorsFor,
+    materialsFor: materialsFor,
     kitLocationsFor: kitLocationsFor,
     kitArrangementsFor: kitArrangementsFor,
     kitExtensionsFor: kitExtensionsFor,
     optionsFor: optionsFor,
     coerce: coerce,
+    /** Load shared survey-rules.json (desktop). Safe to call multiple times. */
+    loadRules: function (url) {
+      var href = url || "../estimate/survey-rules.json";
+      return fetch(href, { cache: "no-store" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("rules " + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          global.SlmSurveyRules = data;
+          return data;
+        });
+    },
+    setRules: function (data) {
+      global.SlmSurveyRules = data || null;
+    },
   };
+
+  // Best-effort auto-load when served over HTTP.
+  if (typeof fetch === "function") {
+    global.SlmNetworkCatalog.loadRules().catch(function () {
+      /* bundled fallbacks in materialsFor / structuresFor */
+    });
+  }
 })(window);

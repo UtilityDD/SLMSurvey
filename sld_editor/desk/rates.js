@@ -11,7 +11,7 @@
 
   var RATEBOOK_URL = "../estimate/ratebook.json";
   var state = {
-    tab: "materials", // materials | labour | schedules
+    tab: "materials", // materials | labour | schedules | rules
     ratebook: null,
     schedules: null,
     q: "",
@@ -121,6 +121,18 @@
   }
 
   function paint(page) {
+    if (state.tab === "rules") {
+      var Rules = global.SlmDeskRules;
+      if (Rules && Rules.render) {
+        page.innerHTML = "";
+        Rules.render(page);
+      } else {
+        page.innerHTML =
+          '<div class="dk-blank"><h2>Phone rules unavailable</h2></div>';
+      }
+      return;
+    }
+
     var rb = state.ratebook || { materials: [], labour: [] };
     var titles = {
       materials: ["Materials", "Item rates from the rate book."],
@@ -167,6 +179,10 @@
     var page = document.createElement("div");
     page.className = "dk-page";
     host.appendChild(page);
+    if (state.tab === "rules") {
+      paint(page);
+      return;
+    }
     page.innerHTML = '<div class="dk-blank"><h2>Loading rates…</h2></div>';
     Promise.all([loadRatebook(), loadSchedules()])
       .then(function () {
@@ -205,6 +221,18 @@
           onClick: function () {
             state.tab = "schedules";
             state.q = "";
+            Desk.refresh();
+          },
+        },
+        {
+          label: "Phone rules",
+          active: state.tab === "rules",
+          onClick: function () {
+            state.tab = "rules";
+            state.q = "";
+            if (global.SlmDeskRules && global.SlmDeskRules.reload) {
+              global.SlmDeskRules.reload();
+            }
             Desk.refresh();
           },
         },

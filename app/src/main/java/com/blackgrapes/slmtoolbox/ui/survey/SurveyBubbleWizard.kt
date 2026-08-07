@@ -674,6 +674,7 @@ class SurveyBubbleWizard : DialogFragment() {
                     push(Step.STRUCTURE)
                     render()
                 }
+                // Location / arrangement / extension tags — used on desktop match; not phone BOQ.
                 if (editing!!.status == WorkStatus.PROPOSED) {
                     addChoice(getString(R.string.bubble_change_kit)) {
                         editingKitOnly = true

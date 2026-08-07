@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "label": "survey-rules-v1",
+  "notes": "Admissible survey combinations for phone wizard + desktop Map chips. Must match docs/SURVEY_COMBINATIONS.md. Kits/estimate stay on PC.",
+  "voltages": ["33kV", "11kV", "LT"],
+  "byVoltage": {
+    "33kV": {
+      "materials": [
+        { "id": "H-Pole", "label": "H-Pole", "phone": true },
+        { "id": "Rail", "label": "Rail", "phone": true },
+        { "id": "9m PCC", "label": "9m PCC", "phone": true }
+      ],
+      "structures": ["1P", "2P", "3P", "4P"],
+      "conductors": ["100", "150", "200"],
+      "deadEndStructures": ["2P", "3P", "4P"],
+      "defaultMaterial": "H-Pole",
+      "defaultStructure": "1P",
+      "defaultConductor": "100",
+      "allowsDtr": false,
+      "requiresFeederSs": true
+    },
+    "11kV": {
+      "materials": [
+        { "id": "8m PCC", "label": "8m PCC", "phone": true },
+        { "id": "9m PCC", "label": "9m PCC", "phone": true },
+        { "id": "H-Pole", "label": "H-Pole", "phone": true },
+        { "id": "Rail", "label": "Rail", "phone": true },
+        { "id": "Steel pole 9m", "label": "Steel pole 9m", "phone": false },
+        { "id": "Steel pole 11m", "label": "Steel pole 11m", "phone": false }
+      ],
+      "structures": ["1P", "2P", "3P", "4P", "DTR"],
+      "conductors": ["30", "50", "100", "ABC"],
+      "deadEndStructures": ["2P", "3P", "4P", "DTR"],
+      "defaultMaterial": "8m PCC",
+      "defaultStructure": "1P",
+      "defaultConductor": "30",
+      "allowsDtr": true,
+      "requiresFeederSs": true
+    },
+    "LT": {
+      "materials": [
+        { "id": "8m PCC", "label": "8m PCC", "phone": true }
+      ],
+      "structures": ["1P", "2P", "3P"],
+      "structuresPhone": ["1P", "2P", "3P"],
+      "kitStructuresExtra": ["DTR"],
+      "conductors": ["30", "50", "ABC", "PVC"],
+      "deadEndStructures": ["1P", "2P", "3P"],
+      "defaultMaterial": "8m PCC",
+      "defaultStructure": "1P",
+      "defaultConductor": "30",
+      "allowsDtr": false,
+      "allowsDtrTOffKits": true,
+      "requiresFeederSs": false
+    }
+  },
+  "locations": ["Tangent", "Angular", "Dead-end", "T-Off"],
+  "arrangements": ["In-line", "Sectional"],
+  "extensions": ["No ext", "With ext"],
+  "dtrMounts": ["2P", "4P"],
+  "dtrCapacitiesCommon": ["16", "25", "63", "100", "160", "250"],
+  "dtrCapacitiesMore": ["315", "630"],
+  "ltPhasesByConductor": {
+    "ABC": ["1P", "2P", "3P"],
+    "PVC": ["1P", "3P"],
+    "*": ["1P", "2P", "3P"]
+  },
+  "rules": {
+    "ht1pNeverDeadEnd": true,
+    "htMultiPoleArrSectionalOnly": true,
+    "ht1pArrAllowInlineAndSectional": true,
+    "continueHt1pLocksConductor": true,
+    "ltNoExtension": true,
+    "guarding": {
+      "withExtAlways": true,
+      "noExtMaterials": ["H-Pole", "Rail"]
+    },
+    "extensionAllowedMaterials": {
+      "33kV": ["H-Pole", "Rail", "9m PCC"],
+      "11kV": ["H-Pole", "Rail", "9m PCC", "Steel pole 9m", "Steel pole 11m"],
+      "LT": []
+    },
+    "htAcsrWire": "3W",
+    "cableConductors": ["ABC", "PVC"]
+  },
+  "poleAbbr": {
+    "8m PCC": "8M",
+    "9m PCC": "9M",
+    "Rail": "RL",
+    "H-Pole": "HP",
+    "Steel pole 9m": "S9",
+    "Steel pole 11m": "S11"
+  },
+  "blocked": [
+    { "when": "location=Dead-end", "block": "structure=1P", "voltages": ["33kV", "11kV"] },
+    { "when": "structure=1P", "block": "location=Dead-end", "voltages": ["33kV", "11kV"] },
+    { "when": "structure in 2P|3P|4P|DTR", "block": "arrangement=In-line", "voltages": ["33kV", "11kV"] },
+    { "when": "material=8m PCC", "block": "extension=With ext", "voltages": ["11kV", "LT"] },
+    { "when": "voltage=LT", "block": "extension=With ext" },
+    { "when": "conductor=PVC", "block": "structure=2P", "voltages": ["LT"] },
+    { "when": "voltage=33kV", "block": "structure=DTR" },
+    { "when": "voltage=33kV", "block": "material=8m PCC" },
+    { "when": "voltage=33kV", "block": "conductor=50" }
+  ]
+}

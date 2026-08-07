@@ -144,6 +144,7 @@
       next.kitArrangement = pack.draft.kitArrangement || null;
       next.kitExtension = pack.draft.kitExtension;
       if (pack.draft.conductor) next.conductor = pack.draft.conductor;
+      if (pack.draft.poleMaterial) next.poleMaterial = pack.draft.poleMaterial;
     }
 
     // HT 2P/3P/4P/DTR → Sectional only (Dead-end has no arrangement).
@@ -553,6 +554,7 @@
     };
     if (Net && Net.optionsFor) return Net.optionsFor(asset.voltage, draft);
     return {
+      materials: [],
       structures: ["1P", "2P", "3P", "4P", "DTR"],
       locations: ["Tangent", "Angular", "Dead-end", "T-Off"],
       arrangements: ["In-line", "Sectional"],
@@ -937,6 +939,16 @@
             esc(structureName) +
             "</div>"
           : "") +
+        chipRow(
+          "Pole",
+          "poleMaterial",
+          pack.materials && pack.materials.length
+            ? pack.materials
+            : Net && Net.materialsFor
+              ? Net.materialsFor(asset.voltage)
+              : [],
+          state.poleMaterial || draft.poleMaterial
+        ) +
         chipRow("Structure", "structure", pack.structures, draft.structure) +
         chipRow("Location", "kitLocation", pack.locations, draft.kitLocation) +
         chipRow("Arrange", "kitArrangement", pack.arrangements, draft.kitArrangement) +
@@ -996,7 +1008,7 @@
         var next = panel._draft || state;
         if (!raw) return;
         var patch = {};
-        ["structure", "kitLocation", "kitArrangement", "kitExtension", "conductor"].forEach(
+        ["structure", "kitLocation", "kitArrangement", "kitExtension", "conductor", "poleMaterial"].forEach(
           function (k) {
             var v = String(next[k] || "").trim();
             if (v && v !== String(raw[k] || "")) patch[k] = v;
@@ -1021,7 +1033,11 @@
       kitArrangement: draft.kitArrangement,
       kitExtension: draft.kitExtension,
       conductor: draft.conductor,
-      poleMaterial: draft.poleMaterial || asset.poleMaterial,
+      poleMaterial:
+        draft.poleMaterial ||
+        asset.poleMaterial ||
+        (pack.draft && pack.draft.poleMaterial) ||
+        "",
     };
     panel._draft = state;
     panel._assetId = asset.id;

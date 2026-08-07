@@ -141,6 +141,23 @@
       });
   }
 
+  function wireApkDownload() {
+    var link = $("dkApkDownload");
+    if (!link) return;
+    var cfg = global.SLM_LICENSE_CONFIG || {};
+    var url = String(cfg.PHONE_APK_DRIVE_URL || "").trim();
+    var L = global.SlmLicense;
+    var allowed =
+      !L || !L.enabled || !!(L.canApprove && L.canApprove());
+    if (!url || !allowed) {
+      link.classList.add("hidden");
+      link.removeAttribute("href");
+      return;
+    }
+    link.href = url;
+    link.classList.remove("hidden");
+  }
+
   function wireShell() {
     document.querySelectorAll(".dk-block-head").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -151,6 +168,8 @@
 
   function start() {
     wireShell();
+    wireApkDownload();
+    window.addEventListener("slm-license-changed", wireApkDownload);
     window.addEventListener("hashchange", function () {
       var hash = (location.hash || "").replace(/^#/, "");
       go(hash);

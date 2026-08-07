@@ -63,15 +63,14 @@ Repo root also has `supabase/` for schema + edge functions used by license + cat
 ```
 Phone survey (GPS + kit tags)
     → export workspace JSON
-    → Desktop CAD import (edit / print SLD)
-    → Estimate tab: match Proposed poles to Final kits → BOQ
+    → Desktop Map import (edit / print / estimate)
 
-Assembly Builder (Mat/Lab → kits)
-    → Publish to app (Supabase)
-    → Phones pull catalog for field check only
+Assembly Builder / Structures
+    → Publish to app (Supabase): survey-rules (+ kits for desktop archive)
+    → Phones pull survey-rules only (combinations); estimate stays on PC
 ```
 
-**Do not** treat phone Estimate as the final quotation engine.
+**Do not** treat phone Estimate as the quotation engine (`PhoneFeatures.ESTIMATE_ENABLED = false`).
 
 ---
 

@@ -251,9 +251,9 @@
     <string name="bubble_dtr_mount_hint">Transformer 2P বা 4P-এ</string>
     <string name="bubble_dtr_capacity">DTR capacity</string>
     <string name="bubble_dtr_more_sizes">আরও সাইজ</string>
-    <string name="bubble_change_kit">Estimate kit বদলান</string>
-    <string name="bubble_kit_ready">Estimate-এর জন্য প্রস্তুত</string>
-    <string name="bubble_kit_incomplete">Kit বিবরণ লাগবে</string>
+    <string name="bubble_change_kit">Location ট্যাগ বদলান</string>
+    <string name="bubble_kit_ready">ট্যাগ সম্পূর্ণ</string>
+    <string name="bubble_kit_incomplete">Location ট্যাগ লাগবে</string>
     <string name="bubble_place">পোল রাখুন</string>
     <string name="place_continue">Place &amp; Continue</string>
     <string name="place_end">Place &amp; End</string>

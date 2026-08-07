@@ -1,6 +1,6 @@
 # Android app — agent README
 
-Field survey app for electrical network poles/spans (GPS map). Survey data stays **on device** (Room). Licensing + estimate **catalog** sync via Supabase. **Desktop CAD is primary for final BOQ**; phone Estimate is a field check only.
+Field survey app for electrical network poles/spans (GPS map). Survey data stays **on device** (Room). Licensing + **survey combination rules** sync via Supabase. **Desktop is primary for kits / BOQ**; phone Estimate is **disabled** (`PhoneFeatures.ESTIMATE_ENABLED = false`).
 
 **Package:** `com.blackgrapes.slmtoolbox`  
 **Module path:** `app/`  
@@ -13,11 +13,13 @@ Field survey app for electrical network poles/spans (GPS map). Survey data stays
 | Concern | Where |
 |---------|--------|
 | GPS poles, spans, Existing/Proposed, kit **tags** | Phone (this app) |
-| Final estimate / BOQ matching | Desktop `sld_editor/estimate/` |
-| Rate book + kit assembly | Desktop Assembly Builder → **Publish to app** |
-| License activate / validate | Supabase edge functions |
+| Allowed / blocked chip combinations | Shared `survey-rules.json` (PC publish → phone) |
+| Final estimate / BOQ matching | Desktop `sld_editor/` |
+| Rate book + kit assembly | Desktop Structures / Estimate → **Publish to app** |
 
-Phone stores **classification tags** on each pole (material, conductor, type, location, arrangement, extension, guarding) so desktop can match kits later. Phone does **not** need to invent Mat/Lab line items.
+Phone stores **classification tags** on each pole (material, conductor, type, location, arrangement, extension, guarding) so desktop can match kits later. Phone does **not** download the full kit matrix for field BOQ.
+
+**Full admissible / default matrix:** [`docs/SURVEY_COMBINATIONS.md`](../docs/SURVEY_COMBINATIONS.md) · machine file [`sld_editor/estimate/survey-rules.json`](../sld_editor/estimate/survey-rules.json) (also in `assets/`).
 
 ---
 

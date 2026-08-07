@@ -1,11 +1,10 @@
 /**
  * Fixed-sequence kit display names.
  *
- * Structure example: 11kV-1P-Tan-Sec-NoExt-DOG
- * Sequence: Voltage-Type-Loc-Arr-Ext-Cond[-Wire][-kVA]
+ * Structure example: 11kV-1P-9M-Tan-Sec-NoExt-DOG
+ * Sequence: Voltage-Type-Pole-Loc-Arr-Ext-Cond[-Wire][-kVA]
  *
  * HT (11/33) never shows wire count — always 3-wire / cable.
- * Pole is a variant, not part of the config name.
  */
 (function (global) {
   "use strict";
@@ -36,6 +35,26 @@
     ["PVC", "PVC"],
   ];
 
+  /** Field pole type / token → short name token. */
+  var POLE_ABBR = {
+    "8m PCC": "8M",
+    "9m PCC": "9M",
+    Rail: "RL",
+    "H-Pole": "HP",
+    "Steel pole 9m": "S9",
+    "Steel pole 11m": "S11",
+    "8M": "8M",
+    "9M": "9M",
+    RL: "RL",
+    HP: "HP",
+    WF: "HP",
+    T9: "S9",
+    T95: "S9",
+    T11: "S11",
+    S9: "S9",
+    S11: "S11",
+  };
+
   function voltagePart(kit) {
     var v = String((kit && kit.voltage) || "").trim();
     if (/^33/i.test(v)) return "33kV";
@@ -59,6 +78,45 @@
       return "DTR2P";
     }
     return st || "1P";
+  }
+
+  function polePart(kit) {
+    if (!kit) return null;
+    var raw =
+      kit._poleMaterial ||
+      kit.poleMaterial ||
+      kit.material ||
+      kit.poleLabel ||
+      kit._poleToken ||
+      kit.activePoleToken ||
+      kit.poleToken ||
+      "";
+    raw = String(raw).trim();
+    if (!raw) return null;
+
+    if (POLE_ABBR[raw]) return POLE_ABBR[raw];
+
+    var upper = raw.toUpperCase();
+    if (POLE_ABBR[upper]) return POLE_ABBR[upper];
+
+    var lower = raw.toLowerCase();
+    if (lower.indexOf("8") !== -1 && lower.indexOf("pcc") !== -1) return "8M";
+    if (lower.indexOf("9") !== -1 && lower.indexOf("pcc") !== -1) return "9M";
+    if (lower.indexOf("rail") !== -1) return "RL";
+    if (lower.indexOf("steel") !== -1 && lower.indexOf("11") !== -1) return "S11";
+    if (lower.indexOf("steel") !== -1 && lower.indexOf("9") !== -1) return "S9";
+    if (lower.indexOf("tubular") !== -1 && lower.indexOf("11") !== -1) return "S11";
+    if (lower.indexOf("tubular") !== -1) return "S9";
+    if (lower.indexOf("wide") !== -1 || lower.indexOf("h-pole") !== -1 || lower === "h-pole") {
+      return "HP";
+    }
+    if (lower.indexOf("h") === 0 && lower.indexOf("pole") !== -1) return "HP";
+
+    // 33kV steel tokens collapse to H-Pole abbreviation
+    if (voltagePart(kit) === "33kV" && (upper === "T9" || upper === "T95" || upper === "T11")) {
+      return "HP";
+    }
+    return upper.slice(0, 4);
   }
 
   function locPart(kit) {
@@ -175,11 +233,10 @@
 
   /** Fixed-sequence display name for structure kits. */
   function structureDisplayName(kit) {
-    var parts = [
-      voltagePart(kit),
-      typePart(kit),
-      locPart(kit),
-    ];
+    var parts = [voltagePart(kit), typePart(kit)];
+    var pole = polePart(kit);
+    if (pole) parts.push(pole);
+    parts.push(locPart(kit));
     var arr = arrPart(kit);
     if (arr) parts.push(arr);
     parts.push(extPart(kit));
@@ -233,6 +290,10 @@
       meaning: "1P · 2P · 3P · 4P · DTR2P · DTR4P",
     },
     {
+      token: "Pole",
+      meaning: "8M · 9M · RL · HP · S9 · S11 (after type)",
+    },
+    {
       token: "Loc",
       meaning: "Tan (tangent) · Ang · DE (dead-end) · TOff",
     },
@@ -259,32 +320,39 @@
   ];
 
   function guideExample() {
-    return "11kV-1P-Tan-Sec-NoExt-DOG";
+    return "11kV-1P-9M-Tan-Sec-NoExt-DOG";
   }
 
   global.SlmKitName = {
     displayName: displayName,
     structureDisplayName: structureDisplayName,
+    poleAbbr: polePart,
     /** Name from a matched kit, or from pole chips when no kit yet. */
     forPole: function (pole, kit) {
-      if (kit) return displayName(kit);
-      if (!pole) return "—";
-      return structureDisplayName({
-        family: "structure",
-        voltage: pole.voltage,
-        structure: pole.structure,
-        dtrMount: pole.dtrMount,
-        dtrCapacity: pole.dtrCapacity || pole.dtCapacityKva,
-        location: pole.kitLocation || pole.location,
-        arrangement: pole.kitArrangement || pole.arrangement,
-        extension: pole.kitExtension || pole.extension,
-        conductor: pole.conductor,
-        conductorShort: pole.conductorShort,
-        conductorName: pole.conductorName,
-        conductorFamily: pole.conductorFamily,
-        wireCount: pole.wireCount,
-        wireLabel: pole.wireLabel,
-      });
+      var base = kit ? Object.assign({}, kit) : { family: "structure" };
+      if (pole) {
+        base.voltage = base.voltage || pole.voltage;
+        base.structure = base.structure || pole.structure;
+        base.dtrMount = base.dtrMount || pole.dtrMount;
+        base.dtrCapacity =
+          base.dtrCapacity || pole.dtrCapacity || pole.dtCapacityKva;
+        base.location = pole.kitLocation || pole.location || base.location;
+        base.arrangement =
+          pole.kitArrangement || pole.arrangement || base.arrangement;
+        base.extension =
+          pole.kitExtension || pole.extension || base.extension;
+        base.conductor = pole.conductor || base.conductor;
+        base.conductorShort = pole.conductorShort || base.conductorShort;
+        base.conductorName = pole.conductorName || base.conductorName;
+        base.conductorFamily = pole.conductorFamily || base.conductorFamily;
+        base.wireCount = pole.wireCount || base.wireCount;
+        base.wireLabel = pole.wireLabel || base.wireLabel;
+        base.poleMaterial =
+          pole.poleMaterial || pole.material || base.poleMaterial;
+        base._poleMaterial =
+          pole.poleMaterial || pole.material || base._poleMaterial;
+      }
+      return displayName(base);
     },
     guide: GUIDE,
     guideExample: guideExample,
