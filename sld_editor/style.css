@@ -1362,6 +1362,30 @@ body.print-simple #mapView {
     color: #fff;
 }
 
+.print-sheet-chip.is-saved:not(.is-active) {
+    background: #ecfdf5;
+    border-color: #6ee7b7;
+    color: #047857;
+}
+
+.print-sheet-chip.is-saved.is-active {
+    background: #0f766e;
+    border-color: #0f766e;
+}
+
+#btnSetPrintPageOne.is-saved {
+    border-color: #6ee7b7;
+    color: #047857;
+}
+
+.print-overlay.is-preview-layout .print-frame {
+    box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.35), 0 8px 28px rgba(15, 23, 42, 0.18);
+}
+
+.print-overlay.is-preview-layout .print-frame-chrome {
+    cursor: default;
+}
+
 .print-zoom-stepper {
     display: inline-flex;
     align-items: center;
@@ -1544,42 +1568,42 @@ body.print-simple #mapView {
 
 .print-frame-legend {
     position: absolute;
-    right: 10px;
-    bottom: 42px;
-    width: min(300px, 46%);
-    max-height: calc(100% - 100px);
+    right: 8px;
+    bottom: 38px;
+    width: min(220px, 34%);
+    max-height: calc(100% - 92px);
     overflow: visible;
-    border: 1.5px solid #0f172a;
+    border: 1.25px solid #0f172a;
     border-radius: 2px;
-    padding: 8px 10px;
+    padding: 5px 6px;
     background: #ffffff;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
     cursor: move;
     z-index: 2;
     -webkit-font-smoothing: antialiased;
 }
 
 .pf-legend-title {
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 700;
     color: #0f172a;
-    margin-bottom: 6px;
-    padding-bottom: 4px;
+    margin-bottom: 3px;
+    padding-bottom: 2px;
     border-bottom: 1px solid #cbd5e1;
     letter-spacing: 0.02em;
 }
 
 .pf-legend-body {
-    font-size: 10px;
+    font-size: 8.5px;
     color: #334155;
-    line-height: 1.35;
+    line-height: 1.2;
 }
 
 .pf-legend-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 10px;
+    font-size: 8.5px;
 }
 
 .pf-legend-table thead th {
@@ -1587,15 +1611,15 @@ body.print-simple #mapView {
     color: #0f172a;
     font-weight: 700;
     text-align: left;
-    padding: 5px 8px;
+    padding: 2px 4px;
     border: 1px solid #0f172a;
-    font-size: 9px;
+    font-size: 7.5px;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.03em;
 }
 
 .pf-legend-table thead th:last-child {
-    width: 78px;
+    width: 52px;
     text-align: right;
 }
 
@@ -1603,15 +1627,15 @@ body.print-simple #mapView {
     background: #e2e8f0;
     color: #0f172a;
     font-weight: 700;
-    padding: 4px 8px;
+    padding: 2px 4px;
     border: 1px solid #94a3b8;
-    font-size: 9px;
+    font-size: 7.5px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.04em;
 }
 
 .pf-legend-data-row td {
-    padding: 4px 8px;
+    padding: 2px 4px;
     border: 1px solid #cbd5e1;
     vertical-align: middle;
     background: #fff;
@@ -1632,14 +1656,14 @@ body.print-simple #mapView {
 
 .pf-legend-key .pf-line-swatch,
 .pf-legend-key .pf-pole-swatch {
-    margin-right: 6px;
+    margin-right: 4px;
     vertical-align: middle;
 }
 
 .pf-pole-swatch {
     display: inline-block;
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     vertical-align: middle;
     overflow: visible;
@@ -1647,11 +1671,11 @@ body.print-simple #mapView {
 
 .pf-line-swatch {
     display: inline-block;
-    width: 18px;
+    width: 14px;
     height: 0;
-    border-top: 3px solid #22c55e;
+    border-top: 2.5px solid #22c55e;
     vertical-align: middle;
-    margin-right: 6px;
+    margin-right: 4px;
 }
 
 .pf-line-swatch.dashed {
@@ -1663,7 +1687,7 @@ body.print-simple #mapView {
     font-weight: 700;
     text-align: right;
     white-space: nowrap;
-    width: 78px;
+    width: 52px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -2051,7 +2075,7 @@ body.print-simple #mapView {
     }
 
     .print-frame-legend {
-        width: min(280px, 50%);
+        width: min(200px, 40%);
     }
 }
 
@@ -2075,8 +2099,8 @@ body.print-simple #mapView {
     }
 
     .print-frame-legend {
-        width: min(260px, 55%);
-        max-height: calc(100% - 96px);
+        width: min(190px, 42%);
+        max-height: calc(100% - 88px);
     }
 
     .print-frame-footer {
@@ -2206,15 +2230,15 @@ body.print-simple #mapView {
     }
 
     .print-frame-legend {
-        width: min(240px, 62%);
+        width: min(180px, 48%);
         right: 6px;
-        bottom: 38px;
-        padding: 6px 8px;
-        max-height: calc(100% - 90px);
+        bottom: 34px;
+        padding: 4px 5px;
+        max-height: calc(100% - 84px);
     }
 
     .pf-legend-table {
-        font-size: 9px;
+        font-size: 8px;
     }
 
     .print-frame-header {

@@ -1096,7 +1096,11 @@
     if (!chips || !state.draft) return;
     const fakeKit = { lines: state.draft.lines };
     const { mat, lab } = kitLineCounts(fakeKit);
+    const pendingNote = state.draft._fromSuggestion
+      ? `<span class="est-chip" style="background:#fff7ed;color:#c2410c;" title="Showing the proposed recipe waiting for admin review">Pending suggestion</span>`
+      : "";
     chips.innerHTML = `
+      ${pendingNote}
       <span class="est-chip" style="background:#e8f1ff;color:#1e40af;"><strong>${mat}</strong> mat</span>
       <span class="est-chip" style="background:#ecfdf3;color:#166534;"><strong>${lab}</strong> lab</span>
       <span class="est-chip ${state.draft.complete ? "complete" : "partial"}">${
@@ -1189,14 +1193,21 @@
     const tok = variant.poleToken || "";
     // Prefer a saved pole overlay when switching chips.
     if (PS && tok) {
-      const recipe = PS.resolveRecipe(loadEdits(), kit, tok);
-      if (recipe.source === "pole") {
+      const recipe = PS.resolveRecipeWithPending(
+        loadEdits(),
+        state.pendingKitMeta || {},
+        kit,
+        tok
+      );
+      if (recipe.source === "pole" || recipe.source === "pending") {
         state.draft.lines = (recipe.lines || []).map((l) => ({ ...l }));
         state.draft.complete = !!recipe.complete;
         state.draft.enabled = recipe.enabled !== false;
         state.draft.notes = recipe.notes || state.draft.notes || "";
         state.draft.activePoleToken = tok;
         state.draft.activePoleCode = variant.matCode || variant.poleCode || "";
+        state.draft._fromSuggestion = recipe.source === "pending";
+        state.draft._suggestionId = recipe.suggestionId || "";
         kit._poleToken = tok;
         kit.activePoleToken = tok;
         if ($("kitEnabled")) $("kitEnabled").checked = recipe.enabled !== false;
@@ -1343,7 +1354,12 @@
       (kit.poleVariants || [])[0]?.poleToken ||
       "";
     const recipe = PS
-      ? PS.resolveRecipe(loadEdits(), kit, preferredPole)
+      ? PS.resolveRecipeWithPending(
+          loadEdits(),
+          state.pendingKitMeta || {},
+          kit,
+          preferredPole
+        )
       : {
           enabled: kit.enabled !== false,
           complete: !!kit.complete,
@@ -1360,11 +1376,13 @@
       activePoleToken: preferredPole || "",
       activePoleCode: kit.poleCode || "",
       _dirty: false,
+      _fromSuggestion: recipe.source === "pending",
+      _suggestionId: recipe.suggestionId || "",
     };
     // Stamp for status pill while editing this pole.
     kit._poleToken = preferredPole || "";
     kit.activePoleToken = preferredPole || "";
-    if (recipe.source === "pole" || preferredPole) {
+    if (recipe.source === "pole" || recipe.source === "pending" || preferredPole) {
       kit.complete = recipe.complete;
       kit.lines = (recipe.lines || []).map((l) => ({ ...l }));
     }
@@ -3015,9 +3033,22 @@
         poleToken: proposed.poleToken,
         poleMaterial: proposed.poleMaterial,
         label: suggestLabel,
+        suggestionId: (json.suggestion && json.suggestion.id) || "",
+        proposed: proposed,
       });
+      // Keep the open editor on the proposed recipe so materials stay visible.
+      if (state.draft) {
+        state.draft._fromSuggestion = true;
+        state.draft._suggestionId =
+          (json.suggestion && json.suggestion.id) || "";
+        state.draft.lines = proposed.lines.map((l) => ({ ...l }));
+        state.draft.complete = false;
+        state.draft._dirty = false;
+      }
       toast("Suggestion sent — kit marked Suggested until reviewed");
       refreshActiveKitStatusPill();
+      renderKitLines();
+      renderEditorSummary();
       renderBoard();
       renderStats();
       notifySoloParent("slm_kit_solo_suggested", {
@@ -3025,6 +3056,12 @@
         poleToken: proposed.poleToken,
       });
       refreshPendingBadge();
+      // Open Suggestions inbox so submitter (and same-license peers) can verify the row.
+      if (canUseSuggestionsUi()) {
+        setTimeout(function () {
+          loadSuggestions();
+        }, 200);
+      }
     } catch (err) {
       console.error(err);
       toast("Suggest failed (network)");
@@ -3184,9 +3221,22 @@
     const detail = $("sugDetail");
     if (!detail || !s) return;
     const kit = state.kitsById[s.kit_id];
-    const currentLines = kit?.lines || [];
     const proposed = s.proposed || {};
+    const poleTok = String(proposed.poleToken || proposed.pole_token || "").trim();
+    // Diff against the same pole overlay the suggestor edited (not only kit-wide base).
+    let currentLines = kit?.lines || [];
+    if (kit && window.SlmPoleScope && poleTok) {
+      const base = window.SlmPoleScope.resolveRecipe(loadEdits(), kit, poleTok);
+      currentLines = base.lines || currentLines;
+    }
     const canApprove = canApproveSuggestions() && s.status === "pending";
+    const poleNote = poleTok
+      ? `<p class="ed-help">Pole scope: <strong>${escapeHtml(poleTok)}</strong>${
+          proposed.poleMaterial
+            ? " · " + escapeHtml(String(proposed.poleMaterial))
+            : ""
+        }</p>`
+      : `<p class="ed-help sug-flow-pending">No pole token on this suggestion — applies kit-wide when accepted.</p>`;
     detail.innerHTML = `
       ${
         canApprove
@@ -3196,7 +3246,7 @@
                 <button type="button" class="est-btn est-btn-danger" id="btnRejectSug">Reject</button>
               </div>`
           : s.status === "pending"
-            ? `<p class="sug-flow-note sug-flow-pending">Waiting for an approver (needs can_approve on license).</p>`
+            ? `<p class="sug-flow-note sug-flow-pending">Waiting for an approver (needs <code>can_approve</code> on the license). You can still review the proposed materials below.</p>`
             : ""
       }
       <div class="sug-detail-head">
@@ -3205,7 +3255,9 @@
           <p class="ed-help">
             From <strong>${escapeHtml(s.submitter_code || "—")}</strong>
             · <span class="est-chip ${escapeAttr(s.status || "")}">${escapeHtml(suggestionStatusLabel(s.status))}</span>
+            · ${(proposed.lines || []).length} proposed lines
           </p>
+          ${poleNote}
           ${
             s.status === "accepted"
               ? `<p class="sug-flow-note sug-flow-accepted">Merged into the kit. Publish to app when ready for phones.</p>`

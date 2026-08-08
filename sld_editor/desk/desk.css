@@ -1533,12 +1533,15 @@ body.dk-st-resizing iframe { pointer-events: none; }
   font-size: 0.68rem;
   color: var(--dk-muted);
 }
-.dk-st-detail-actions {
-  margin: 10px 0 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.dk-st-pending-note {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #9a3412;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
 }
 .dk-st-review-bar {
   margin: 0 0 14px;

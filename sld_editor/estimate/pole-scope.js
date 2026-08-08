@@ -153,11 +153,17 @@
     if (!key) return map;
     // Drop legacy bare-kit entry so it cannot mark every pole.
     if (tok && map[String(kitId)]) delete map[String(kitId)];
+    var prev = map[key] && typeof map[key] === "object" ? map[key] : {};
+    var proposed =
+      meta && meta.proposed && typeof meta.proposed === "object"
+        ? meta.proposed
+        : prev.proposed || null;
     map[key] = {
       poleToken: tok,
-      poleMaterial: String((meta && meta.poleMaterial) || "").trim(),
-      label: String((meta && meta.label) || "").trim(),
-      suggestionId: String((meta && meta.suggestionId) || "").trim(),
+      poleMaterial: String((meta && meta.poleMaterial) || prev.poleMaterial || "").trim(),
+      label: String((meta && meta.label) || prev.label || "").trim(),
+      suggestionId: String((meta && meta.suggestionId) || prev.suggestionId || "").trim(),
+      proposed: proposed,
     };
     return map;
   }
@@ -203,9 +209,54 @@
         poleMaterial: prop.poleMaterial || prop.pole_material || "",
         label: s.kit_label || "",
         suggestionId: s.id || "",
+        proposed: prop,
       });
     });
     return next;
+  }
+
+  /** Pending meta for a leaf (composite key, then legacy). */
+  function pendingEntryForLeaf(pendingMap, kitId, poleToken) {
+    if (!kitId || !pendingMap) return null;
+    var tok = normalizeToken(poleToken);
+    var id = String(kitId);
+    if (tok) {
+      var hit = pendingMap[pendingKey(id, tok)];
+      if (hit) return hit;
+      var legacy = pendingMap[id];
+      if (legacy && legacy !== true && typeof legacy === "object") {
+        var legTok = normalizeToken(legacy.poleToken);
+        if (legTok && legTok === tok) return legacy;
+      }
+      return null;
+    }
+    if (pendingMap[id] && typeof pendingMap[id] === "object") return pendingMap[id];
+    var prefix = id + SEP;
+    var keys = Object.keys(pendingMap);
+    for (var i = 0; i < keys.length; i++) {
+      if (keys[i] === id || keys[i].indexOf(prefix) === 0) return pendingMap[keys[i]];
+    }
+    return null;
+  }
+
+  /**
+   * Prefer pending proposed recipe when reviewing a Suggested leaf.
+   * Falls back to resolveRecipe(edits, kit, poleToken).
+   */
+  function resolveRecipeWithPending(edits, pendingMap, baseKit, poleToken) {
+    var entry = pendingEntryForLeaf(pendingMap, baseKit && baseKit.id, poleToken);
+    var prop = entry && entry.proposed;
+    if (prop && Array.isArray(prop.lines) && prop.lines.length) {
+      return {
+        enabled: prop.enabled !== false,
+        complete: !!prop.complete,
+        lines: prop.lines,
+        notes: prop.notes != null ? String(prop.notes) : "",
+        source: "pending",
+        suggestionId: (entry && entry.suggestionId) || "",
+      };
+    }
+    return resolveRecipe(edits, baseKit, poleToken);
   }
 
   function publishStatus(recipe, pending, kitId, poleToken) {
@@ -222,9 +273,11 @@
     parseKey: parseKey,
     isCompositeKey: isCompositeKey,
     resolveRecipe: resolveRecipe,
+    resolveRecipeWithPending: resolveRecipeWithPending,
     writeOverlay: writeOverlay,
     pendingKey: pendingKey,
     isPendingForLeaf: isPendingForLeaf,
+    pendingEntryForLeaf: pendingEntryForLeaf,
     setPendingEntry: setPendingEntry,
     clearPendingEntry: clearPendingEntry,
     pendingMapFromSuggestions: pendingMapFromSuggestions,

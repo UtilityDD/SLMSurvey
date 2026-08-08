@@ -38,16 +38,17 @@
           poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
           label: String(s.kit_label || "").trim(),
           suggestionId: String(s.id || ""),
+          proposed: prop,
         };
       });
     }
     try {
       var encoded = JSON.stringify(next);
       var prev = localStorage.getItem(PENDING_KITS_KEY) || "";
-      if (prev === encoded) return;
-      localStorage.setItem(PENDING_KITS_KEY, encoded);
       pendingCache.raw = encoded;
       pendingCache.map = next;
+      if (prev === encoded) return;
+      localStorage.setItem(PENDING_KITS_KEY, encoded);
       window.dispatchEvent(new CustomEvent("slm-pending-kits-changed"));
     } catch (e) {
       /* ignore */
@@ -1348,7 +1349,14 @@
   function resolvedRecipeForLeaf(k) {
     var PS = global.SlmPoleScope;
     var tok = activePoleToken(k);
-    if (PS) return PS.resolveRecipe(loadEditsMap(), k, tok);
+    if (PS) {
+      return PS.resolveRecipeWithPending(
+        loadEditsMap(),
+        loadPendingMap(),
+        k,
+        tok
+      );
+    }
     return {
       enabled: k.enabled !== false,
       complete: !!k.complete,
@@ -1487,6 +1495,9 @@
       '<p class="dk-st-detail-line">' +
       esc(detailPath(k)) +
       "</p>" +
+      (recipe.source === "pending"
+        ? '<p class="dk-st-pending-note">Showing <strong>proposed</strong> materials from the pending suggestion — Accept to merge, or open Estimate → Suggestions.</p>'
+        : "") +
       '<p class="dk-st-detail-meta">' +
       lines.length +
       " lines · Pole " +

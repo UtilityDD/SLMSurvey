@@ -48,7 +48,7 @@
     <div id="printSimpleBar" class="print-simple-bar hidden">
         <a class="print-simple-back" href="./desk/#map">← Map</a>
         <strong class="print-simple-title">Print map</strong>
-        <span class="print-simple-hint">Fit in N pages · review · Print PDF</span>
+        <span class="print-simple-hint">Fit pages · preview · Save each page · Print PDF</span>
     </div>
 
     <!-- Same rental license as the Android app -->
@@ -329,20 +329,20 @@
                     <input type="text" id="printScale" class="print-input print-input-xs" placeholder="Scale" value="NTS" title="Scale">
                 </div>
                 <div class="print-toolbar-divider print-simple-hide"></div>
-                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Review sheets">
+                <div class="print-toolbar-group print-sheet-nav is-hidden" id="printSheetNav" title="Preview sheets">
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetPrev" title="Previous sheet">‹</button>
                     <div class="print-sheet-strip" id="printSheetStrip"></div>
                     <button type="button" class="print-sheet-nav-btn" id="btnPrintSheetNext" title="Next sheet">›</button>
                 </div>
                 <div class="print-toolbar-group print-toolbar-actions">
                     <button type="button" class="btn btn-primary print-toolbar-btn" id="btnFitPrintFrame" title="Fit network into the selected page count">Fit pages</button>
-                    <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnSetPrintPageOne" title="Advanced: lock page 1 framing">Set page 1</button>
+                    <button type="button" class="btn print-toolbar-btn" id="btnSetPrintPageOne" title="Save the current map view for this page">Save this page</button>
                     <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnCenterPrintFrame" title="Center print frame on screen">Center</button>
                     <button type="button" class="btn print-toolbar-btn print-simple-hide" id="btnExportPrintPng" title="Export current sheet PNG">PNG</button>
                     <button type="button" class="btn btn-success print-toolbar-btn" id="btnExportPrintPdf" title="Print PDF">Print PDF</button>
                 </div>
                 <p class="print-workflow-hint" id="printWorkflowHint">
-                    Choose how many pages, click Fit pages, review with ‹ ›, then Print PDF.
+                    Choose how many pages, click Fit pages, preview &amp; Save each page, then Print PDF.
                 </p>
             </div>
 

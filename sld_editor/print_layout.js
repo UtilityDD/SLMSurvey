@@ -16,11 +16,11 @@
     const MM_PER_INCH = 25.4;
     const HEADER_FRAC = 0.11;
     const FOOTER_FRAC = 0.075;
-    const LEGEND_W_FRAC = 0.34;
-    const LEGEND_H_FRAC = 0.52;
+    const LEGEND_W_FRAC = 0.26;
+    const LEGEND_H_FRAC = 0.38;
     /** Fallback keep-out size (fraction of map hole) when live panels are not measurable. */
-    const LEGEND_KEEPOUT_W_FRAC = 0.42;
-    const LEGEND_KEEPOUT_H_FRAC = 0.46;
+    const LEGEND_KEEPOUT_W_FRAC = 0.30;
+    const LEGEND_KEEPOUT_H_FRAC = 0.34;
     const KEYPLAN_KEEPOUT_W_FRAC = 0.30;
     const KEYPLAN_KEEPOUT_H_FRAC = 0.34;
     /** Extra clear gap around overlay panels so poles/labels are not flush against them. */
@@ -63,6 +63,12 @@
     let pageOneBounds = null;
     /** Per-sheet custom frames: index → {south,west,north,east} */
     let sheetOverrides = Object.create(null);
+    /** After Fit pages: free pan/zoom per sheet; frame size/aspect stays fixed. */
+    let previewLayoutActive = false;
+    /** index → true once user clicked Save this page */
+    let sheetFinalized = Object.create(null);
+    /** Ignore map move/zoom from fitBounds while navigating sheets. */
+    let suppressMapDirty = false;
 
     function $(id) {
         return document.getElementById(id);
@@ -470,10 +476,10 @@
     function legendExportRect(mapX, mapY, mapW, mapH, legendImg) {
         const margin = Math.max(10, mapW * 0.012);
         const aspect = legendImg.height / Math.max(1, legendImg.width);
-        let w = Math.min(mapW * 0.38, mapW * 0.46);
+        let w = Math.min(mapW * 0.28, mapW * 0.34);
         let h = w * aspect;
         const maxH = mapH - margin * 2;
-        const maxW = mapW * 0.48;
+        const maxW = mapW * 0.36;
         if (h > maxH) {
             h = maxH;
             w = h / aspect;
@@ -510,7 +516,7 @@
     function poleLegendSwatchHtml(struct) {
         const label = struct === 'DTR' ? 'DTR' : struct;
         const fontSize = label === 'DTR' ? 5.2 : 7.5;
-        return `<svg class="pf-pole-swatch" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" role="presentation">
+        return `<svg class="pf-pole-swatch" width="14" height="14" viewBox="0 0 20 20" aria-hidden="true" role="presentation">
             <circle cx="10" cy="10" r="8.5" fill="${STRUCTURE_COLOR}" stroke="#ffffff" stroke-width="1.25"/>
             <text x="10" y="10" text-anchor="middle" dominant-baseline="central" fill="#ffffff"
                 font-size="${fontSize}" font-weight="700" font-family="Inter, Arial, sans-serif">${label}</text>
@@ -657,11 +663,79 @@
         requestAnimationFrame(() => {
             fitLegendPanelInFrame();
             if (!printEnabled) return;
+            // In layout preview, do not snap the map — user pans/zooms freely.
+            if (previewLayoutActive) return;
             const s = currentSheet();
             if (s && map && nodes && nodes.length) {
                 fitBoundsToMapHole(s.bounds, false);
             }
         });
+    }
+
+    function enterPreviewLayout(opts) {
+        const options = opts || {};
+        previewLayoutActive = true;
+        if (!options.keepFinalized) sheetFinalized = Object.create(null);
+        const overlay = $('printOverlay');
+        if (overlay) overlay.classList.add('is-preview-layout');
+        if (sheetPlan[0] && sheetPlan[0].bounds) {
+            pageOneBounds = sheetPlan[0].bounds;
+        }
+        syncPreviewToolbar();
+        syncReviewModeUi();
+        updateSheetNavUI();
+    }
+
+    function exitPreviewLayout() {
+        previewLayoutActive = false;
+        sheetFinalized = Object.create(null);
+        const overlay = $('printOverlay');
+        if (overlay) overlay.classList.remove('is-preview-layout');
+        syncPreviewToolbar();
+    }
+
+    function finalizedCount() {
+        return Object.keys(sheetFinalized).filter(function (k) {
+            return sheetFinalized[k] && sheetPlan[Number(k)];
+        }).length;
+    }
+
+    function unfinalizedPageNumbers() {
+        const out = [];
+        for (let i = 0; i < sheetPlan.length; i++) {
+            if (!sheetFinalized[i]) out.push(i + 1);
+        }
+        return out;
+    }
+
+    function syncPreviewToolbar() {
+        const setBtn = $('btnSetPrintPageOne');
+        if (setBtn) {
+            const n = currentSheetIndex + 1;
+            const saved = !!sheetFinalized[currentSheetIndex];
+            setBtn.classList.remove('print-simple-hide');
+            setBtn.classList.toggle('is-active', previewLayoutActive);
+            setBtn.classList.toggle('is-saved', saved);
+            if (!previewLayoutActive || !sheetPlan.length) {
+                setBtn.textContent = 'Save this page';
+                setBtn.title = 'After Fit pages: pan/zoom the map, then save this page’s layout';
+            } else {
+                setBtn.textContent = saved ? `Page ${n} saved ✓` : `Save page ${n}`;
+                setBtn.title = saved
+                    ? 'Layout saved for print. Pan/zoom and save again to update.'
+                    : 'Save the current map view for this page (print frame stays fixed)';
+            }
+            setBtn.disabled = !printEnabled || !sheetPlan.length;
+        }
+        const pdfBtn = $('btnExportPrintPdf');
+        if (pdfBtn && previewLayoutActive && sheetPlan.length) {
+            const done = finalizedCount();
+            const total = sheetPlan.length;
+            pdfBtn.title =
+                done < total
+                    ? `Print PDF (${done}/${total} pages saved — unsaved pages use planned framing)`
+                    : `Print PDF — all ${total} pages saved`;
+        }
     }
 
     function setPrintEnabled(on) {
@@ -688,6 +762,7 @@
             }
             syncMetaFromSurvey();
             centerFrame();
+            wirePreviewMapDirty();
             if (manualAtlasLocked && pageOneBounds) {
                 buildSheetPlanFromPageOne(pageOneBounds);
             } else {
@@ -710,6 +785,7 @@
                     : `Click Fit pages for ${target} page${target === 1 ? '' : 's'}, review, then Print PDF.`);
             }
         } else {
+            exitPreviewLayout();
             syncReviewModeUi();
         }
     }
@@ -1040,6 +1116,7 @@
         sheetOverrides = Object.create(null);
         manualAtlasLocked = false;
         pageOneBounds = null;
+        sheetFinalized = Object.create(null);
     }
 
     function currentSheet() {
@@ -1134,12 +1211,25 @@
         if (!sheetPlan[i]) return false;
         sheetPlan[i].bounds = bounds;
         sheetOverrides[i] = boundsToPlain(bounds);
+        sheetFinalized[i] = true;
         if (i === 0) pageOneBounds = bounds;
+        manualAtlasLocked = true;
         refreshFrameChrome();
         updateSheetNavUI();
+        syncPreviewToolbar();
         syncReviewModeUi();
         if (!options.quiet) {
-            showToast(`Page ${i + 1} saved — go to the next page to adjust it.`);
+            const next = i + 1 < sheetPlan.length ? i + 1 : -1;
+            showToast(
+                next > 0
+                    ? `Page ${i + 1} saved — go to page ${next + 1}, adjust, then Save`
+                    : `Page ${i + 1} saved — Print PDF when ready`
+            );
+            if (next > 0 && options.advance !== false) {
+                setTimeout(function () {
+                    goToSheet(next, true);
+                }, 280);
+            }
         }
         return true;
     }
@@ -1226,52 +1316,56 @@
     function syncReviewModeUi() {
         const overlay = $('printOverlay');
         if (overlay) {
-            overlay.classList.toggle('is-sheet-review', sheetPlan.length > 1);
+            overlay.classList.toggle('is-sheet-review', sheetPlan.length > 1 || previewLayoutActive);
+            overlay.classList.toggle('is-preview-layout', !!previewLayoutActive);
         }
         const hint = $('printWorkflowHint');
         if (hint) {
             const target = getTargetPageCount();
+            const n = currentSheetIndex + 1;
+            const total = sheetPlan.length;
+            const saved = !!sheetFinalized[currentSheetIndex];
+            const done = finalizedCount();
             if (!printEnabled) {
-                hint.textContent = 'Choose Fit in pages · Fit pages · review · Print PDF.';
-            } else if (manualAtlasLocked && sheetPlan.length > 1) {
+                hint.textContent = 'Choose Fit in pages · Fit pages · preview each page · Save · Print PDF.';
+            } else if (previewLayoutActive && total > 0) {
+                hint.textContent =
+                    `Preview page ${n} of ${total}` +
+                    (saved ? ' · saved' : ' · pan/zoom freely') +
+                    ` · ${done}/${total} saved — Save this page, then Print PDF.`;
+            } else if (manualAtlasLocked && total > 1) {
                 const customized = sheetOverrides[currentSheetIndex] ? ' · saved' : '';
-                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length}${customized} — pan/zoom, then Set page ${currentSheetIndex + 1} (advanced).`;
-            } else if (sheetPlan.length > 1) {
-                hint.textContent = `Page ${currentSheetIndex + 1} of ${sheetPlan.length} — use ‹ › to review, then Print PDF.`;
+                hint.textContent = `Page ${n} of ${total}${customized} — pan/zoom, then Save page ${n}.`;
+            } else if (total > 1) {
+                hint.textContent = `Page ${n} of ${total} — Fit pages first, then preview and Save each page.`;
             } else if (target !== 'auto') {
                 hint.textContent = target === 1
-                    ? 'Fitted to 1 page — Print PDF when ready.'
-                    : `Fitted within ${target} pages — review, then Print PDF.`;
+                    ? 'Fitted to 1 page — pan/zoom if needed, Save this page, then Print PDF.'
+                    : `Fitted within ${target} pages — preview, Save each page, then Print PDF.`;
             } else {
-                hint.textContent = 'Choose how many pages, click Fit pages, review with ‹ ›, then Print PDF.';
+                hint.textContent = 'Choose how many pages, click Fit pages, preview & Save each page, then Print PDF.';
             }
         }
-        const setBtn = $('btnSetPrintPageOne');
-        if (setBtn) {
-            if (!manualAtlasLocked && sheetPlan.length <= 1) {
-                setBtn.textContent = 'Set page 1';
-                setBtn.title = 'Advanced: lock page 1 framing and build sheets from it. Shift-click later to reset.';
-            } else {
-                setBtn.textContent = `Set page ${currentSheetIndex + 1}`;
-                setBtn.title = 'Advanced: save this page’s map position. Shift-click to reset all pages.';
-            }
-            setBtn.classList.toggle('is-active', !!manualAtlasLocked);
+        syncPreviewToolbar();
+        const simpleHint = document.querySelector('.print-simple-hint');
+        if (simpleHint && previewLayoutActive && sheetPlan.length) {
+            simpleHint.textContent =
+                `Page ${currentSheetIndex + 1}/${sheetPlan.length} · Save layout · Print PDF`;
+        } else if (simpleHint) {
+            simpleHint.textContent = 'Fit in N pages · preview · Save · Print PDF';
         }
     }
 
     function onSetPageButtonClick() {
-        if (sheetPlan.length > 1 || (manualAtlasLocked && sheetPlan.length)) {
-            if (!manualAtlasLocked) {
+        if (!previewLayoutActive && sheetPlan.length) {
+            enterPreviewLayout({ keepFinalized: true });
+        }
+        if (sheetPlan.length >= 1) {
+            if (!manualAtlasLocked && sheetPlan[0] && sheetPlan[0].bounds) {
                 manualAtlasLocked = true;
-                if (sheetPlan[0] && sheetPlan[0].bounds) {
-                    pageOneBounds = sheetPlan[0].bounds;
-                    if (!sheetOverrides[0]) {
-                        sheetOverrides[0] = boundsToPlain(pageOneBounds);
-                    }
-                }
+                pageOneBounds = sheetPlan[0].bounds;
             }
-            captureCurrentSheetFromView({ quiet: false });
-            syncReviewModeUi();
+            captureCurrentSheetFromView({ quiet: false, advance: sheetPlan.length > 1 });
             return;
         }
         setPageOneFromView();
@@ -1304,6 +1398,8 @@
 
         buildSheetPlanFromPageOne(pageOneBounds);
         updateSheetNavUI();
+        enterPreviewLayout({ keepFinalized: false });
+        sheetFinalized[0] = true;
         syncReviewModeUi();
         refreshFrameChrome();
         fitBoundsToMapHole(pageOneBounds, true);
@@ -1311,8 +1407,8 @@
         const total = sheetPlan.length;
         showToast(
             total > 1
-                ? `Page 1 locked · ${total} sheets — adjust each page if needed, then Print PDF`
-                : 'Page 1 locked · network fits on one sheet'
+                ? `Page 1 saved · ${total} sheets — adjust each page, Save, then Print PDF`
+                : 'Page 1 saved · network fits on one sheet'
         );
 
         if (total > 1) {
@@ -1327,12 +1423,25 @@
         manualAtlasLocked = false;
         pageOneBounds = null;
         sheetOverrides = Object.create(null);
+        exitPreviewLayout();
         syncReviewModeUi();
     }
 
     function fitBoundsToMapHole(bounds, animate, opts) {
         if (!map || !bounds || !bounds.isValid()) return;
         const options = opts || {};
+        suppressMapDirty = true;
+        const clearDirty = function () {
+            setTimeout(function () {
+                suppressMapDirty = false;
+            }, 400);
+        };
+        if (map.once) {
+            map.once('moveend', clearDirty);
+            map.once('zoomend', clearDirty);
+        } else {
+            clearDirty();
+        }
         const hole = getMapHoleRectInViewport();
         if (!hole || hole.w < 40 || hole.h < 40) {
             map.fitBounds(bounds, { padding: [16, 16], animate: !!animate, maxZoom: 19 });
@@ -1395,15 +1504,22 @@
         const prev = $('btnPrintSheetPrev');
         const next = $('btnPrintSheetNext');
         const multi = sheetPlan.length > 1;
-        if (nav) nav.classList.toggle('is-hidden', !multi);
+        const showNav = multi || (previewLayoutActive && sheetPlan.length > 0);
+        if (nav) nav.classList.toggle('is-hidden', !showNav);
         if (!strip) return;
         strip.innerHTML = '';
         sheetPlan.forEach((s, i) => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'print-sheet-chip' + (i === currentSheetIndex ? ' is-active' : '');
-            btn.textContent = String(i + 1);
-            btn.title = `Sheet ${i + 1} of ${sheetPlan.length}` +
+            const saved = !!sheetFinalized[i];
+            btn.className =
+                'print-sheet-chip' +
+                (i === currentSheetIndex ? ' is-active' : '') +
+                (saved ? ' is-saved' : '');
+            btn.textContent = saved ? String(i + 1) + '✓' : String(i + 1);
+            btn.title =
+                `Sheet ${i + 1} of ${sheetPlan.length}` +
+                (saved ? ' · layout saved' : ' · not saved yet') +
                 (s.rows > 1 || s.cols > 1 ? ` (R${s.row + 1}·C${s.col + 1})` : '');
             btn.addEventListener('click', () => goToSheet(i, true));
             strip.appendChild(btn);
@@ -1420,10 +1536,15 @@
         }
         if (!sheetPlan.length) return;
         currentSheetIndex = Math.max(0, Math.min(index, sheetPlan.length - 1));
+        applySheetOverrides();
         const sheet = currentSheet();
+        // Temporarily allow reframe for navigation even in preview.
+        const wasPreview = previewLayoutActive;
         if (sheet) fitBoundsToMapHole(sheet.bounds, animate !== false);
+        previewLayoutActive = wasPreview;
         refreshFrameChrome();
         updateSheetNavUI();
+        syncPreviewToolbar();
         syncReviewModeUi();
     }
 
@@ -1440,6 +1561,7 @@
             });
         }
         refreshFrameChrome();
+        if (sheetPlan.length) enterPreviewLayout({ keepFinalized: false });
         syncReviewModeUi();
     }
 
@@ -1465,12 +1587,12 @@
         const total = sheetPlan.length;
         if (target === 'auto') {
             showToast(total > 1
-                ? `Auto: ${total} pages — review with ‹ ›, then Print PDF`
-                : 'Auto: fits on 1 page');
+                ? `Auto: ${total} pages — preview, Save each page, then Print PDF`
+                : 'Auto: 1 page — pan/zoom if needed, Save, then Print PDF');
         } else {
             showToast(total > 1
-                ? `Fitted in ${total} page${total === 1 ? '' : 's'} — review, then Print PDF`
-                : 'Fitted on 1 page');
+                ? `Fitted in ${total} pages — preview each page, Save layout, then Print PDF`
+                : 'Fitted on 1 page — Save this page, then Print PDF');
         }
     }
 
@@ -1523,16 +1645,18 @@
             if (!target.closest('.print-frame-chrome')) return;
             e.preventDefault();
             e.stopPropagation();
-            const reviewSwipe = sheetPlan.length > 1;
+            // Preview layout: keep print frame fixed — swipe pages only (don't move frame).
+            const lockFrame = previewLayoutActive || sheetPlan.length > 1;
             dragState = {
                 startX: e.clientX,
                 startY: e.clientY,
                 origLeft: frameLeft,
                 origTop: frameTop,
-                reviewSwipe,
+                reviewSwipe: lockFrame && sheetPlan.length > 1,
+                lockFrame,
                 moved: false
             };
-            if (reviewSwipe) frame.classList.add('is-swiping');
+            if (dragState.reviewSwipe) frame.classList.add('is-swiping');
             document.addEventListener('mousemove', onDragMove);
             document.addEventListener('mouseup', onDragEnd);
         };
@@ -1567,8 +1691,8 @@
         const dx = e.clientX - dragState.startX;
         const dy = e.clientY - dragState.startY;
         if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragState.moved = true;
-        // In review mode, horizontal drag is a page swipe — don't move the frame.
-        if (dragState.reviewSwipe) return;
+        // Preview / multi-sheet: do not move the print frame (area settings stay fixed).
+        if (dragState.lockFrame || dragState.reviewSwipe) return;
         frameLeft = dragState.origLeft + dx;
         frameTop = dragState.origTop + dy;
         clampFrame();
@@ -2837,16 +2961,48 @@
             showToast('PDF library not loaded.');
             return;
         }
-        if (manualAtlasLocked && pageOneBounds) {
-            buildSheetPlanFromPageOne(pageOneBounds);
-        } else if (!sheetPlan.length) {
-            buildSheetPlan(false);
+        // Keep the current atlas + any per-page saves. Only build if empty.
+        if (!sheetPlan.length) {
+            if (manualAtlasLocked && pageOneBounds) {
+                buildSheetPlanFromPageOne(pageOneBounds);
+            } else {
+                buildSheetPlan(false);
+            }
+        } else {
+            applySheetOverrides();
         }
         maybeCrowdingToast();
         updateSheetNavUI();
         if (!sheetPlan.length) {
             showToast('Nothing to print — load poles first, then Fit pages.');
             return;
+        }
+
+        const missing = unfinalizedPageNumbers();
+        if (missing.length && previewLayoutActive) {
+            // Capture the page currently on screen so last tweaks aren't lost.
+            captureCurrentSheetFromView({ quiet: true, advance: false });
+            const still = unfinalizedPageNumbers();
+            if (still.length) {
+                const D = window.SlmDialog;
+                let ok = true;
+                const msg =
+                    still.length === sheetPlan.length
+                        ? 'No pages saved yet. Print using the planned framing for every page?'
+                        : `Pages ${still.join(', ')} are not saved. Print those with planned framing?`;
+                if (D && D.confirm) {
+                    ok = await D.confirm({
+                        title: 'Print without saving all pages?',
+                        message: msg,
+                        okLabel: 'Print PDF',
+                        cancelLabel: 'Go back',
+                    });
+                }
+                if (!ok) {
+                    showToast('Save each page after pan/zoom, then Print PDF.');
+                    return;
+                }
+            }
         }
 
         const { jsPDF } = jsPdfNs;
@@ -2956,6 +3112,20 @@
         refreshFrameChrome();
     }
 
+    function wirePreviewMapDirty() {
+        if (!map || wirePreviewMapDirty._bound) return;
+        wirePreviewMapDirty._bound = true;
+        const markDirty = function () {
+            if (suppressMapDirty || !previewLayoutActive || exportInProgress) return;
+            if (!sheetFinalized[currentSheetIndex]) return;
+            delete sheetFinalized[currentSheetIndex];
+            syncPreviewToolbar();
+            updateSheetNavUI();
+        };
+        map.on('dragend', markDirty);
+        map.on('zoomend', markDirty);
+    }
+
     const MAP_PRINT_ZOOM_STEP = 0.15;
 
     function initPrintLayout() {
@@ -3004,6 +3174,7 @@
         if (fitBtn) fitBtn.addEventListener('click', fitNetworkInFrame);
         const setPageBtn = $('btnSetPrintPageOne');
         if (setPageBtn) setPageBtn.addEventListener('click', onSetPageOneClick);
+        wirePreviewMapDirty();
         const centerBtn = $('btnCenterPrintFrame');
         if (centerBtn) centerBtn.addEventListener('click', () => {
             if (!printEnabled) setPrintEnabled(true);
