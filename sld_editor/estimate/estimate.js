@@ -218,6 +218,7 @@
         poleMaterial: (meta && meta.poleMaterial) || "",
         label: (meta && meta.label) || "",
         suggestionId: (meta && meta.suggestionId) || "",
+        proposed: (meta && meta.proposed) || null,
       });
     } else {
       state.pendingKitMeta[String(kitId)] = meta || {};
@@ -3855,6 +3856,18 @@
     });
     $("btnRefreshSuggestions")?.addEventListener("click", loadSuggestions);
     $("sugStatusFilter")?.addEventListener("change", loadSuggestions);
+    // Keep admin/suggestor inbox fresh when returning to the tab or window.
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && state.tab === "suggestions") {
+        loadSuggestions();
+      } else if (document.visibilityState === "visible") {
+        refreshPendingBadge();
+      }
+    });
+    window.addEventListener("focus", () => {
+      if (state.tab === "suggestions") loadSuggestions();
+      else refreshPendingBadge();
+    });
     $("btnRefreshLicenses")?.addEventListener("click", loadLicenses);
     $("licSearch")?.addEventListener("input", renderLicenses);
     $("licStatusFilter")?.addEventListener("change", renderLicenses);

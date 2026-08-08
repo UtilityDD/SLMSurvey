@@ -65,21 +65,24 @@
     var id = String(kitId || "");
     var PS = global.SlmPoleScope;
     var want = PS ? PS.normalizeToken(poleToken) : String(poleToken || "").trim();
-    var fallback = null;
+    var unscoped = null;
     for (var i = 0; i < pendingSuggestionRows.length; i++) {
       var row = pendingSuggestionRows[i];
       if (String(row.kit_id) !== id) continue;
-      var prop = row.proposed || {};
       var tok = PS
-        ? PS.normalizeToken(prop.poleToken || prop.pole_token || "")
-        : String(prop.poleToken || prop.pole_token || "").trim();
+        ? PS.tokenFromSuggestion(row)
+        : String(
+            (row.proposed && (row.proposed.poleToken || row.proposed.pole_token)) ||
+              ""
+          ).trim();
       if (want && tok && want === tok) return row;
       if (!want && !tok) return row;
-      if (!fallback) fallback = row;
+      if (!tok && !unscoped) unscoped = row;
+      if (!want && !unscoped) unscoped = row;
     }
-    // Exact pole required when leaf has a pole — do not fall back to another pole.
-    if (want) return null;
-    return fallback;
+    // Legacy rows with no recoverable pole: allow Accept from any leaf.
+    if (want) return unscoped;
+    return unscoped;
   }
 
   function catalogPost(path, body) {
@@ -2093,6 +2096,11 @@
       if (ev.data.type === "slm_kit_solo_suggested") {
         Desk.toast("Suggestion sent — marked Suggested");
         leaveEdit();
+        syncPendingSuggestions(true)
+          .then(function () {
+            softRefresh();
+          })
+          .catch(function () {});
         return;
       }
       if (ev.data.type === "slm_kit_solo_done") {
@@ -2181,6 +2189,15 @@
         pendingCache.map = null;
         softRefresh();
       }
+    });
+    document.addEventListener("visibilitychange", function () {
+      if (document.visibilityState !== "visible") return;
+      if (!(Desk.active && Desk.active() === "structures")) return;
+      syncPendingSuggestions(true)
+        .then(function (ok) {
+          if (ok) softRefresh();
+        })
+        .catch(function () {});
     });
   }
 

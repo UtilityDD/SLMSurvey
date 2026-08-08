@@ -114,6 +114,28 @@
     return overlayKey(kitId, poleToken);
   }
 
+  /** Infer pole abbr (8M/9M/…) from kit labels when proposed.poleToken is missing. */
+  function tokenFromLabel(label) {
+    var tok = "";
+    String(label || "")
+      .split(/[-·|]/)
+      .forEach(function (p) {
+        if (/^(8M|9M|RL|HP|WF|T9|T95|T11|S9|S11)$/i.test(String(p).trim())) {
+          tok = String(p).trim().toUpperCase();
+        }
+      });
+    return tok;
+  }
+
+  /** Pole token from a suggestion row (proposed fields, then kit_label). */
+  function tokenFromSuggestion(s) {
+    if (!s) return "";
+    var prop = s.proposed || {};
+    var tok = normalizeToken(prop.poleToken || prop.pole_token || "");
+    if (tok) return tok;
+    return normalizeToken(tokenFromLabel(s.kit_label || s.label || ""));
+  }
+
   /**
    * True if this leaf has a pending suggestion.
    * Exact pole match only. Legacy kit-only keys apply only when leaf has no pole
@@ -196,15 +218,7 @@
     (rows || []).forEach(function (s) {
       if (!s || s.status !== "pending" || !s.kit_id) return;
       var prop = s.proposed || {};
-      var tok = prop.poleToken || prop.pole_token || "";
-      // Fallback: parse abbr from kit_label (…-9M-…).
-      if (!tok && s.kit_label) {
-        String(s.kit_label)
-          .split(/[-·|]/)
-          .forEach(function (p) {
-            if (/^(8M|9M|RL|HP|WF|T9|T95|T11|S9|S11)$/i.test(p)) tok = p;
-          });
-      }
+      var tok = tokenFromSuggestion(s);
       setPendingEntry(next, s.kit_id, tok, {
         poleMaterial: prop.poleMaterial || prop.pole_material || "",
         label: s.kit_label || "",
@@ -276,6 +290,8 @@
     resolveRecipeWithPending: resolveRecipeWithPending,
     writeOverlay: writeOverlay,
     pendingKey: pendingKey,
+    tokenFromLabel: tokenFromLabel,
+    tokenFromSuggestion: tokenFromSuggestion,
     isPendingForLeaf: isPendingForLeaf,
     pendingEntryForLeaf: pendingEntryForLeaf,
     setPendingEntry: setPendingEntry,
