@@ -1066,6 +1066,22 @@ a { color: inherit; text-decoration: none; }
 }
 .dk-st-col-head h1 { font-size: 1.05rem; }
 .dk-st-col-head h2 { font-size: 0.95rem; }
+.dk-st-rail-volt {
+  align-self: flex-start;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #0b6bcb;
+  background: #e8f2fc;
+  border: 1px solid #c5ddf5;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-top: -2px;
+}
+.dk-st-rail-volt.is-mykits {
+  color: #0f766e;
+  background: #ecfdf5;
+  border-color: #99f6e4;
+}
 .dk-st-col-sub {
   font-size: 0.7rem;
   color: var(--dk-muted);
@@ -1261,6 +1277,18 @@ body.dk-st-resizing iframe { pointer-events: none; }
 }
 .dk-st-tree-node[data-depth="0"] > .dk-st-tree-row .dk-st-tree-label {
   font-size: 0.86rem;
+}
+.dk-st-tree-node.is-mykits {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--dk-line);
+}
+.dk-st-tree-node.is-mykits > .dk-st-tree-row .dk-st-tree-label {
+  color: #0f766e;
+  font-weight: 800;
+}
+.dk-st-tree-node.is-catalog > .dk-st-tree-row .dk-st-tree-label {
+  font-weight: 800;
 }
 .dk-st-tree-node[data-depth="2"] > .dk-st-tree-row .dk-st-tree-label,
 .dk-st-tree-node[data-depth="3"] > .dk-st-tree-row .dk-st-tree-label {
@@ -1505,7 +1533,13 @@ body.dk-st-resizing iframe { pointer-events: none; }
   font-size: 0.68rem;
   color: var(--dk-muted);
 }
-.dk-st-detail-actions { margin: 10px 0 12px; }
+.dk-st-detail-actions {
+  margin: 10px 0 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
 .dk-st-review-bar {
   margin: 0 0 14px;
   padding: 12px;

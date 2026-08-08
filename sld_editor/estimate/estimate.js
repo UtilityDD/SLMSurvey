@@ -1466,11 +1466,10 @@
     }
     const saveBtn = $("btnSaveKit");
     if (saveBtn) {
-      saveBtn.classList.toggle("hidden", !canEdit);
-      saveBtn.disabled = !canEdit;
-      saveBtn.title = canEdit
-        ? "Save a copy under Structures → My Kits on this PC"
-        : "Needs Suggest or Approve on your license";
+      // Any licensed (or offline) user may keep a personal My Kits copy.
+      saveBtn.classList.remove("hidden");
+      saveBtn.disabled = false;
+      saveBtn.title = "Save a copy under Structures → My Kits on this PC";
     }
     // Hide Add Items tab for view-only licenses.
     document.querySelectorAll('.ed-view-tab[data-ed-view="add"]').forEach((tab) => {
@@ -1524,7 +1523,7 @@
     else if (canApprove && canSuggest) roleLabel = "Admin — edit, approve, publish";
     else if (canApprove) roleLabel = "Approver — review suggestions & publish";
     else if (canSuggest) roleLabel = "Suggestor — edit kits & suggest changes";
-    else roleLabel = "Viewer — browse catalog only";
+    else roleLabel = "Viewer — browse kits; copy to My Kits on this PC";
     if (roleEl) {
       const code = prefs.licenseCode ? ` · ${prefs.licenseCode}` : "";
       roleEl.textContent = roleLabel + code;

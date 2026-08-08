@@ -288,6 +288,8 @@
   var state = {
     matrix: null,
     voltage: "11kV",
+    /** "catalog" = voltage rail (33/11/LT); "mykits" = My Kits rail item */
+    panel: "catalog",
     q: "",
     statusFilter: "", // "" | draft | suggested | final
     selected: null,
@@ -726,16 +728,25 @@
   }
 
   /**
-   * Tree: Voltage → Type (1P…DTR) → Position → Arrangement → Pole → kits
-   * My Kits sits at the top with Voltage → Type → … (same shape as main).
-   * (rail voltage filters catalog kits; My Kits lists all voltages)
+   * Forest for the left panel:
+   *   My Kits  → 33kV/11kV/LT → Type → Position → Arrangement → Pole
+   *   {rail V} → Type → Position → Arrangement → Pole   (catalog only)
+   * My Kits is a sibling of the voltage catalog — not inside it.
    */
   function buildTree(kits) {
-    var root = {
+    var catalog = {
       key: "v:" + state.voltage,
       label: state.voltage,
       kits: [],
       children: Object.create(null),
+      kind: "catalog",
+    };
+    var myKits = {
+      key: "my:My Kits",
+      label: "My Kits",
+      kits: [],
+      children: Object.create(null),
+      kind: "mykits",
     };
 
     function ensureChild(parent, keyPart, label, kind, extra) {
@@ -797,12 +808,11 @@
     kits.forEach(function (k) {
       var family = kitFamily(k);
       if (isMyKit(k)) {
-        var myRoot = ensureChild(root, "o:My Kits", "My Kits", "mykits");
         var vLabel = kitVoltage(k) || "—";
         if (/^LT$/i.test(vLabel)) vLabel = "LT";
         else if (/33/i.test(vLabel)) vLabel = "33kV";
         else if (/11/i.test(vLabel)) vLabel = "11kV";
-        var vNode = ensureChild(myRoot, "mv:" + vLabel, vLabel, "myvoltage");
+        var vNode = ensureChild(myKits, "mv:" + vLabel, vLabel, "myvoltage");
         if (family !== "structure") {
           placeOtherLeaf(vNode, k, family);
         } else {
@@ -811,10 +821,10 @@
         return;
       }
       if (family !== "structure") {
-        placeOtherLeaf(root, k, family);
+        placeOtherLeaf(catalog, k, family);
         return;
       }
-      placeStructureLeaf(root, k, state.voltage);
+      placeStructureLeaf(catalog, k, state.voltage);
     });
 
     function countNode(node) {
@@ -825,7 +835,6 @@
       node.count = n;
       return n;
     }
-    countNode(root);
 
     function childList(node, order, keyFn) {
       var keys = Object.keys(node.children);
@@ -895,23 +904,24 @@
       });
     }
 
-    root.ordered = childList(
-      root,
-      ["My Kits"].concat(TYPE_ORDER).concat(["Conductors", "Add-ons"]),
+    countNode(myKits);
+    countNode(catalog);
+
+    myKits.ordered = childList(myKits, ["33kV", "11kV", "LT"], function (n) {
+      return n.label;
+    });
+    myKits.ordered.forEach(function (vNode) {
+      orderTypeChildren(vNode, vNode.label);
+    });
+
+    catalog.ordered = childList(
+      catalog,
+      TYPE_ORDER.concat(["Conductors", "Add-ons"]),
       function (n) {
         return n.label;
       }
     );
-    root.ordered.forEach(function (node) {
-      if (node.kind === "mykits") {
-        node.ordered = childList(node, ["33kV", "11kV", "LT"], function (n) {
-          return n.label;
-        });
-        node.ordered.forEach(function (vNode) {
-          orderTypeChildren(vNode, vNode.label);
-        });
-        return;
-      }
+    catalog.ordered.forEach(function (node) {
       if (node.kind === "other") {
         node.kits.sort(function (a, b) {
           var la = String(a.customLabel || a.label || a.id || "");
@@ -923,7 +933,11 @@
       orderStructureBranch(node, state.voltage);
     });
 
-    return root;
+    // Rail chooses panel: My Kits OR catalog voltage — never nest My Kits under voltage.
+    if (state.panel === "mykits") {
+      return myKits;
+    }
+    return catalog;
   }
 
   function typeSortKey(type) {
@@ -967,6 +981,7 @@
     var parts = String(node.key || "")
       .split("/")
       .map(function (p) {
+        if (p.indexOf("my:") === 0) return p.slice(3);
         if (p.indexOf("v:") === 0) return p.slice(2);
         if (p.indexOf("mv:") === 0) return p.slice(3);
         if (p.indexOf("t:") === 0) return p.slice(2);
@@ -1069,6 +1084,146 @@
     var L = global.SlmLicense;
     if (!L || !L.enabled) return true;
     return !!(L.canEditKits && L.canEditKits());
+  }
+
+  function myKitIdFor(kit) {
+    if (!kit || !kit.id) return "";
+    if (isMyKit(kit)) return String(kit.id);
+    return "MYKIT|" + String(kit.id);
+  }
+
+  function persistLocalCustomKit(copy) {
+    if (!copy || !copy.id) return;
+    var list = loadLocalCustomKits().filter(function (k) {
+      return k && String(k.id) !== String(copy.id);
+    });
+    list.push(copy);
+    try {
+      localStorage.setItem(CUSTOM_KITS_KEY, JSON.stringify(list));
+    } catch (e) {
+      throw e;
+    }
+    // Keep in-memory matrix in sync without full refetch.
+    if (state.matrix) {
+      var byId = Object.create(null);
+      (state.matrix.customKits || []).forEach(function (k) {
+        if (k && k.id) byId[k.id] = k;
+      });
+      byId[copy.id] = copy;
+      state.matrix.customKits = Object.keys(byId).map(function (id) {
+        return byId[id];
+      });
+      matrixEditStamp = null;
+    }
+  }
+
+  /** Any user: copy the selected kit recipe into Structures → My Kits on this PC. */
+  function copyKitToMyKits(sourceKit) {
+    if (!sourceKit || !sourceKit.id) return;
+    var recipe = resolvedRecipeForLeaf(sourceKit);
+    var poleTok = activePoleToken(sourceKit);
+    var poleMat = activePoleMaterial(sourceKit);
+    var already = isMyKit(sourceKit);
+    var title = kitTitle(sourceKit);
+    var go =
+      global.SlmDialog && global.SlmDialog.confirm
+        ? global.SlmDialog.confirm({
+            title: already ? "Update My Kit?" : "Copy to My Kits?",
+            message: already
+              ? "Update “" +
+                title +
+                "” under Structures → My Kits on this computer?"
+              : "Save a personal copy of “" +
+                title +
+                "”" +
+                (poleMat ? " (" + poleMat + ")" : "") +
+                " under Structures → My Kits on this computer?\n\nThis does not change the shared catalog.",
+            okLabel: already ? "Update My Kit" : "Copy to My Kits",
+          })
+        : Promise.resolve(true);
+    Promise.resolve(go).then(function (ok) {
+      if (!ok) return;
+      var id = myKitIdFor(sourceKit);
+      var lines = (recipe.lines || []).map(function (l) {
+        return {
+          code: lineCode(l) || l.code,
+          qty: lineQty(l),
+          type: lineIsLabour(l) ? "labour" : l.type || "material",
+        };
+      });
+      var srcStruct = String(sourceKit.structure || "").trim();
+      if (!srcStruct || /^CUSTOM$/i.test(srcStruct)) {
+        srcStruct = kitType(sourceKit);
+        if (srcStruct === "Custom" || srcStruct === "?") srcStruct = "CUSTOM";
+      }
+      var copy = {
+        id: id,
+        family: kitFamily(sourceKit) || "structure",
+        custom: true,
+        myKit: true,
+        sourceKitId: already
+          ? sourceKit.sourceKitId || null
+          : sourceKit.id,
+        voltage: kitVoltage(sourceKit) || state.voltage || "",
+        customLabel: sourceKit.customLabel || sourceKit.label || title,
+        label: sourceKit.customLabel || sourceKit.label || title,
+        structure: srcStruct,
+        structureLabel:
+          sourceKit.structureLabel &&
+          String(sourceKit.structureLabel) !== "My Kits"
+            ? sourceKit.structureLabel
+            : srcStruct,
+        isDtr: !!sourceKit.isDtr,
+        location: sourceKit.location || null,
+        locationLabel:
+          sourceKit.locationLabel || sourceKit.location || null,
+        arrangement: sourceKit.arrangement || null,
+        arrangementLabel: sourceKit.arrangementLabel || null,
+        conductorId: sourceKit.conductorId || null,
+        conductorShort: sourceKit.conductorShort || null,
+        conductorName: sourceKit.conductorName || null,
+        wireCount: sourceKit.wireCount || null,
+        wireLabel: sourceKit.wireLabel || null,
+        extension: sourceKit.extension || null,
+        extensionLabel: sourceKit.extensionLabel || null,
+        qtyBasis: sourceKit.qtyBasis || "per_structure",
+        poleHeightHint: poleMat || sourceKit.poleHeightHint || "",
+        poleToken: poleTok || sourceKit.poleToken || "",
+        poleVariants: sourceKit.poleVariants || null,
+        dtrCapacity: sourceKit.dtrCapacity || null,
+        dtrCapacityLabel: sourceKit.dtrCapacityLabel || null,
+        notes: recipe.notes || sourceKit.notes || "",
+        enabled: recipe.enabled !== false,
+        complete: !!recipe.complete,
+        lines: lines,
+        hint: "Saved on this PC — Structures → My Kits",
+      };
+      try {
+        persistLocalCustomKit(copy);
+      } catch (e) {
+        Desk.toast("Could not save My Kit (storage full?)");
+        return;
+      }
+      var keepPole = poleMat;
+      var keepTok = poleTok;
+      state.mode = "browse";
+      state.pendingKitId = null;
+      state.selected = Object.assign({}, copy, {
+        _poleMaterial: keepPole || null,
+        _poleToken: keepTok || null,
+        activePoleToken: keepTok || copy.poleToken,
+      });
+      state.selectedPoleMaterial = keepPole || null;
+      state.selectedPoleToken = keepTok || null;
+      selectKitById(copy.id);
+      if (Desk.syncTools) Desk.syncTools();
+      softRefresh();
+      Desk.toast(
+        already
+          ? "Updated My Kit"
+          : "Copied to My Kits" + (poleMat ? " · " + poleMat : "")
+      );
+    });
   }
 
   function lineCode(line) {
@@ -1349,8 +1504,11 @@
           : "") +
       "</p>" +
       '<div class="dk-st-detail-actions">' +
+      '<button type="button" class="dk-btn dk-btn-primary" id="dkCopyMyKit" title="Save a personal copy on this computer">' +
+      (isMyKit(k) ? "Update My Kit" : "Copy to My Kits") +
+      "</button>" +
       (canEdit()
-        ? '<button type="button" class="dk-btn dk-btn-primary" id="dkEditKit">Edit kit</button>'
+        ? '<button type="button" class="dk-btn dk-btn-ghost" id="dkEditKit">Edit kit</button>'
         : "") +
       "</div>" +
       (kitPublishStatus(k) === "suggested" && canApproveOnDesk()
@@ -1366,6 +1524,13 @@
       recipeGroupHtml("Materials", materials) +
       recipeGroupHtml("Labour", labour) +
       "</div></div>";
+
+    var copyBtn = host.querySelector("#dkCopyMyKit");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", function () {
+        copyKitToMyKits(k);
+      });
+    }
 
     var edit = host.querySelector("#dkEditKit");
     if (edit) {
@@ -1423,6 +1588,8 @@
       else if (/33/i.test(v)) state.voltage = "33kV";
       else if (/11/i.test(v)) state.voltage = "11kV";
     }
+    if (isMyKit(hit)) state.panel = "mykits";
+    else state.panel = "catalog";
     // Focus deepest tree path for this kit
     var poleMat = state.selectedPoleMaterial || "Unspecified pole";
     if (isMyKit(hit)) {
@@ -1432,9 +1599,7 @@
       else if (/11/i.test(myV)) myV = "11kV";
       if (kitFamily(hit) === "structure") {
         state.focusKey =
-          "v:" +
-          state.voltage +
-          "/o:My Kits/mv:" +
+          "my:My Kits/mv:" +
           myV +
           "/t:" +
           kitType(hit) +
@@ -1446,9 +1611,7 @@
           encodeURIComponent(poleMat);
       } else {
         state.focusKey =
-          "v:" +
-          state.voltage +
-          "/o:My Kits/mv:" +
+          "my:My Kits/mv:" +
           myV +
           "/o:" +
           (kitFamily(hit) === "conductor" ? "Conductors" : "Add-ons");
@@ -1544,8 +1707,12 @@
       '<div class="dk-st-tree-node' +
       (isLast ? " is-last" : "") +
       (focused ? " is-focused" : "") +
+      (node.kind === "mykits" ? " is-mykits" : "") +
+      (node.kind === "catalog" ? " is-catalog" : "") +
       '" data-depth="' +
       depth +
+      '" data-kind="' +
+      esc(node.kind || "") +
       '">' +
       '<div class="dk-st-tree-row">' +
       '<button type="button" class="dk-st-tree-twist" data-twist="' +
@@ -1573,13 +1740,27 @@
 
   function setVoltage(v) {
     if (!v) return;
+    state.panel = "catalog";
     state.voltage = v;
     state.selected = null;
     state.selectedPoleMaterial = null;
     state.selectedPoleToken = null;
-    state.focusKey = "v:" + v;
+    state.focusKey = null;
     state.mode = "browse";
     state.pendingKitId = null;
+    if (Desk.syncTools) Desk.syncTools();
+    softRefresh();
+  }
+
+  function setMyKitsPanel() {
+    state.panel = "mykits";
+    state.selected = null;
+    state.selectedPoleMaterial = null;
+    state.selectedPoleToken = null;
+    state.focusKey = null;
+    state.mode = "browse";
+    state.pendingKitId = null;
+    if (Desk.syncTools) Desk.syncTools();
     softRefresh();
   }
 
@@ -1669,15 +1850,16 @@
     var kits = filtered();
     var tree = buildTree(kits);
     if (!state.focusKey || !findNode(tree, state.focusKey)) {
-      // Prefer first type group (under My Kits voltage if that is first).
-      var first = tree.ordered && tree.ordered[0];
-      if (first && first.kind === "mykits" && first.ordered && first.ordered[0]) {
-        var vNode = first.ordered[0];
+      var firstTop = tree.ordered && tree.ordered[0];
+      if (state.panel === "mykits" && firstTop) {
+        // Voltage → first type group
         state.focusKey =
-          (vNode.ordered && vNode.ordered[0] && vNode.ordered[0].key) ||
-          vNode.key;
+          (firstTop.ordered && firstTop.ordered[0] && firstTop.ordered[0].key) ||
+          firstTop.key;
+      } else if (firstTop) {
+        state.focusKey = firstTop.key;
       } else {
-        state.focusKey = (first && first.key) || tree.key;
+        state.focusKey = tree.key;
       }
     }
     var focusNode = findNode(tree, state.focusKey) || tree;
@@ -1689,20 +1871,38 @@
         })
       : focusKits;
 
+    var treeHtml = (tree.ordered || [])
+      .map(function (n, i) {
+        return treeGroupHtml(n, 0, tree.ordered, i);
+      })
+      .join("");
+
+    var headTitle = state.panel === "mykits" ? "My Kits" : "Structures";
+    var headBadge =
+      state.panel === "mykits"
+        ? '<span class="dk-st-rail-volt is-mykits" title="Your personal kit copies">Personal</span>'
+        : '<span class="dk-st-rail-volt" title="Catalog voltage filter">' +
+          esc(state.voltage) +
+          "</span>";
+    var emptyTree =
+      state.panel === "mykits"
+        ? "No My Kits yet. Select a catalog kit (33kV / 11kV / LT) and tap Copy to My Kits."
+        : "No kits";
+
     page.innerHTML =
       '<div class="dk-st-page" id="dkStPage">' +
       '<section class="dk-st-col dk-st-col-tree">' +
       '<div class="dk-st-col-head"><h1>' +
-      esc(state.voltage) +
-      '</h1><input class="dk-search dk-st-search" id="dkKitQ" placeholder="Search…" value="' +
+      esc(headTitle) +
+      "</h1>" +
+      headBadge +
+      '<input class="dk-search dk-st-search" id="dkKitQ" placeholder="Search…" value="' +
       esc(state.q) +
       '"></div>' +
       '<div class="dk-st-gallery">' +
-      (!kits.length
-        ? '<div class="dk-st-empty">No kits</div>'
-        : '<div class="dk-st-tree">' +
-          treeGroupHtml(tree, 0, [tree], 0) +
-          "</div>") +
+      (!(tree.ordered && tree.ordered.length)
+        ? '<div class="dk-st-empty">' + esc(emptyTree) + "</div>"
+        : '<div class="dk-st-tree">' + treeHtml + "</div>") +
       "</div></section>" +
       '<div class="dk-st-split" data-split="tree" role="separator" aria-orientation="vertical" aria-label="Resize tree" tabindex="0"></div>' +
       '<section class="dk-st-col dk-st-col-kits">' +
@@ -1724,7 +1924,9 @@
             ? "No " +
               (state.statusFilter || "matching") +
               " kits in this group."
-            : "No kits in this group.") +
+            : state.panel === "mykits"
+              ? esc(emptyTree)
+              : "No kits in this group.") +
           "</div>") +
       "</div></section>" +
       '<div class="dk-st-split" data-split="detail" role="separator" aria-orientation="vertical" aria-label="Resize detail" tabindex="0"></div>' +
@@ -1932,15 +2134,25 @@
 
   Desk.register("structures", {
     tools: function () {
-      return ["33kV", "11kV", "LT"].map(function (v) {
+      var volts = ["33kV", "11kV", "LT"].map(function (v) {
         return {
           label: v,
-          active: state.voltage === v,
+          active: state.panel === "catalog" && state.voltage === v,
           onClick: function () {
             setVoltage(v);
           },
         };
       });
+      return [
+        {
+          label: "My Kits",
+          active: state.panel === "mykits",
+          onClick: function () {
+            setMyKitsPanel();
+          },
+        },
+        { kind: "sep" },
+      ].concat(volts);
     },
     render: render,
     openKit: openKit,

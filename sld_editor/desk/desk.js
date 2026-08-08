@@ -1,6 +1,6 @@
 /**
  * SLM Desktop shell — Map | Structures | Rates | Licenses (admin).
- * Each desk’s actions live under its own nav block (active only).
+ * Structures rail tools: My Kits | 33kV | 11kV | LT.
  */
 (function (global) {
   "use strict";
@@ -248,6 +248,9 @@
     register: register,
     go: go,
     refresh: refresh,
+    syncTools: function () {
+      if (activeId) syncBlocks(activeId);
+    },
     toast: toast,
     escapeHtml: escapeHtml,
     start: start,
