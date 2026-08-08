@@ -17,26 +17,37 @@
   var pendingSync = { loading: false, lastAt: 0 };
   /** Full pending suggestion rows from server (for Accept / Reject on desk). */
   var pendingSuggestionRows = [];
+  /** Cached localStorage maps — avoid JSON.parse per leaf. */
+  var editsCache = { raw: null, map: null };
+  var pendingCache = { raw: null, map: null };
+  var matrixEditStamp = null;
 
   function writePendingFromSuggestions(rows) {
+    var PS = global.SlmPoleScope;
     pendingSuggestionRows = (rows || []).filter(function (s) {
       return s && s.status === "pending" && s.kit_id;
     });
-    var next = {};
-    pendingSuggestionRows.forEach(function (s) {
-      var prop = s.proposed || {};
-      next[String(s.kit_id)] = {
-        poleToken: String(prop.poleToken || prop.pole_token || "").trim(),
-        poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
-        label: String(s.kit_label || "").trim(),
-        suggestionId: String(s.id || ""),
-      };
-    });
+    var next = PS
+      ? PS.pendingMapFromSuggestions(pendingSuggestionRows)
+      : {};
+    if (!PS) {
+      pendingSuggestionRows.forEach(function (s) {
+        var prop = s.proposed || {};
+        next[String(s.kit_id)] = {
+          poleToken: String(prop.poleToken || prop.pole_token || "").trim(),
+          poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
+          label: String(s.kit_label || "").trim(),
+          suggestionId: String(s.id || ""),
+        };
+      });
+    }
     try {
       var encoded = JSON.stringify(next);
       var prev = localStorage.getItem(PENDING_KITS_KEY) || "";
       if (prev === encoded) return;
       localStorage.setItem(PENDING_KITS_KEY, encoded);
+      pendingCache.raw = encoded;
+      pendingCache.map = next;
       window.dispatchEvent(new CustomEvent("slm-pending-kits-changed"));
     } catch (e) {
       /* ignore */
@@ -49,14 +60,25 @@
     return !!(L.canApprove && L.canApprove());
   }
 
-  function pendingRowForKit(kitId) {
+  function pendingRowForKit(kitId, poleToken) {
     var id = String(kitId || "");
+    var PS = global.SlmPoleScope;
+    var want = PS ? PS.normalizeToken(poleToken) : String(poleToken || "").trim();
+    var fallback = null;
     for (var i = 0; i < pendingSuggestionRows.length; i++) {
-      if (String(pendingSuggestionRows[i].kit_id) === id) {
-        return pendingSuggestionRows[i];
-      }
+      var row = pendingSuggestionRows[i];
+      if (String(row.kit_id) !== id) continue;
+      var prop = row.proposed || {};
+      var tok = PS
+        ? PS.normalizeToken(prop.poleToken || prop.pole_token || "")
+        : String(prop.poleToken || prop.pole_token || "").trim();
+      if (want && tok && want === tok) return row;
+      if (!want && !tok) return row;
+      if (!fallback) fallback = row;
     }
-    return null;
+    // Exact pole required when leaf has a pole — do not fall back to another pole.
+    if (want) return null;
+    return fallback;
   }
 
   function catalogPost(path, body) {
@@ -94,10 +116,7 @@
         if (k && String(k.id) === String(kitId)) hit = k;
       });
     if (!hit) return false;
-    hit.enabled = proposed.enabled !== false;
-    hit.complete = !!asFinal;
-    hit.notes = String(proposed.notes || "");
-    hit.lines = Array.isArray(proposed.lines)
+    var lines = Array.isArray(proposed.lines)
       ? proposed.lines.map(function (l) {
           return {
             code: l.code,
@@ -106,16 +125,33 @@
           };
         })
       : [];
-    if (asFinal && !hit.lines.length) hit.complete = false;
+    var complete = !!asFinal;
+    if (asFinal && !lines.length) complete = false;
+    var poleTok = String(
+      proposed.poleToken || proposed.pole_token || ""
+    ).trim();
+    var patch = {
+      enabled: proposed.enabled !== false,
+      complete: complete,
+      notes: String(proposed.notes || ""),
+      lines: lines,
+    };
     try {
       var edits = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}") || {};
-      edits[kitId] = {
-        enabled: hit.enabled,
-        complete: hit.complete,
-        lines: hit.lines,
-        notes: hit.notes || "",
-      };
+      var PS = global.SlmPoleScope;
+      if (PS && poleTok) {
+        PS.writeOverlay(edits, kitId, poleTok, patch);
+      } else {
+        edits[kitId] = patch;
+        hit.enabled = patch.enabled;
+        hit.complete = patch.complete;
+        hit.notes = patch.notes;
+        hit.lines = lines;
+      }
       localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+      editsCache.raw = JSON.stringify(edits);
+      editsCache.map = edits;
+      matrixEditStamp = null;
     } catch (e) {
       /* ignore */
     }
@@ -173,7 +209,7 @@
           Desk.toast("Suggestion rejected");
         }
         return syncPendingSuggestions(true).then(function () {
-          Desk.refresh();
+          softRefresh();
         });
       })
       .catch(function () {
@@ -199,6 +235,18 @@
     var anon = cfg.SUPABASE_ANON_KEY || "";
     if (!base || !anon) return Promise.resolve(false);
     pendingSync.loading = true;
+    var finished = false;
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (finished) return;
+      finished = true;
+      pendingSync.loading = false;
+      try {
+        if (ctrl) ctrl.abort();
+      } catch (e) {
+        /* ignore */
+      }
+    }, 4000);
     return fetch(base + "/functions/v1/catalog-suggestions-list", {
       method: "POST",
       headers: {
@@ -210,11 +258,15 @@
         device_id: L.deviceId(),
         status: "pending",
       }),
+      signal: ctrl ? ctrl.signal : undefined,
     })
       .then(function (r) {
         return r.json();
       })
       .then(function (json) {
+        if (finished) return false;
+        finished = true;
+        clearTimeout(timer);
         pendingSync.loading = false;
         pendingSync.lastAt = Date.now();
         if (!json || !json.ok) return false;
@@ -222,6 +274,9 @@
         return true;
       })
       .catch(function () {
+        if (finished) return false;
+        finished = true;
+        clearTimeout(timer);
         pendingSync.loading = false;
         return false;
       });
@@ -416,12 +471,22 @@
     if (kitFamily(k) === "conductor") return "Conductor";
     if (kitFamily(k) === "addon") return k.addonType || k.label || "Add-on";
     var st = String(k.structure || k.structureLabel || "").trim();
+    // Older My Kits copies used structure:"CUSTOM" — recover type from source id.
+    if (
+      (!st || /^CUSTOM$/i.test(st) || /^My Kits$/i.test(st)) &&
+      (k.sourceKitId || k.id)
+    ) {
+      var src = String(k.sourceKitId || k.id).replace(/^MYKIT\|/i, "");
+      var fromId = src.match(/(?:^|\|)(1NP|1P|2P|3P|4P|DTR)\b/i);
+      if (fromId) st = fromId[1];
+    }
     if (/^DTR/i.test(st) || k.isDtr) return "DTR";
     if (/^1NP$/i.test(st) || /^P1N$/i.test(st)) return "1NP";
     var m = st.match(/^(1P|2P|3P|4P)\b/i);
     if (m) return m[1].toUpperCase();
     // Fall back: structureLabel like "DTR on 2P" already handled; plain ids next.
     if (TYPE_ORDER.indexOf(st) >= 0) return st;
+    if (/^CUSTOM$/i.test(st) || /^My Kits$/i.test(st)) return "Custom";
     return st || "?";
   }
 
@@ -574,7 +639,8 @@
     return k.code || k.id || "Kit";
   }
 
-  function namingGuideHtml() {
+  function namingGuideHtml(opts) {
+    opts = opts || {};
     var KN = global.SlmKitName;
     var rows =
       KN && KN.guide
@@ -592,7 +658,11 @@
         : "";
     var example = (KN && KN.guideExample && KN.guideExample()) || "11kV-1P-Tan-Sec-NoExt-DOG";
     return (
-      '<details class="dk-st-name-guide">' +
+      '<details class="dk-st-name-guide' +
+      (opts.highlight ? " is-highlight" : "") +
+      '"' +
+      (opts.open ? " open" : "") +
+      ">" +
       "<summary>Naming guide</summary>" +
       '<p class="dk-st-name-guide-ex"><code>' +
       esc(example) +
@@ -635,7 +705,8 @@
     var q = state.q.toLowerCase().trim();
     return allKits().filter(function (k) {
       if (k.enabled === false) return false;
-      if (!matchesVoltage(k)) return false;
+      // My Kits: show all voltages in the left tree (grouped under My Kits).
+      if (!isMyKit(k) && !matchesVoltage(k)) return false;
       if (!q) return true;
       return kitSearchText(k).toLowerCase().indexOf(q) !== -1;
     });
@@ -656,7 +727,8 @@
 
   /**
    * Tree: Voltage → Type (1P…DTR) → Position → Arrangement → Pole → kits
-   * (voltage is the selected rail filter; shown as root for the path)
+   * My Kits sits at the top with Voltage → Type → … (same shape as main).
+   * (rail voltage filters catalog kits; My Kits lists all voltages)
    */
   function buildTree(kits) {
     var root = {
@@ -666,92 +738,47 @@
       children: Object.create(null),
     };
 
-    kits.forEach(function (k) {
-      var family = kitFamily(k);
-      if (isMyKit(k)) {
-        var myKey = "My Kits";
-        if (!root.children[myKey]) {
-          root.children[myKey] = {
-            key: root.key + "/o:" + myKey,
-            label: myKey,
+    function ensureChild(parent, keyPart, label, kind, extra) {
+      if (!parent.children[keyPart]) {
+        parent.children[keyPart] = Object.assign(
+          {
+            key: parent.key + "/" + keyPart,
+            label: label,
             kits: [],
             children: Object.create(null),
-            kind: "other",
-          };
-        }
-        root.children[myKey].kits.push(k);
-        return;
+            kind: kind,
+          },
+          extra || {}
+        );
       }
-      if (family !== "structure") {
-        var otherKey = family === "conductor" ? "Conductors" : "Add-ons";
-        if (!root.children[otherKey]) {
-          root.children[otherKey] = {
-            key: root.key + "/o:" + otherKey,
-            label: otherKey,
-            kits: [],
-            children: Object.create(null),
-            kind: "other",
-          };
-        }
-        root.children[otherKey].kits.push(k);
-        return;
-      }
+      return parent.children[keyPart];
+    }
 
+    function placeStructureLeaf(parent, k, voltageForPoles) {
       var type = kitType(k);
       var pos = posLabel(k);
       var arr = arrLabel(k.arrangement);
-      var mats = kitPoleMaterials(k);
+      var mats = kitPoleMaterials(
+        Object.assign({}, k, {
+          voltage: voltageForPoles || kitVoltage(k) || state.voltage,
+        })
+      );
       if (!mats.length) mats = ["Unspecified pole"];
 
-      if (!root.children[type]) {
-        root.children[type] = {
-          key: root.key + "/t:" + type,
-          label: type,
-          kits: [],
-          children: Object.create(null),
-          kind: "type",
-        };
-      }
-      var typeNode = root.children[type];
-
-      if (!typeNode.children[pos]) {
-        typeNode.children[pos] = {
-          key: typeNode.key + "/p:" + pos,
-          label: pos,
-          kits: [],
-          children: Object.create(null),
-          kind: "position",
-        };
-      }
-      var posNode = typeNode.children[pos];
-
-      if (!posNode.children[arr]) {
-        posNode.children[arr] = {
-          key: posNode.key + "/a:" + arr,
-          label: arr,
-          kits: [],
-          children: Object.create(null),
-          kind: "arrangement",
-        };
-      }
-      var arrNode = posNode.children[arr];
+      var typeNode = ensureChild(parent, "t:" + type, type, "type");
+      var posNode = ensureChild(typeNode, "p:" + pos, pos, "position");
+      var arrNode = ensureChild(posNode, "a:" + arr, arr, "arrangement");
 
       mats.forEach(function (mat) {
         var tok = preferredTokenForMaterial(mat, k);
-        var pk = mat;
-        if (!arrNode.children[pk]) {
-          arrNode.children[pk] = {
-            key: arrNode.key + "/pole:" + encodeURIComponent(mat),
-            label: mat,
-            kits: [],
-            children: Object.create(null),
-            kind: "pole",
-            poleMaterial: mat,
-            poleToken: tok,
-          };
-        }
-        // Stamp material on a shallow copy so list/detail know the pole type.
-        arrNode.children[pk].kits.push(
+        var poleNode = ensureChild(
+          arrNode,
+          "pole:" + encodeURIComponent(mat),
+          mat,
+          "pole",
+          { poleMaterial: mat, poleToken: tok }
+        );
+        poleNode.kits.push(
           Object.assign({}, k, {
             _poleMaterial: mat,
             _poleToken: tok,
@@ -759,6 +786,35 @@
           })
         );
       });
+    }
+
+    function placeOtherLeaf(parent, k, family) {
+      var otherKey = family === "conductor" ? "Conductors" : "Add-ons";
+      var node = ensureChild(parent, "o:" + otherKey, otherKey, "other");
+      node.kits.push(k);
+    }
+
+    kits.forEach(function (k) {
+      var family = kitFamily(k);
+      if (isMyKit(k)) {
+        var myRoot = ensureChild(root, "o:My Kits", "My Kits", "mykits");
+        var vLabel = kitVoltage(k) || "—";
+        if (/^LT$/i.test(vLabel)) vLabel = "LT";
+        else if (/33/i.test(vLabel)) vLabel = "33kV";
+        else if (/11/i.test(vLabel)) vLabel = "11kV";
+        var vNode = ensureChild(myRoot, "mv:" + vLabel, vLabel, "myvoltage");
+        if (family !== "structure") {
+          placeOtherLeaf(vNode, k, family);
+        } else {
+          placeStructureLeaf(vNode, k, vLabel);
+        }
+        return;
+      }
+      if (family !== "structure") {
+        placeOtherLeaf(root, k, family);
+        return;
+      }
+      placeStructureLeaf(root, k, state.voltage);
     });
 
     function countNode(node) {
@@ -785,31 +841,18 @@
       });
     }
 
-    root.ordered = childList(
-      root,
-      ["My Kits"].concat(TYPE_ORDER).concat(["Conductors", "Add-ons"]),
-      function (n, k) {
-        return n.kind === "other" ? n.label : k;
-      }
-    );
-    root.ordered.forEach(function (typeNode) {
-      if (typeNode.kind === "other") {
-        typeNode.kits.sort(function (a, b) {
-          var la = String(a.customLabel || a.label || a.id || "");
-          var lb = String(b.customLabel || b.label || b.id || "");
-          return la.localeCompare(lb);
-        });
-        return;
-      }
-      typeNode.ordered = childList(typeNode, POS_ORDER, function (n) {
+    function orderStructureBranch(typeParent, voltageForPoles) {
+      typeParent.ordered = childList(typeParent, POS_ORDER, function (n) {
         return n.label;
       });
-      typeNode.ordered.forEach(function (posNode) {
+      typeParent.ordered.forEach(function (posNode) {
         posNode.ordered = childList(posNode, ARR_ORDER, function (n) {
           return n.label;
         });
         posNode.ordered.forEach(function (arrNode) {
-          var poleOrder = poleMaterialsForVoltage(state.voltage);
+          var poleOrder = poleMaterialsForVoltage(
+            voltageForPoles || state.voltage
+          );
           arrNode.ordered = childList(arrNode, poleOrder, function (n) {
             return n.poleMaterial || n.label;
           });
@@ -821,11 +864,63 @@
               var ma = String(a.dtrCapacity || a.dtrCapacityLabel || "");
               var mb = String(b.dtrCapacity || b.dtrCapacityLabel || "");
               if (ma !== mb) return ma.localeCompare(mb);
+              var la = String(a.customLabel || a.label || a.id || "");
+              var lb = String(b.customLabel || b.label || b.id || "");
+              if (la !== lb) return la.localeCompare(lb);
               return String(a.id || "").localeCompare(String(b.id || ""));
             });
           });
         });
       });
+    }
+
+    function orderTypeChildren(parent, voltageForPoles) {
+      parent.ordered = childList(
+        parent,
+        TYPE_ORDER.concat(["Custom", "Conductors", "Add-ons"]),
+        function (n) {
+          return n.label;
+        }
+      );
+      parent.ordered.forEach(function (child) {
+        if (child.kind === "other") {
+          child.kits.sort(function (a, b) {
+            var la = String(a.customLabel || a.label || a.id || "");
+            var lb = String(b.customLabel || b.label || b.id || "");
+            return la.localeCompare(lb);
+          });
+          return;
+        }
+        orderStructureBranch(child, voltageForPoles);
+      });
+    }
+
+    root.ordered = childList(
+      root,
+      ["My Kits"].concat(TYPE_ORDER).concat(["Conductors", "Add-ons"]),
+      function (n) {
+        return n.label;
+      }
+    );
+    root.ordered.forEach(function (node) {
+      if (node.kind === "mykits") {
+        node.ordered = childList(node, ["33kV", "11kV", "LT"], function (n) {
+          return n.label;
+        });
+        node.ordered.forEach(function (vNode) {
+          orderTypeChildren(vNode, vNode.label);
+        });
+        return;
+      }
+      if (node.kind === "other") {
+        node.kits.sort(function (a, b) {
+          var la = String(a.customLabel || a.label || a.id || "");
+          var lb = String(b.customLabel || b.label || b.id || "");
+          return la.localeCompare(lb);
+        });
+        return;
+      }
+      orderStructureBranch(node, state.voltage);
     });
 
     return root;
@@ -873,6 +968,7 @@
       .split("/")
       .map(function (p) {
         if (p.indexOf("v:") === 0) return p.slice(2);
+        if (p.indexOf("mv:") === 0) return p.slice(3);
         if (p.indexOf("t:") === 0) return p.slice(2);
         if (p.indexOf("p:") === 0) return p.slice(2);
         if (p.indexOf("a:") === 0) return p.slice(2);
@@ -893,12 +989,7 @@
 
   function applyLocalEdits(m) {
     if (!m) return m;
-    var edits = {};
-    try {
-      edits = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}") || {};
-    } catch (e) {
-      edits = {};
-    }
+    var edits = loadEditsMap();
     var byId = Object.create(null);
     (m.customKits || []).forEach(function (k) {
       if (k && k.id) byId[k.id] = Object.assign({}, k, { custom: true, myKit: true });
@@ -926,22 +1017,52 @@
     return m;
   }
 
+  var matrixFetch = null;
+
   function loadMatrix(force) {
-    if (force) state.matrix = null;
+    if (force) {
+      state.matrix = null;
+      matrixEditStamp = null;
+      matrixFetch = null;
+    }
     if (state.matrix) {
-      applyLocalEdits(state.matrix);
+      var raw = "";
+      try {
+        raw = localStorage.getItem(EDITS_KEY) || "{}";
+      } catch (e) {
+        raw = "{}";
+      }
+      if (matrixEditStamp !== raw) {
+        // Invalidate edits cache so apply sees fresh map.
+        editsCache.raw = null;
+        editsCache.map = null;
+        applyLocalEdits(state.matrix);
+        matrixEditStamp = raw;
+      }
       return Promise.resolve(state.matrix);
     }
-    var loadCat = Cat && Cat.load ? Cat.load(force).catch(function () {}) : Promise.resolve();
-    return Promise.all([
-      fetch(MATRIX_URL).then(function (r) {
+    if (matrixFetch) return matrixFetch;
+    // Warm catalog in background — do not block kit tree on rates.
+    if (Cat && Cat.load) Cat.load(false).catch(function () {});
+    matrixFetch = fetch(MATRIX_URL)
+      .then(function (r) {
         return r.json();
-      }),
-      loadCat,
-    ]).then(function (pair) {
-      state.matrix = applyLocalEdits(pair[0]);
-      return state.matrix;
-    });
+      })
+      .then(function (data) {
+        state.matrix = applyLocalEdits(data);
+        try {
+          matrixEditStamp = localStorage.getItem(EDITS_KEY) || "{}";
+        } catch (e) {
+          matrixEditStamp = "{}";
+        }
+        matrixFetch = null;
+        return state.matrix;
+      })
+      .catch(function (err) {
+        matrixFetch = null;
+        throw err;
+      });
+    return matrixFetch;
   }
 
   function canEdit() {
@@ -1038,81 +1159,65 @@
     );
   }
 
-  function isKitPendingSuggestion(kitId, poleToken, poleMaterial) {
-    if (!kitId) return false;
+  function loadEditsMap() {
     try {
-      var raw = JSON.parse(localStorage.getItem(PENDING_KITS_KEY) || "{}");
-      var meta = raw[String(kitId)];
-      if (!meta) return false;
-      if (meta === true) meta = { poleToken: "", poleMaterial: "", label: "" };
-
-      var wantTok = String(meta.poleToken || "").trim();
-      var wantMat = String(meta.poleMaterial || "").trim();
-      var wantAbbr = "";
-      String(meta.label || "")
-        .split("-")
-        .forEach(function (p) {
-          if (/^(8M|9M|RL|HP|S9|S11|T9|T95|T11)$/i.test(p)) {
-            wantAbbr = String(p).toUpperCase();
-            if (wantAbbr === "T9" || wantAbbr === "T95") wantAbbr = "S9";
-            if (wantAbbr === "T11") wantAbbr = "S11";
-          }
-        });
-      if (wantTok === "T9" || wantTok === "T95") wantAbbr = wantAbbr || "S9";
-      if (wantTok === "T11") wantAbbr = wantAbbr || "S11";
-      if (wantTok === "8M" || wantTok === "9M" || wantTok === "RL" || wantTok === "HP") {
-        wantAbbr = wantAbbr || wantTok;
-      }
-      if (wantTok === "S9" || wantTok === "S11") wantAbbr = wantAbbr || wantTok;
-
-      // No pole on suggestion → still mark this kit's leaves (legacy / unscoped).
-      if (!wantTok && !wantMat && !wantAbbr) {
-        return true;
-      }
-
-      var leafTok = String(poleToken || "").trim();
-      var leafMat = String(poleMaterial || "").trim();
-      var leafAbbr = "";
-      if (global.SlmKitName && global.SlmKitName.poleAbbr) {
-        leafAbbr =
-          global.SlmKitName.poleAbbr({
-            _poleMaterial: leafMat,
-            poleMaterial: leafMat,
-            _poleToken: leafTok,
-            poleToken: leafTok,
-            activePoleToken: leafTok,
-          }) || "";
-      } else {
-        leafAbbr = leafTok.toUpperCase();
-      }
-      if (wantTok && leafTok && wantTok === leafTok) return true;
-      if (wantMat && leafMat && wantMat === leafMat) return true;
-      if (
-        wantAbbr &&
-        leafAbbr &&
-        String(wantAbbr).toUpperCase() === String(leafAbbr).toUpperCase()
-      ) {
-        return true;
-      }
-      return false;
+      var raw = localStorage.getItem(EDITS_KEY) || "{}";
+      if (editsCache.raw === raw && editsCache.map) return editsCache.map;
+      var map = JSON.parse(raw) || {};
+      editsCache.raw = raw;
+      editsCache.map = map;
+      return map;
     } catch (e) {
-      return false;
+      editsCache.raw = null;
+      editsCache.map = {};
+      return {};
     }
+  }
+
+  function loadPendingMap() {
+    try {
+      var raw = localStorage.getItem(PENDING_KITS_KEY) || "{}";
+      if (pendingCache.raw === raw && pendingCache.map) return pendingCache.map;
+      var map = JSON.parse(raw) || {};
+      pendingCache.raw = raw;
+      pendingCache.map = map;
+      return map;
+    } catch (e) {
+      pendingCache.raw = null;
+      pendingCache.map = {};
+      return {};
+    }
+  }
+
+  /** Pole-aware recipe for a stamped leaf (or selected kit). */
+  function resolvedRecipeForLeaf(k) {
+    var PS = global.SlmPoleScope;
+    var tok = activePoleToken(k);
+    if (PS) return PS.resolveRecipe(loadEditsMap(), k, tok);
+    return {
+      enabled: k.enabled !== false,
+      complete: !!k.complete,
+      lines: k.lines || [],
+      notes: k.notes || "",
+      source: "matrix",
+    };
+  }
+
+  function isKitPendingSuggestion(kitId, poleToken) {
+    if (!kitId) return false;
+    var PS = global.SlmPoleScope;
+    if (!PS) return false;
+    return PS.isPendingForLeaf(loadPendingMap(), kitId, poleToken || "");
   }
 
   function kitPublishStatus(k) {
     if (!k || k.enabled === false) return "off";
-    if (!(k.lines || []).length) return "empty";
-    if (
-      isKitPendingSuggestion(
-        k.id,
-        k._poleToken || k.activePoleToken || "",
-        k._poleMaterial || ""
-      )
-    ) {
-      return "suggested";
-    }
-    if (k.complete) return "final";
+    var tok = activePoleToken(k);
+    if (isKitPendingSuggestion(k.id, tok)) return "suggested";
+    var recipe = resolvedRecipeForLeaf(k);
+    if (recipe.enabled === false) return "off";
+    if (!(recipe.lines || []).length) return "empty";
+    if (recipe.complete) return "final";
     return "draft";
   }
 
@@ -1124,8 +1229,8 @@
     return "Empty";
   }
 
-  function statusPillHtml(k) {
-    var st = kitPublishStatus(k);
+  function statusPillHtml(k, stOpt) {
+    var st = stOpt || kitPublishStatus(k);
     return (
       '<span class="dk-st-status dk-st-status-' +
       st +
@@ -1149,10 +1254,12 @@
     var k = state.selected;
     if (!k) {
       state.mode = "browse";
+      host.classList.remove("is-editing");
       host.innerHTML =
         '<div class="dk-detail-empty">' +
         "<strong>Kit detail</strong>" +
         "<p>Select a kit in the middle pane to review its recipe.</p>" +
+        namingGuideHtml({ open: true, highlight: true }) +
         "</div>";
       return;
     }
@@ -1180,6 +1287,8 @@
         "</span></div></div>" +
         '<iframe class="dk-st-edit-frame" id="dkStEditFrame" title="Edit kit" src="../estimate/?embed=1&solo=1&theme=desk&kit=' +
         encodeURIComponent(k.id || "") +
+        "&pole=" +
+        encodeURIComponent(activePoleToken(k) || "") +
         '"></iframe></div>';
       wireSoloMessages();
       var shell = document.getElementById("dkStPage");
@@ -1194,7 +1303,8 @@
     }
 
     host.classList.remove("is-editing");
-    var lines = k.lines || [];
+    var recipe = resolvedRecipeForLeaf(k);
+    var lines = recipe.lines || [];
     var materials = [];
     var labour = [];
     lines.forEach(function (l) {
@@ -1262,7 +1372,7 @@
       edit.addEventListener("click", function () {
         state.mode = "edit";
         state.pendingKitId = k.id;
-        Desk.refresh();
+        softRefresh();
       });
     }
 
@@ -1270,15 +1380,20 @@
       var btn = host.querySelector(btnId);
       if (!btn) return;
       btn.addEventListener("click", function () {
-        var row = pendingRowForKit(k.id);
+        var tok = activePoleToken(k);
+        var row = pendingRowForKit(k.id, tok);
         var ensureRow = row
           ? Promise.resolve(row)
           : syncPendingSuggestions(true).then(function () {
-              return pendingRowForKit(k.id);
+              return pendingRowForKit(k.id, tok);
             });
         ensureRow.then(function (sug) {
           if (!sug || !sug.id) {
-            Desk.toast("No pending suggestion found for this kit — Refresh Suggested");
+            Desk.toast(
+              "No pending suggestion for this pole (" +
+                (tok || "—") +
+                ") — Refresh Suggested"
+            );
             return;
           }
           reviewDeskSuggestion(sug.id, action, asFinal);
@@ -1309,7 +1424,36 @@
       else if (/11/i.test(v)) state.voltage = "11kV";
     }
     // Focus deepest tree path for this kit
-    if (kitFamily(hit) === "structure") {
+    var poleMat = state.selectedPoleMaterial || "Unspecified pole";
+    if (isMyKit(hit)) {
+      var myV = kitVoltage(hit) || state.voltage || "—";
+      if (/^LT$/i.test(myV)) myV = "LT";
+      else if (/33/i.test(myV)) myV = "33kV";
+      else if (/11/i.test(myV)) myV = "11kV";
+      if (kitFamily(hit) === "structure") {
+        state.focusKey =
+          "v:" +
+          state.voltage +
+          "/o:My Kits/mv:" +
+          myV +
+          "/t:" +
+          kitType(hit) +
+          "/p:" +
+          posLabel(hit) +
+          "/a:" +
+          arrLabel(hit.arrangement) +
+          "/pole:" +
+          encodeURIComponent(poleMat);
+      } else {
+        state.focusKey =
+          "v:" +
+          state.voltage +
+          "/o:My Kits/mv:" +
+          myV +
+          "/o:" +
+          (kitFamily(hit) === "conductor" ? "Conductors" : "Add-ons");
+      }
+    } else if (kitFamily(hit) === "structure") {
       state.focusKey =
         "v:" +
         state.voltage +
@@ -1320,7 +1464,7 @@
         "/a:" +
         arrLabel(hit.arrangement) +
         "/pole:" +
-        encodeURIComponent(state.selectedPoleMaterial || "Unspecified pole");
+        encodeURIComponent(poleMat);
     } else {
       state.focusKey =
         "v:" +
@@ -1352,7 +1496,8 @@
       String(state.selected.id) === String(k.id) &&
       (!k._poleMaterial ||
         String(state.selectedPoleMaterial || "") === String(k._poleMaterial || ""));
-    var n = (k.lines || []).length;
+    var recipe = resolvedRecipeForLeaf(k);
+    var n = (recipe.lines || []).length;
     var title = kitTitle(k);
     var st = kitPublishStatus(k);
     return (
@@ -1372,7 +1517,7 @@
       '<span class="dk-st-leaf-title">' +
       esc(title) +
       "</span>" +
-      statusPillHtml(k) +
+      statusPillHtml(k, st) +
       "</span>" +
       '<span class="dk-st-leaf-n">' +
       n +
@@ -1435,7 +1580,36 @@
     state.focusKey = "v:" + v;
     state.mode = "browse";
     state.pendingKitId = null;
-    Desk.refresh();
+    softRefresh();
+  }
+
+  /** Re-paint Structures in place — avoid full desk remount / loading flash. */
+  function softRefresh() {
+    if (!state.matrix || !(Desk.active && Desk.active() === "structures")) {
+      Desk.refresh();
+      return;
+    }
+    var host = document.getElementById("dkMain");
+    var page = host && host.querySelector(".dk-page");
+    if (!page) {
+      Desk.refresh();
+      return;
+    }
+    var tree = page.querySelector(".dk-st-gallery");
+    var list = page.querySelector("#dkKitList");
+    var treeScroll = tree ? tree.scrollTop : 0;
+    var listScroll = list ? list.scrollTop : 0;
+    try {
+      renderBrowse(page);
+    } catch (err) {
+      console.error(err);
+      Desk.refresh();
+      return;
+    }
+    tree = page.querySelector(".dk-st-gallery");
+    list = page.querySelector("#dkKitList");
+    if (tree) tree.scrollTop = treeScroll;
+    if (list) list.scrollTop = listScroll;
   }
 
   function countStatusIn(kits) {
@@ -1495,7 +1669,16 @@
     var kits = filtered();
     var tree = buildTree(kits);
     if (!state.focusKey || !findNode(tree, state.focusKey)) {
-      state.focusKey = tree.key;
+      // Prefer first type group (under My Kits voltage if that is first).
+      var first = tree.ordered && tree.ordered[0];
+      if (first && first.kind === "mykits" && first.ordered && first.ordered[0]) {
+        var vNode = first.ordered[0];
+        state.focusKey =
+          (vNode.ordered && vNode.ordered[0] && vNode.ordered[0].key) ||
+          vNode.key;
+      } else {
+        state.focusKey = (first && first.key) || tree.key;
+      }
     }
     var focusNode = findNode(tree, state.focusKey) || tree;
     var focusKits = collectKits(focusNode);
@@ -1555,11 +1738,11 @@
         state.statusFilter = btn.getAttribute("data-status-filter") || "";
         if (state.statusFilter === "suggested") {
           syncPendingSuggestions(true).then(function () {
-            Desk.refresh();
+            softRefresh();
           });
           return;
         }
-        Desk.refresh();
+        softRefresh();
       });
     });
 
@@ -1570,7 +1753,11 @@
         var node = findNode(tree, key);
         if (node && !(node.ordered && node.ordered.length)) return;
         toggleCollapsed(key);
-        Desk.refresh();
+        var row = btn.closest(".dk-st-tree-node");
+        var kids = row && row.querySelector(":scope > .dk-st-tree-kids");
+        var collapsed = !!(state.collapsed && state.collapsed[key]);
+        if (kids) kids.classList.toggle("is-collapsed", collapsed);
+        btn.textContent = collapsed ? "▸" : "▾";
       });
     });
 
@@ -1584,7 +1771,7 @@
           var slash = key.lastIndexOf("/");
           key = slash >= 0 ? key.slice(0, slash) : "";
         }
-        Desk.refresh();
+        softRefresh();
       });
     });
 
@@ -1612,7 +1799,10 @@
           state.selectedPoleMaterial = poleMat || null;
           state.selectedPoleToken = poleTok || null;
           state.pendingKitId = next.id;
-        } else if (same) {
+          softRefresh();
+          return;
+        }
+        if (same) {
           state.selected = null;
           state.selectedPoleMaterial = null;
           state.selectedPoleToken = null;
@@ -1621,7 +1811,12 @@
           state.selectedPoleMaterial = poleMat || null;
           state.selectedPoleToken = poleTok || null;
         }
-        Desk.refresh();
+        // Browse: update selection + detail only — skip full tree rebuild.
+        page.querySelectorAll(".dk-st-leaf.is-selected").forEach(function (el) {
+          el.classList.remove("is-selected");
+        });
+        if (state.selected) btn.classList.add("is-selected");
+        renderDetail(page.querySelector("#dkKitDetail"));
       });
     });
 
@@ -1629,7 +1824,7 @@
       state.q = e.target.value;
       clearTimeout(renderBrowse._t);
       renderBrowse._t = setTimeout(function () {
-        Desk.refresh();
+        softRefresh();
       }, 200);
     });
 
@@ -1646,9 +1841,15 @@
         var fresh = allKits().find(function (k) {
           return String(k.id) === String(kitId);
         });
-        if (fresh) state.selected = fresh;
+        if (fresh) {
+          state.selected = Object.assign({}, fresh, {
+            _poleMaterial: state.selectedPoleMaterial || null,
+            _poleToken: state.selectedPoleToken || null,
+            activePoleToken: state.selectedPoleToken || fresh.poleToken,
+          });
+        }
       }
-      Desk.refresh();
+      softRefresh();
     };
     var catReload =
       Cat && Cat.reload
@@ -1691,20 +1892,42 @@
     var page = document.createElement("div");
     page.className = "dk-page";
     host.appendChild(page);
+    // Instant paint when matrix already in memory (voltage switch / re-entry).
+    if (state.matrix) {
+      try {
+        renderBrowse(page);
+      } catch (err) {
+        console.error(err);
+        page.innerHTML =
+          '<div class="dk-blank"><h2>Could not render kits</h2><p>Check the browser console for details.</p></div>';
+      }
+      syncPendingSuggestions(false).catch(function () {});
+      return;
+    }
     page.innerHTML = '<div class="dk-blank"><h2>Loading structures…</h2></div>';
+    var painted = false;
     var paint = function () {
+      if (painted) return;
+      painted = true;
       loadMatrix()
         .then(function () {
           page.innerHTML = "";
-          renderBrowse(page);
+          try {
+            renderBrowse(page);
+          } catch (err) {
+            console.error(err);
+            page.innerHTML =
+              '<div class="dk-blank"><h2>Could not render kits</h2><p>Check the browser console for details.</p></div>';
+          }
         })
         .catch(function () {
           page.innerHTML =
             '<div class="dk-blank"><h2>Could not load kits</h2><p>Check estimate/kit-matrix.json</p></div>';
         });
     };
-    // Always pull pending from server so Suggested counts work across browsers.
-    syncPendingSuggestions(true).then(paint).catch(paint);
+    // Never block the tree on a slow/hung suggestions sync.
+    paint();
+    syncPendingSuggestions(false).catch(function () {});
   }
 
   Desk.register("structures", {
@@ -1727,14 +1950,19 @@
   if (!global.__slmPendingKitsWired) {
     global.__slmPendingKitsWired = true;
     window.addEventListener("slm-pending-kits-changed", function () {
-      if (Desk.active && Desk.active() === "structures") Desk.refresh();
+      if (Desk.active && Desk.active() === "structures") softRefresh();
     });
     window.addEventListener("storage", function (ev) {
       if (ev.key === PENDING_KITS_KEY && Desk.active && Desk.active() === "structures") {
-        Desk.refresh();
+        pendingCache.raw = null;
+        pendingCache.map = null;
+        softRefresh();
       }
     });
   }
+
+  // Prefetch ~6MB matrix while user is on Map — Structures opens warm.
+  loadMatrix().catch(function () {});
 
   global.SlmStructuresDesk = {
     openKit: openKit,

@@ -66,19 +66,28 @@
 
   function kitStatus(kit) {
     if (!kit.enabled) return "off";
-    if (!(kit.lines || []).length) return "empty";
-    // Structures stamps _poleMaterial on each pole leaf; Estimate board does not.
+    const PS = window.SlmPoleScope;
+    const leafTok =
+      kit._poleToken || kit.activePoleToken || kit.poleToken || "";
     const leafScoped = !!(kit._poleMaterial || kit._poleToken);
     if (
       kit.id &&
       isPendingSuggested(
         kit.id,
-        leafScoped ? kit._poleToken || kit.activePoleToken || kit.poleToken || "" : null,
+        leafScoped ? leafTok : null,
         leafScoped ? kit._poleMaterial || "" : null
       )
     ) {
       return "suggested";
     }
+    // Pole leaf: resolve overlay recipe for lines/complete.
+    if (PS && kit.id && leafScoped) {
+      const recipe = PS.resolveRecipe(loadEdits(), kit, leafTok);
+      if (!(recipe.lines || []).length) return "empty";
+      if (recipe.complete) return "final";
+      return "draft";
+    }
+    if (!(kit.lines || []).length) return "empty";
     if (kit.complete) return "final";
     return "draft";
   }
@@ -91,6 +100,21 @@
     return "Empty";
   }
 
+  /** Sync Mark Final button + hidden kitComplete from draft.complete. */
+  function syncFinalControl(completeOpt) {
+    const complete =
+      completeOpt != null
+        ? !!completeOpt
+        : !!(state.draft && state.draft.complete);
+    if (state.draft) state.draft.complete = complete;
+    if ($("kitComplete")) $("kitComplete").checked = complete;
+    const btn = $("kitFinal");
+    if (!btn) return;
+    btn.classList.toggle("is-final", complete);
+    btn.setAttribute("aria-pressed", complete ? "true" : "false");
+    btn.textContent = complete ? "Final" : "Mark Final";
+  }
+
   function suggestionStatusLabel(st) {
     if (st === "pending") return "Pending review";
     if (st === "accepted") return "Accepted";
@@ -98,7 +122,47 @@
     return String(st || "—");
   }
 
-  /** kit_id → { poleToken, poleMaterial, label } for pending suggestions */
+  function loadEdits() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /** Persist edit map without wiping pole overlays. */
+  function saveEditsMap(map) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map || {}));
+    persistCustomKitDefsFromState();
+  }
+
+  /** Write current kit recipe to pole overlay (or kit-wide if no pole). */
+  function saveKitOverlay(kit, poleToken) {
+    if (!kit?.id) return;
+    const edits = loadEdits();
+    const PS = window.SlmPoleScope;
+    const tok = String(
+      poleToken || kit.activePoleToken || kit._poleToken || kit.poleToken || ""
+    ).trim();
+    const patch = {
+      enabled: kit.enabled !== false,
+      complete: !!kit.complete,
+      lines: (kit.lines || []).map((l) => ({
+        code: l.code,
+        qty: Number(l.qty) || 0,
+        type: l.type,
+      })),
+      notes: kit.notes || "",
+    };
+    if (PS && tok) {
+      PS.writeOverlay(edits, kit.id, tok, patch);
+    } else {
+      edits[kit.id] = patch;
+    }
+    saveEditsMap(edits);
+  }
+
+  /** kit_id|pole → pending meta */
   function persistPendingKitIds() {
     const obj = {};
     state.pendingKitMeta = state.pendingKitMeta || {};
@@ -116,13 +180,7 @@
   function loadPendingKitIdsFromStorage() {
     try {
       const raw = JSON.parse(localStorage.getItem(PENDING_KITS_KEY) || "{}");
-      state.pendingKitMeta = {};
-      Object.keys(raw || {}).forEach((id) => {
-        const v = raw[id];
-        if (!v) return;
-        state.pendingKitMeta[id] =
-          v === true ? { poleToken: "", poleMaterial: "", label: "" } : v;
-      });
+      state.pendingKitMeta = raw && typeof raw === "object" ? raw : {};
       state.pendingKitIds = new Set(Object.keys(state.pendingKitMeta));
     } catch (_) {
       state.pendingKitMeta = {};
@@ -130,84 +188,22 @@
     }
   }
 
-  function poleAbbrFromLabel(label) {
-    const parts = String(label || "").split("-");
-    const hit = parts.find((p) =>
-      /^(8M|9M|RL|HP|S9|S11|T9|T95|T11)$/i.test(String(p || "").trim())
-    );
-    return hit ? String(hit).toUpperCase().replace("T95", "S9").replace("T9", "S9").replace("T11", "S11") : "";
-  }
-
-  function pendingMetaFor(kitId) {
-    if (!kitId) return null;
-    const meta = (state.pendingKitMeta || {})[String(kitId)];
-    return meta || null;
-  }
-
   /** True when this kit (optionally this pole leaf) has a pending suggestion. */
   function isPendingSuggested(kitId, poleToken, poleMaterial) {
-    const meta = pendingMetaFor(kitId);
-    if (!meta) return false;
-    // Kit-level row (Estimate board): any pending on this id.
-    if (poleToken == null && poleMaterial == null) return true;
-
-    let wantTok = String(meta.poleToken || "").trim();
-    let wantMat = String(meta.poleMaterial || "").trim();
-    let wantAbbr = poleAbbrFromLabel(meta.label);
-    if (wantTok && POLE_TOKEN_TO_ABBR[wantTok]) {
-      wantAbbr = wantAbbr || POLE_TOKEN_TO_ABBR[wantTok];
+    const PS = window.SlmPoleScope;
+    if (!PS) return false;
+    // Kit-level board row (no leaf stamps): any pending for kit.
+    if (poleToken == null && poleMaterial == null) {
+      return PS.isPendingForLeaf(state.pendingKitMeta, kitId, "");
     }
-    // Suggestion has no pole scope → show on every pole leaf of this kit.
-    if (!wantTok && !wantMat && !wantAbbr) return true;
-    const leafTok = String(poleToken || "").trim();
-    const leafMat = String(poleMaterial || "").trim();
-    const leafAbbr =
-      (window.SlmKitName &&
-        window.SlmKitName.poleAbbr &&
-        window.SlmKitName.poleAbbr({
-          _poleMaterial: leafMat,
-          poleMaterial: leafMat,
-          _poleToken: leafTok,
-          poleToken: leafTok,
-          activePoleToken: leafTok,
-        })) ||
-      String(leafTok || "").toUpperCase();
-    if (wantTok && leafTok && wantTok === leafTok) return true;
-    if (wantMat && leafMat && wantMat === leafMat) return true;
-    if (
-      wantAbbr &&
-      leafAbbr &&
-      String(wantAbbr).toUpperCase() === String(leafAbbr).toUpperCase()
-    ) {
-      return true;
-    }
-    return false;
+    return PS.isPendingForLeaf(state.pendingKitMeta, kitId, poleToken);
   }
 
-  const POLE_TOKEN_TO_ABBR = {
-    "8M": "8M",
-    "9M": "9M",
-    RL: "RL",
-    HP: "HP",
-    WF: "HP",
-    T9: "S9",
-    T95: "S9",
-    T11: "S11",
-    S9: "S9",
-    S11: "S11",
-  };
-
   function setPendingKitsFromSuggestions(rows) {
-    const next = {};
-    (rows || []).forEach((s) => {
-      if (!s || s.status !== "pending" || !s.kit_id) return;
-      const prop = s.proposed || {};
-      next[String(s.kit_id)] = {
-        poleToken: String(prop.poleToken || prop.pole_token || "").trim(),
-        poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
-        label: String(s.kit_label || "").trim(),
-      };
-    });
+    const PS = window.SlmPoleScope;
+    const next = PS
+      ? PS.pendingMapFromSuggestions(rows)
+      : {};
     state.pendingKitMeta = next;
     state.pendingKitIds = new Set(Object.keys(next));
     persistPendingKitIds();
@@ -215,20 +211,31 @@
 
   function markKitPending(kitId, meta) {
     if (!kitId) return;
+    const PS = window.SlmPoleScope;
     state.pendingKitMeta = state.pendingKitMeta || {};
-    state.pendingKitMeta[String(kitId)] = {
-      poleToken: String((meta && meta.poleToken) || "").trim(),
-      poleMaterial: String((meta && meta.poleMaterial) || "").trim(),
-      label: String((meta && meta.label) || "").trim(),
-    };
-    state.pendingKitIds.add(String(kitId));
+    if (PS) {
+      PS.setPendingEntry(state.pendingKitMeta, kitId, (meta && meta.poleToken) || "", {
+        poleMaterial: (meta && meta.poleMaterial) || "",
+        label: (meta && meta.label) || "",
+        suggestionId: (meta && meta.suggestionId) || "",
+      });
+    } else {
+      state.pendingKitMeta[String(kitId)] = meta || {};
+    }
+    state.pendingKitIds = new Set(Object.keys(state.pendingKitMeta));
     persistPendingKitIds();
   }
 
-  function clearKitPending(kitId) {
+  function clearKitPending(kitId, poleToken) {
     if (!kitId) return;
-    if (state.pendingKitMeta) delete state.pendingKitMeta[String(kitId)];
-    state.pendingKitIds.delete(String(kitId));
+    const PS = window.SlmPoleScope;
+    state.pendingKitMeta = state.pendingKitMeta || {};
+    if (PS) {
+      PS.clearPendingEntry(state.pendingKitMeta, kitId, poleToken || "");
+    } else {
+      delete state.pendingKitMeta[String(kitId)];
+    }
+    state.pendingKitIds = new Set(Object.keys(state.pendingKitMeta));
     persistPendingKitIds();
   }
 
@@ -237,7 +244,13 @@
     if (!pill || !state.activeKitId) return;
     const kit = state.kitsById[state.activeKitId];
     if (!kit) return;
-    const st = kitStatus(kit);
+    const tok = state.draft?.activePoleToken || kit._poleToken || kit.poleToken || "";
+    const view = Object.assign({}, kit, {
+      _poleToken: tok,
+      activePoleToken: tok,
+      _poleMaterial: kit._poleMaterial || "",
+    });
+    const st = kitStatus(view);
     pill.textContent = statusLabel(st);
     pill.className =
       "ed-status-pill" +
@@ -343,15 +356,6 @@
     return `${basis}${height} · ${mat} mat · ${lab} lab · ${total} items`;
   }
 
-  function loadEdits() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  }
-
   function loadCustomKits() {
     try {
       const raw = localStorage.getItem(CUSTOM_KITS_KEY);
@@ -420,8 +424,18 @@
     if (state.matrix) state.matrix.customKits = customs;
   }
 
+  /**
+   * Update kit-wide base entries from in-memory kits, preserving pole overlays.
+   * Prefer saveKitOverlay() when saving a specific pole leaf.
+   */
   function saveEdits() {
+    const prev = loadEdits();
+    const PS = window.SlmPoleScope;
     const payload = {};
+    // Keep existing pole overlays.
+    Object.keys(prev).forEach((key) => {
+      if (PS && PS.isCompositeKey(key)) payload[key] = prev[key];
+    });
     for (const [id, kit] of Object.entries(state.kitsById)) {
       payload[id] = {
         enabled: kit.enabled,
@@ -430,8 +444,7 @@
         notes: kit.notes || "",
       };
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    persistCustomKitDefsFromState();
+    saveEditsMap(payload);
   }
 
   function mergeKits() {
@@ -444,6 +457,7 @@
       ...allCustomKitDefs(),
     ];
     for (const base of lists) {
+      // Base merge only — pole overlays applied when opening a leaf / resolving status.
       const e = edits[base.id] || {};
       kits[base.id] = {
         ...base,
@@ -505,8 +519,27 @@
       voltage: sourceKit.voltage || existing?.voltage || "",
       customLabel: label,
       label,
-      structure: "CUSTOM",
-      structureLabel: "My Kits",
+      // Keep original structure typing so Structures → My Kits can group like catalog.
+      structure:
+        sourceKit.structure &&
+        String(sourceKit.structure).toUpperCase() !== "CUSTOM"
+          ? sourceKit.structure
+          : existing?.structure &&
+              String(existing.structure).toUpperCase() !== "CUSTOM"
+            ? existing.structure
+            : sourceKit.structure || existing?.structure || "CUSTOM",
+      structureLabel:
+        sourceKit.structureLabel &&
+        String(sourceKit.structureLabel) !== "My Kits"
+          ? sourceKit.structureLabel
+          : existing?.structureLabel &&
+              String(existing.structureLabel) !== "My Kits"
+            ? existing.structureLabel
+            : sourceKit.structureLabel ||
+              existing?.structureLabel ||
+              sourceKit.structure ||
+              "My Kits",
+      isDtr: !!(sourceKit.isDtr || existing?.isDtr),
       location: sourceKit.location || null,
       locationLabel: sourceKit.locationLabel || sourceKit.location || null,
       arrangement: sourceKit.arrangement || null,
@@ -1152,6 +1185,29 @@
   /** Swap kit lines to the selected pole mat (+ erection lab if in ratebook). */
   function applyPoleVariant(kit, variant) {
     if (!state.draft || !variant) return;
+    const PS = window.SlmPoleScope;
+    const tok = variant.poleToken || "";
+    // Prefer a saved pole overlay when switching chips.
+    if (PS && tok) {
+      const recipe = PS.resolveRecipe(loadEdits(), kit, tok);
+      if (recipe.source === "pole") {
+        state.draft.lines = (recipe.lines || []).map((l) => ({ ...l }));
+        state.draft.complete = !!recipe.complete;
+        state.draft.enabled = recipe.enabled !== false;
+        state.draft.notes = recipe.notes || state.draft.notes || "";
+        state.draft.activePoleToken = tok;
+        state.draft.activePoleCode = variant.matCode || variant.poleCode || "";
+        kit._poleToken = tok;
+        kit.activePoleToken = tok;
+        if ($("kitEnabled")) $("kitEnabled").checked = recipe.enabled !== false;
+        syncFinalControl(!!recipe.complete);
+        markDraftDirty();
+        renderKitLines();
+        renderEditorSummary();
+        refreshActiveKitStatusPill();
+        return;
+      }
+    }
     const idx = itemIndex();
     const matCode = variant.matCode || variant.poleCode || "";
     const labCodes = labourCodesForVariant(kit, variant);
@@ -1187,9 +1243,12 @@
 
     state.draft.activePoleToken = variant.poleToken || "";
     state.draft.activePoleCode = matCode;
+    kit._poleToken = state.draft.activePoleToken;
+    kit.activePoleToken = state.draft.activePoleToken;
     markDraftDirty();
     renderKitLines();
     renderEditorSummary();
+    refreshActiveKitStatusPill();
 
     const kitCodeStr = variant.code || "";
     if ($("editorSub") && kitCodeStr) {
@@ -1199,19 +1258,13 @@
       $("editorSub").textContent = [`Code ${kitCodeStr}`, ...bits].join(" · ");
       $("editorSub").classList.remove("hidden");
     }
-
-    if (!addedMat && !addedLab) {
+    if (!addedMat && matCode) {
+      toast(`Pole mat ${matCode} not in rate book`);
+    } else if (addedMat || addedLab) {
       toast(
-        matCode
-          ? `Pole ${variant.poleToken || matCode} not found in ratebook`
-          : "No pole code on this variant"
+        `Pole set · ${variant.poleToken || "—"}${addedLab ? ` · ${addedLab} labour` : ""}`
       );
-      return;
     }
-    const parts = [];
-    if (addedMat) parts.push(variant.poleLabel || variant.poleToken || matCode);
-    if (addedLab) parts.push(`${addedLab} lab`);
-    toast(`Pole set · ${parts.join(" · ")}`);
   }
 
   function renderEditorPoleVariants(kit) {
@@ -1268,7 +1321,8 @@
     });
   }
 
-  function openEditor(kitId) {
+  function openEditor(kitId, opts) {
+    opts = opts || {};
     const kit = state.kitsById[kitId];
     if (!kit) return;
     const L = window.SlmLicense;
@@ -1278,16 +1332,42 @@
       toast("View-only license — kit editing is not available");
       return;
     }
+    const PS = window.SlmPoleScope;
+    const params = new URLSearchParams(location.search);
+    const poleFromUrl = opts.poleToken || params.get("pole") || "";
+    const preferredPole =
+      poleFromUrl ||
+      kit.activePoleToken ||
+      kit.poleToken ||
+      (kit.poleVariants || []).find((v) => v.isDefault)?.poleToken ||
+      (kit.poleVariants || [])[0]?.poleToken ||
+      "";
+    const recipe = PS
+      ? PS.resolveRecipe(loadEdits(), kit, preferredPole)
+      : {
+          enabled: kit.enabled !== false,
+          complete: !!kit.complete,
+          lines: kit.lines || [],
+          notes: kit.notes || "",
+        };
+
     state.activeKitId = kitId;
     state.draft = {
-      enabled: kit.enabled,
-      complete: kit.complete,
-      notes: kit.notes || "",
-      lines: (kit.lines || []).map((l) => ({ ...l })),
-      activePoleToken: kit.poleToken || "",
+      enabled: recipe.enabled,
+      complete: recipe.complete,
+      notes: recipe.notes || "",
+      lines: (recipe.lines || []).map((l) => ({ ...l })),
+      activePoleToken: preferredPole || "",
       activePoleCode: kit.poleCode || "",
       _dirty: false,
     };
+    // Stamp for status pill while editing this pole.
+    kit._poleToken = preferredPole || "";
+    kit.activePoleToken = preferredPole || "";
+    if (recipe.source === "pole" || preferredPole) {
+      kit.complete = recipe.complete;
+      kit.lines = (recipe.lines || []).map((l) => ({ ...l }));
+    }
 
     $("boardPanel").classList.add("hidden");
     $("ratebookPanel").classList.add("hidden");
@@ -1325,8 +1405,7 @@
     }
     renderEditorPoleVariants(kit);
     $("kitEnabled").checked = !!state.draft.enabled;
-    if ($("kitFinal")) $("kitFinal").checked = !!state.draft.complete;
-    if ($("kitComplete")) $("kitComplete").checked = !!state.draft.complete;
+    syncFinalControl(!!state.draft.complete);
     $("kitNotes").value = state.draft.notes || "";
 
     const delBtn = $("btnDeleteCustomKit");
@@ -1375,21 +1454,15 @@
     const licensedOff = !L || !L.enabled;
     const canApprove = licensedOff || !!(L && L.canApprove());
     const canEdit = licensedOff || !!(L && L.canEditKits && L.canEditKits());
-    const finalWrap = $("kitFinalWrap");
-    const finalBox = $("kitFinal");
-    if (finalWrap) {
-      finalWrap.classList.toggle("hidden", !canEdit);
-      finalWrap.classList.toggle("is-locked", !canApprove);
-      finalWrap.title = canApprove
+    const finalBtn = $("kitFinal");
+    if (finalBtn) {
+      finalBtn.classList.toggle("hidden", !canEdit);
+      finalBtn.classList.toggle("is-locked", !canApprove);
+      finalBtn.disabled = !canApprove;
+      finalBtn.title = canApprove
         ? "Mark ready for estimates (approvers)"
         : "Mark Final needs can_approve on your license";
-    }
-    if (finalBox) {
-      finalBox.disabled = !canApprove;
-      if (!canApprove && state.draft) {
-        // keep visual in sync with kit, but cannot toggle
-        finalBox.checked = !!state.draft.complete;
-      }
+      if (state.draft) syncFinalControl(!!state.draft.complete);
     }
     const saveBtn = $("btnSaveKit");
     if (saveBtn) {
@@ -1798,7 +1871,7 @@
     });
     if (!ok) return;
     kit.enabled = $("kitEnabled").checked;
-    kit.complete = !!$("kitFinal")?.checked;
+    kit.complete = !!(state.draft && state.draft.complete);
     kit.notes = $("kitNotes").value || "";
     kit.lines = state.draft.lines.map((l) => ({
       code: l.code,
@@ -1810,25 +1883,31 @@
     if (kit.complete && !kit.lines.length) {
       kit.complete = false;
       state.draft.complete = false;
-      if ($("kitFinal")) $("kitFinal").checked = false;
+      syncFinalControl(false);
       toast("Add items before marking Final");
       return;
     }
     if (alreadyMine) kit.myKit = true;
+    const poleTok =
+      state.draft.activePoleToken || kit._poleToken || kit.poleToken || "";
+    kit.activePoleToken = poleTok;
+    kit._poleToken = poleTok;
     const copy = upsertMyKitCopy(kit);
-    saveEdits();
+    saveKitOverlay(kit, poleTok);
     state.draft._dirty = false;
     renderStats();
     renderEditorSummary();
+    refreshActiveKitStatusPill();
     const statusBit = kit.complete ? "Final" : "Draft";
     toast(
       alreadyMine
-        ? `Updated My Kits · ${statusBit}`
-        : `Saved · ${statusBit} · copy in My Kits`
+        ? `Updated My Kits · ${statusBit}${poleTok ? " · " + poleTok : ""}`
+        : `Saved · ${statusBit}${poleTok ? " · " + poleTok : ""} · copy in My Kits`
     );
     notifySoloParent("slm_kit_solo_saved", {
       complete: !!kit.complete,
       myKitId: copy?.id || null,
+      poleToken: poleTok,
     });
   }
 
@@ -3156,19 +3235,67 @@
     const kit = state.kitsById[kitId];
     if (!kit || !proposed) return false;
     const asFinal = !!(opts && opts.asFinal);
-    kit.enabled = proposed.enabled !== false;
-    kit.complete = asFinal;
-    kit.notes = String(proposed.notes || "");
-    kit.lines = Array.isArray(proposed.lines)
+    const poleTok = String(
+      proposed.poleToken || proposed.pole_token || opts.poleToken || ""
+    ).trim();
+    const lines = Array.isArray(proposed.lines)
       ? proposed.lines.map((l) => ({
           code: l.code,
           qty: Number(l.qty) || 0,
           type: l.type,
         }))
       : [];
-    if (asFinal && !kit.lines.length) kit.complete = false;
-    upsertMyKitCopy(kit);
-    saveEdits();
+    let complete = asFinal;
+    if (asFinal && !lines.length) complete = false;
+    const patch = {
+      enabled: proposed.enabled !== false,
+      complete,
+      notes: String(proposed.notes || ""),
+      lines,
+    };
+    // Always write pole overlay when pole is known — never overwrite all poles.
+    const edits = loadEdits();
+    const PS = window.SlmPoleScope;
+    if (PS && poleTok) {
+      PS.writeOverlay(edits, kitId, poleTok, patch);
+      saveEditsMap(edits);
+    } else {
+      kit.enabled = patch.enabled;
+      kit.complete = patch.complete;
+      kit.notes = patch.notes;
+      kit.lines = lines;
+      saveEdits();
+    }
+    // Refresh in-memory view if this kit/pole is open.
+    if (state.activeKitId === kitId) {
+      const activeTok =
+        state.draft?.activePoleToken || kit._poleToken || kit.poleToken || "";
+      if (!poleTok || String(activeTok) === String(poleTok)) {
+        kit.enabled = patch.enabled;
+        kit.complete = patch.complete;
+        kit.notes = patch.notes;
+        kit.lines = lines;
+        kit._poleToken = poleTok || activeTok;
+        if (state.draft) {
+          state.draft.enabled = patch.enabled;
+          state.draft.complete = patch.complete;
+          state.draft.notes = patch.notes;
+          state.draft.lines = lines.map((l) => ({ ...l }));
+          if (poleTok) state.draft.activePoleToken = poleTok;
+        }
+      }
+    }
+    upsertMyKitCopy(
+      Object.assign({}, kit, {
+        lines,
+        complete,
+        notes: patch.notes,
+        enabled: patch.enabled,
+        poleToken: poleTok,
+        _poleToken: poleTok,
+        activePoleToken: poleTok,
+      })
+    );
     return true;
   }
 
@@ -3211,22 +3338,29 @@
         return;
       }
       if (action === "accept") {
-        const ok = applyProposedToKit(json.kit_id, json.proposed, {
+        const prop = json.proposed || {};
+        const poleTok = String(prop.poleToken || prop.pole_token || "").trim();
+        const ok = applyProposedToKit(json.kit_id, prop, {
           asFinal: !!opts.asFinal,
+          poleToken: poleTok,
         });
-        clearKitPending(json.kit_id);
+        clearKitPending(json.kit_id, poleTok);
         toast(
           ok
             ? opts.asFinal
-              ? "Accepted as Final — Publish when ready"
-              : "Accepted as Draft"
+              ? `Accepted as Final${poleTok ? " · " + poleTok : ""} — Publish when ready`
+              : `Accepted as Draft${poleTok ? " · " + poleTok : ""}`
             : "Accepted (kit missing locally)"
         );
         renderStats();
         renderBoard();
         refreshActiveKitStatusPill();
       } else {
-        clearKitPending(json.kit_id);
+        const sug = state.suggestions.find((x) => x.id === id);
+        const poleTok = String(
+          sug?.proposed?.poleToken || sug?.proposed?.pole_token || ""
+        ).trim();
+        clearKitPending(json.kit_id, poleTok);
         toast("Suggestion rejected");
         renderBoard();
         refreshActiveKitStatusPill();
@@ -3503,7 +3637,8 @@
     const fromSession = tryLoadBoqFromSession();
     if (solo && kitId) {
       // Focused single-kit editor — skip board tabs.
-      if (kitId && state.kitsById[kitId]) openEditor(kitId);
+      const pole = params.get("pole") || "";
+      if (kitId && state.kitsById[kitId]) openEditor(kitId, { poleToken: pole });
       else toast("Kit not found in catalog");
     } else if (startTab === "boq" || fromSession) {
       showTab("boq");
@@ -3589,26 +3724,37 @@
     document.querySelectorAll(".ed-view-tab").forEach((tab) => {
       tab.addEventListener("click", () => setEditorView(tab.dataset.edView));
     });
-    $("kitFinal")?.addEventListener("change", () => {
+    $("kitFinal")?.addEventListener("click", async () => {
       const L = window.SlmLicense;
       const canApprove = !L || !L.enabled || !!(L && L.canApprove());
       if (!canApprove) {
-        if ($("kitFinal") && state.draft) $("kitFinal").checked = !!state.draft.complete;
+        if (state.draft) syncFinalControl(!!state.draft.complete);
         toast("Mark Final needs Approve on your license");
         return;
       }
-      if (state.draft) {
-        state.draft.complete = $("kitFinal").checked;
-        if ($("kitComplete")) $("kitComplete").checked = state.draft.complete;
-        markDraftDirty();
-        renderEditorSummary();
-        refreshActiveKitStatusPill();
+      if (!state.draft) return;
+      const next = !state.draft.complete;
+      if (next && !(state.draft.lines || []).length) {
+        toast("Add items before marking Final");
+        return;
       }
+      const ok = await window.SlmDialog.confirm({
+        title: next ? "Mark as Final?" : "Unmark Final?",
+        message: next
+          ? "This kit will be marked Final and used in estimates on this PC. Continue?"
+          : "This kit will return to Draft status. Continue?",
+        okLabel: next ? "Mark Final" : "Unmark",
+        danger: !next,
+      });
+      if (!ok) return;
+      syncFinalControl(next);
+      markDraftDirty();
+      renderEditorSummary();
+      refreshActiveKitStatusPill();
     });
     $("kitComplete")?.addEventListener("change", () => {
       if (state.draft) {
-        state.draft.complete = $("kitComplete").checked;
-        if ($("kitFinal")) $("kitFinal").checked = state.draft.complete;
+        syncFinalControl($("kitComplete").checked);
         markDraftDirty();
         renderEditorSummary();
       }

@@ -754,25 +754,49 @@
 
     openKitModal._kitId = live.id;
 
-    function isPendingSuggested(kitId) {
+    function isPendingSuggested(kitId, poleToken) {
       try {
         var raw = JSON.parse(
           localStorage.getItem("slm_pending_kit_suggestions_v1") || "{}"
         );
-        var meta = raw[String(kitId)];
-        if (!meta) return false;
-        // Map modal is kit-level (one recipe); any pending on id counts.
-        return true;
+        var PS = global.SlmPoleScope;
+        if (PS) return PS.isPendingForLeaf(raw, kitId, poleToken || "");
+        // Fallback: any pending key for this kit.
+        var id = String(kitId);
+        if (raw[id]) return true;
+        return Object.keys(raw).some(function (k) {
+          return k === id || k.indexOf(id + "|") === 0;
+        });
       } catch (e) {
         return false;
       }
     }
 
+    var poleTok =
+      live._poleToken || live.activePoleToken || live.poleToken || "";
+    var PS = global.SlmPoleScope;
+    var recipe = PS
+      ? PS.resolveRecipe(
+          (function () {
+            try {
+              return JSON.parse(localStorage.getItem("slm_estimate_kits_v7") || "{}") || {};
+            } catch (e) {
+              return {};
+            }
+          })(),
+          live,
+          poleTok
+        )
+      : {
+          enabled: live.enabled !== false,
+          complete: !!live.complete,
+          lines: live.lines || [],
+        };
     var st = "empty";
-    if (live.enabled === false) st = "off";
-    else if (isPendingSuggested(live.id)) st = "suggested";
-    else if ((live.lines || []).length && live.complete) st = "final";
-    else if ((live.lines || []).length) st = "draft";
+    if (recipe.enabled === false || live.enabled === false) st = "off";
+    else if (isPendingSuggested(live.id, poleTok)) st = "suggested";
+    else if ((recipe.lines || []).length && recipe.complete) st = "final";
+    else if ((recipe.lines || []).length) st = "draft";
     var stLabel =
       st === "final"
         ? "Final"
@@ -798,6 +822,8 @@
         '<div class="dk-modal-body is-embed">' +
         '<iframe class="dk-kit-embed" id="dkKitEmbed" title="Edit kit" src="../estimate/?embed=1&solo=1&theme=desk&kit=' +
         encodeURIComponent(live.id || "") +
+        "&pole=" +
+        encodeURIComponent(poleTok || "") +
         '"></iframe></div>' +
         '<div class="dk-modal-actions dk-modal-actions-bar">' +
         '<button type="button" class="dk-btn dk-btn-sm" id="dkKitBack">← Recipe</button>' +

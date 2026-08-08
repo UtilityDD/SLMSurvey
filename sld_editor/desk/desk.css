@@ -1374,6 +1374,25 @@ body.dk-st-resizing iframe { pointer-events: none; }
   background: #fff;
   padding: 0;
 }
+.dk-st-name-guide.is-highlight {
+  margin-top: 16px;
+  border-color: #f59e0b;
+  background: linear-gradient(180deg, #fffbeb 0%, #fff 48%);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+.dk-st-name-guide.is-highlight > summary {
+  font-size: 0.82rem;
+  color: #9a3412;
+  padding: 10px 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.28);
+}
+.dk-st-name-guide.is-highlight > summary::before {
+  color: #d97706;
+}
+.dk-detail-empty .dk-st-name-guide.is-highlight {
+  text-align: left;
+}
 .dk-st-name-guide > summary {
   list-style: none;
   cursor: pointer;

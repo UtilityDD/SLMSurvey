@@ -278,8 +278,10 @@ html.est-solo-page.est-theme-desk body {
 .est-shell.est-solo.est-theme-desk .est-catalog-list {
     padding: 0 4px 12px;
 }
-.est-shell.est-solo.est-theme-desk .est-final-check {
+.est-shell.est-solo.est-theme-desk .est-final-btn {
     font-size: 0.75rem;
+    padding: 6px 10px;
+    min-width: 6.5rem;
 }
 
 .est-embed-rail {
@@ -932,21 +934,32 @@ html.est-solo-page.est-theme-desk body {
 .est-row.is-empty,
 .est-row.is-off { box-shadow: inset 3px 0 0 #94a3b8; }
 
-.est-final-check {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+.est-final-btn {
     font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--ink);
-    cursor: pointer;
-    user-select: none;
-    padding: 6px 10px;
+    font-weight: 700;
+    padding: 8px 14px;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: #fff;
+    color: var(--ink);
+    min-width: 7.5rem;
 }
-.est-final-check input { accent-color: var(--accent); }
+.est-final-btn.is-final {
+    background: #ecfdf5;
+    border-color: #86efac;
+    color: #15803d;
+}
+.est-final-btn:not(.is-locked):not(:disabled):hover {
+    border-color: var(--accent);
+}
+.est-final-btn.is-final:not(.is-locked):not(:disabled):hover {
+    border-color: #16a34a;
+}
+.est-final-btn.is-locked,
+.est-final-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
 
 .est-editor {
     padding: 0;
@@ -1106,9 +1119,8 @@ html.est-solo-page.est-theme-desk body {
 
 .ed-footer .est-btn-primary { min-width: 140px; }
 
-.est-final-check.is-locked {
-    opacity: 0.45;
-    cursor: not-allowed;
+.est-final-btn.hidden {
+    display: none;
 }
 
 .ed-add .est-catalog-tabs { padding: 10px 16px 0; }
