@@ -46,6 +46,9 @@ Deno.serve(async (req) => {
         complete: !!proposed.complete,
         lines,
         notes: String(proposed.notes ?? ""),
+        // Kept for Structures Suggested matching across browsers/devices.
+        poleToken: String(proposed.poleToken ?? proposed.pole_token ?? "").slice(0, 40),
+        poleMaterial: String(proposed.poleMaterial ?? proposed.pole_material ?? "").slice(0, 80),
       },
       message: String(body?.message ?? "").slice(0, 2000),
       status: "pending",

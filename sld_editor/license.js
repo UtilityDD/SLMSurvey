@@ -263,12 +263,44 @@
 
   function showGate(show) {
     var gate = $("licenseGate");
-    var app = $("appContainer") || $("estShell") || document.querySelector(".est-shell");
+    var app =
+      $("appContainer") ||
+      $("estShell") ||
+      document.querySelector(".est-shell") ||
+      document.querySelector(".dk-shell");
     if (gate) gate.classList.toggle("hidden", !show);
     if (app) {
       if (app.id === "appContainer") app.classList.toggle("license-locked", show);
       else app.classList.toggle("license-locked", show);
     }
+  }
+
+  function roleLabel(prefs) {
+    if (!ENABLED) return "Dev mode";
+    if (prefs.canApprove && prefs.canSuggest) return "Admin";
+    if (prefs.canApprove) return "Approver";
+    if (prefs.canSuggest) return "Suggestor";
+    return "Viewer";
+  }
+
+  function initialsFrom(name, code) {
+    var s = String(name || "").trim();
+    if (s) {
+      var parts = s.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+      }
+      return s.slice(0, 2).toUpperCase();
+    }
+    var c = String(code || "SL").replace(/[^A-Za-z0-9]/g, "");
+    return (c.slice(0, 2) || "SL").toUpperCase();
+  }
+
+  function accessLabel(access, prefs) {
+    if (!ENABLED) return "Local";
+    if (access === "allowed") return isTrial(prefs) ? "Trial" : "Active";
+    if (access === "grace") return "Grace";
+    return "Locked";
   }
 
   function unlockEditor() {
@@ -331,26 +363,62 @@
   function updateBadge() {
     var badge = $("licenseBadge");
     if (!badge) return;
-    if (!ENABLED) {
-      badge.classList.add("hidden");
-      return;
-    }
+    var rich = !!badge.querySelector("[data-lic]");
     var prefs = readPrefs();
     var access = evaluateAccess(prefs);
-    if (access !== "allowed" && access !== "grace") {
-      badge.classList.add("hidden");
-      return;
-    }
     var date = formatDate(prefs.expiresAtEpochMs);
     var days = daysRemaining(prefs);
     var code = prefs.licenseCode || (isTrial(prefs) ? "Trial" : "License");
-    badge.textContent = code + " ┬╖ " + days + "d";
+    var name = String(prefs.customerName || "").trim() || (ENABLED ? "Licensed user" : "Developer");
+    var role = roleLabel(prefs);
+    var accessTxt = accessLabel(access, prefs);
+
+    // Compact pill (CAD / Estimate): hide when locked or licensing off.
+    if (!rich) {
+      if (!ENABLED || (access !== "allowed" && access !== "grace")) {
+        badge.classList.add("hidden");
+        return;
+      }
+      badge.textContent = code + " · " + days + "d";
+      badge.classList.remove("hidden");
+      badge.title =
+        (isTrial(prefs) ? "Trial" : "License") +
+        " · expires " +
+        date +
+        " · tap for details / sign out";
+      return;
+    }
+
+    // Rich side-panel card (Desktop desk): always visible.
     badge.classList.remove("hidden");
-    badge.title =
-      (isTrial(prefs) ? "Trial" : "License") +
-      " ┬╖ expires " +
-      date +
-      " ┬╖ tap for details / sign out";
+    badge.classList.toggle("is-grace", access === "grace");
+    badge.classList.toggle("is-locked", access === "locked");
+    badge.classList.toggle("is-dev", !ENABLED);
+    var setLic = function (key, value) {
+      var el = badge.querySelector('[data-lic="' + key + '"]');
+      if (el) el.textContent = value;
+    };
+    setLic("mark", initialsFrom(prefs.customerName, code));
+    setLic("name", name);
+    setLic("access", accessTxt);
+    setLic("code", code);
+    setLic("role", role);
+    if (!ENABLED) {
+      setLic("days", "All tools");
+      badge.title = "Licensing off — local / Dev mode";
+    } else if (access === "allowed" || access === "grace") {
+      setLic("days", days + "d left");
+      badge.title =
+        name +
+        " · " +
+        role +
+        " · expires " +
+        date +
+        " · tap for details / sign out";
+    } else {
+      setLic("days", "Sign in");
+      badge.title = "Not signed in — tap to activate";
+    }
   }
 
   async function onActivateClick() {
@@ -400,9 +468,26 @@
       });
     }
     var badge = $("licenseBadge");
-    if (badge) {
+    if (badge && !badge.getAttribute("data-lic-wired")) {
+      badge.setAttribute("data-lic-wired", "1");
       badge.addEventListener("click", async function () {
         var prefs = readPrefs();
+        if (!ENABLED) {
+          var D0 = global.SlmDialog;
+          if (D0 && D0.alert) {
+            await D0.alert({
+              title: "Account",
+              message: "Licensing is off on this build.\nAll desk tools are available locally.",
+            });
+          }
+          return;
+        }
+        var access = evaluateAccess(prefs);
+        if (access !== "allowed" && access !== "grace") {
+          showGate(true);
+          refreshStatus();
+          return;
+        }
         var date = formatDate(prefs.expiresAtEpochMs);
         var days = daysRemaining(prefs);
         var info =
@@ -410,6 +495,12 @@
           (prefs.licenseCode ? " (" + prefs.licenseCode + ")" : "") +
           "\n" +
           (prefs.customerName ? "Name: " + prefs.customerName + "\n" : "") +
+          "Role: " +
+          roleLabel(prefs) +
+          "\n" +
+          "Status: " +
+          accessLabel(access, prefs) +
+          "\n" +
           "Expires: " +
           date +
           " (" +
@@ -419,7 +510,7 @@
         var leave = false;
         if (D && D.confirm) {
           leave = await D.confirm({
-            title: "License",
+            title: "Account",
             message: info + "\n\nSign out and enter a different code?",
             okLabel: "Sign out",
             cancelLabel: "Stay signed in",
@@ -486,6 +577,7 @@
     signOut: signOut,
     activate: activate,
     validate: validate,
+    refreshBadge: updateBadge,
     canSuggest: function () {
       return !!readPrefs().canSuggest;
     },

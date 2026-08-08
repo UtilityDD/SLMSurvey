@@ -151,8 +151,9 @@
                             <option>11kV</option>
                             <option>LT</option>
                         </select>
-                        <select id="filterStatus" class="est-select">
+                        <select id="filterStatus" class="est-select hidden" aria-hidden="true" tabindex="-1">
                             <option value="">All status</option>
+                            <option value="suggested">Suggested</option>
                             <option value="final">Final</option>
                             <option value="draft">Draft</option>
                             <option value="empty">Empty</option>
@@ -163,6 +164,12 @@
                             <option value="flat">Flat list</option>
                         </select>
                         <button type="button" class="est-btn est-btn-primary est-btn-sm" id="btnAddCustomStructure">+ Custom</button>
+                    </div>
+                    <div class="est-status-tabs" id="statusFilterTabs" role="tablist" aria-label="Kit status filter">
+                        <button type="button" class="est-status-tab is-all is-on" data-status="" role="tab">All</button>
+                        <button type="button" class="est-status-tab is-draft" data-status="draft" role="tab">Draft</button>
+                        <button type="button" class="est-status-tab is-suggested" data-status="suggested" role="tab">Suggested</button>
+                        <button type="button" class="est-status-tab is-final" data-status="final" role="tab">Final</button>
                     </div>
                     <div class="est-filters-row est-filters-extra" id="filtersMore">
                         <select id="filterStructure" class="est-select">
@@ -285,7 +292,7 @@
                     </div>
                     <div class="ed-footer-right">
                         <button type="button" class="est-btn est-btn-ghost hidden" id="btnSuggestKit" title="Send for approval">Send suggestion</button>
-                        <button type="button" class="est-btn est-btn-primary" id="btnSaveKit">Save on this PC</button>
+                        <button type="button" class="est-btn est-btn-primary" id="btnSaveKit" title="Save a copy under Structures → My Kits">Save to My Kits</button>
                     </div>
                 </footer>
             </section>
@@ -352,12 +359,17 @@
             <section class="est-suggestions hidden" id="suggestionsPanel">
                 <div class="est-filters sug-filters">
                     <select id="sugStatusFilter" class="est-select">
-                        <option value="pending">Pending</option>
+                        <option value="pending">Pending review</option>
                         <option value="">All statuses</option>
                         <option value="accepted">Accepted</option>
                         <option value="rejected">Rejected</option>
                     </select>
                     <button type="button" class="est-btn est-btn-ghost" id="btnRefreshSuggestions">Refresh</button>
+                    <div class="sug-legend" aria-hidden="true">
+                        <span class="sug-legend-item is-pending">Pending</span>
+                        <span class="sug-legend-item is-accepted">Accepted</span>
+                        <span class="sug-legend-item is-rejected">Rejected</span>
+                    </div>
                 </div>
                 <div class="sug-layout">
                     <div id="sugList" class="sug-list"></div>

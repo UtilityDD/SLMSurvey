@@ -12,6 +12,220 @@
 
   var MATRIX_URL = "../estimate/kit-matrix.json";
   var EDITS_KEY = "slm_estimate_kits_v7";
+  var CUSTOM_KITS_KEY = "slm_estimate_custom_kits_v1";
+  var PENDING_KITS_KEY = "slm_pending_kit_suggestions_v1";
+  var pendingSync = { loading: false, lastAt: 0 };
+  /** Full pending suggestion rows from server (for Accept / Reject on desk). */
+  var pendingSuggestionRows = [];
+
+  function writePendingFromSuggestions(rows) {
+    pendingSuggestionRows = (rows || []).filter(function (s) {
+      return s && s.status === "pending" && s.kit_id;
+    });
+    var next = {};
+    pendingSuggestionRows.forEach(function (s) {
+      var prop = s.proposed || {};
+      next[String(s.kit_id)] = {
+        poleToken: String(prop.poleToken || prop.pole_token || "").trim(),
+        poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
+        label: String(s.kit_label || "").trim(),
+        suggestionId: String(s.id || ""),
+      };
+    });
+    try {
+      var encoded = JSON.stringify(next);
+      var prev = localStorage.getItem(PENDING_KITS_KEY) || "";
+      if (prev === encoded) return;
+      localStorage.setItem(PENDING_KITS_KEY, encoded);
+      window.dispatchEvent(new CustomEvent("slm-pending-kits-changed"));
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
+  function canApproveOnDesk() {
+    var L = global.SlmLicense;
+    if (!L || !L.enabled) return true;
+    return !!(L.canApprove && L.canApprove());
+  }
+
+  function pendingRowForKit(kitId) {
+    var id = String(kitId || "");
+    for (var i = 0; i < pendingSuggestionRows.length; i++) {
+      if (String(pendingSuggestionRows[i].kit_id) === id) {
+        return pendingSuggestionRows[i];
+      }
+    }
+    return null;
+  }
+
+  function catalogPost(path, body) {
+    var L = global.SlmLicense;
+    var cfg = global.SLM_LICENSE_CONFIG || {};
+    var base = String(cfg.SUPABASE_URL || "").replace(/\/$/, "");
+    var anon = cfg.SUPABASE_ANON_KEY || "";
+    if (!base || !anon || !L || !L.deviceId) {
+      return Promise.reject(new Error("licensing_disabled"));
+    }
+    return fetch(base + path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + anon,
+        apikey: anon,
+      },
+      body: JSON.stringify(
+        Object.assign({ device_id: L.deviceId() }, body || {})
+      ),
+    }).then(function (r) {
+      return r.json();
+    });
+  }
+
+  function applyProposedLocally(kitId, proposed, asFinal) {
+    if (!state.matrix || !kitId || !proposed) return false;
+    var hit = null;
+    []
+      .concat(state.matrix.structureKits || [])
+      .concat(state.matrix.conductorKits || [])
+      .concat(state.matrix.addonKits || [])
+      .concat(state.matrix.customKits || [])
+      .forEach(function (k) {
+        if (k && String(k.id) === String(kitId)) hit = k;
+      });
+    if (!hit) return false;
+    hit.enabled = proposed.enabled !== false;
+    hit.complete = !!asFinal;
+    hit.notes = String(proposed.notes || "");
+    hit.lines = Array.isArray(proposed.lines)
+      ? proposed.lines.map(function (l) {
+          return {
+            code: l.code,
+            qty: Number(l.qty) || 0,
+            type: l.type,
+          };
+        })
+      : [];
+    if (asFinal && !hit.lines.length) hit.complete = false;
+    try {
+      var edits = JSON.parse(localStorage.getItem(EDITS_KEY) || "{}") || {};
+      edits[kitId] = {
+        enabled: hit.enabled,
+        complete: hit.complete,
+        lines: hit.lines,
+        notes: hit.notes || "",
+      };
+      localStorage.setItem(EDITS_KEY, JSON.stringify(edits));
+    } catch (e) {
+      /* ignore */
+    }
+    return true;
+  }
+
+  function reviewDeskSuggestion(suggestionId, action, asFinal) {
+    if (!canApproveOnDesk()) {
+      Desk.toast("Your license cannot approve");
+      return Promise.resolve();
+    }
+    var go = Promise.resolve(true);
+    if (action === "reject") {
+      go = global.SlmDialog.prompt({
+        title: "Reject suggestion",
+        message: "Optional note for the suggestor.",
+        inputLabel: "Review note",
+        placeholder: "Reason…",
+        okLabel: "Reject",
+      }).then(function (note) {
+        if (note === null) return false;
+        return catalogPost("/functions/v1/catalog-suggestion-review", {
+          suggestion_id: suggestionId,
+          action: "reject",
+          review_note: String(note || "").trim(),
+        });
+      });
+    } else {
+      go = global.SlmDialog.confirm({
+        title: asFinal ? "Accept as Final?" : "Accept as Draft?",
+        message: asFinal
+          ? "Merge into the kit and mark Final."
+          : "Merge into the kit as Draft.",
+        okLabel: asFinal ? "Accept as Final" : "Accept as Draft",
+      }).then(function (ok) {
+        if (!ok) return false;
+        return catalogPost("/functions/v1/catalog-suggestion-review", {
+          suggestion_id: suggestionId,
+          action: "accept",
+          review_note: "",
+        });
+      });
+    }
+    return go
+      .then(function (json) {
+        if (json === false || json == null) return;
+        if (!json || !json.ok) {
+          Desk.toast("Review failed: " + ((json && json.error) || "unknown"));
+          return;
+        }
+        if (action === "accept") {
+          applyProposedLocally(json.kit_id, json.proposed, !!asFinal);
+          Desk.toast(asFinal ? "Accepted as Final" : "Accepted as Draft");
+        } else {
+          Desk.toast("Suggestion rejected");
+        }
+        return syncPendingSuggestions(true).then(function () {
+          Desk.refresh();
+        });
+      })
+      .catch(function () {
+        Desk.toast("Review failed (network)");
+      });
+  }
+
+  /** Pull pending suggestions so Structures Suggested counts stay accurate. */
+  function syncPendingSuggestions(force) {
+    var L = global.SlmLicense;
+    var cfg = global.SLM_LICENSE_CONFIG || {};
+    if (!L || !L.enabled || !L.deviceId) return Promise.resolve(false);
+    if (!L.canSuggest || (!L.canSuggest() && !(L.canApprove && L.canApprove()))) {
+      return Promise.resolve(false);
+    }
+    var now = Date.now();
+    if (pendingSync.loading) return Promise.resolve(false);
+    // Even forced syncs debounce briefly to avoid refresh loops.
+    if (now - pendingSync.lastAt < (force ? 1500 : 8000)) {
+      return Promise.resolve(false);
+    }
+    var base = String(cfg.SUPABASE_URL || "").replace(/\/$/, "");
+    var anon = cfg.SUPABASE_ANON_KEY || "";
+    if (!base || !anon) return Promise.resolve(false);
+    pendingSync.loading = true;
+    return fetch(base + "/functions/v1/catalog-suggestions-list", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + anon,
+        apikey: anon,
+      },
+      body: JSON.stringify({
+        device_id: L.deviceId(),
+        status: "pending",
+      }),
+    })
+      .then(function (r) {
+        return r.json();
+      })
+      .then(function (json) {
+        pendingSync.loading = false;
+        pendingSync.lastAt = Date.now();
+        if (!json || !json.ok) return false;
+        writePendingFromSuggestions(json.suggestions || []);
+        return true;
+      })
+      .catch(function () {
+        pendingSync.loading = false;
+        return false;
+      });
+  }
   var COLS_KEY = "slm_st_col_widths_v1";
   var COL_MIN = { tree: 160, kits: 220, detail: 200 };
   var colWidths = loadColWidths();
@@ -20,6 +234,7 @@
     matrix: null,
     voltage: "11kV",
     q: "",
+    statusFilter: "", // "" | draft | suggested | final
     selected: null,
     selectedPoleMaterial: null,
     selectedPoleToken: null,
@@ -163,13 +378,34 @@
   var POS_ORDER = ["Tangent", "Angular", "Dead-end", "T-Off", "Tap"];
   var ARR_ORDER = ["In-line", "Sectional", "Other"];
 
+  function loadLocalCustomKits() {
+    try {
+      var list = JSON.parse(localStorage.getItem(CUSTOM_KITS_KEY) || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   function allKits() {
     var m = state.matrix;
     if (!m) return [];
     return []
       .concat(m.structureKits || [])
       .concat(m.conductorKits || [])
-      .concat(m.addonKits || []);
+      .concat(m.addonKits || [])
+      .concat(m.customKits || []);
+  }
+
+  function isMyKit(k) {
+    if (!k) return false;
+    if (k.myKit || k.custom) return true;
+    var id = String(k.id || "");
+    return (
+      id.indexOf("MYKIT|") === 0 ||
+      id.indexOf("CUSTOM|") === 0 ||
+      String(k.structure || "") === "CUSTOM"
+    );
   }
 
   function kitFamily(k) {
@@ -432,6 +668,20 @@
 
     kits.forEach(function (k) {
       var family = kitFamily(k);
+      if (isMyKit(k)) {
+        var myKey = "My Kits";
+        if (!root.children[myKey]) {
+          root.children[myKey] = {
+            key: root.key + "/o:" + myKey,
+            label: myKey,
+            kits: [],
+            children: Object.create(null),
+            kind: "other",
+          };
+        }
+        root.children[myKey].kits.push(k);
+        return;
+      }
       if (family !== "structure") {
         var otherKey = family === "conductor" ? "Conductors" : "Add-ons";
         if (!root.children[otherKey]) {
@@ -537,13 +787,20 @@
 
     root.ordered = childList(
       root,
-      TYPE_ORDER.concat(["Conductors", "Add-ons"]),
+      ["My Kits"].concat(TYPE_ORDER).concat(["Conductors", "Add-ons"]),
       function (n, k) {
         return n.kind === "other" ? n.label : k;
       }
     );
     root.ordered.forEach(function (typeNode) {
-      if (typeNode.kind === "other") return;
+      if (typeNode.kind === "other") {
+        typeNode.kits.sort(function (a, b) {
+          var la = String(a.customLabel || a.label || a.id || "");
+          var lb = String(b.customLabel || b.label || b.id || "");
+          return la.localeCompare(lb);
+        });
+        return;
+      }
       typeNode.ordered = childList(typeNode, POS_ORDER, function (n) {
         return n.label;
       });
@@ -642,6 +899,16 @@
     } catch (e) {
       edits = {};
     }
+    var byId = Object.create(null);
+    (m.customKits || []).forEach(function (k) {
+      if (k && k.id) byId[k.id] = Object.assign({}, k, { custom: true, myKit: true });
+    });
+    loadLocalCustomKits().forEach(function (k) {
+      if (k && k.id) byId[k.id] = Object.assign({}, k, { custom: true, myKit: true });
+    });
+    m.customKits = Object.keys(byId).map(function (id) {
+      return byId[id];
+    });
     function patch(k) {
       if (!k || !k.id || !edits[k.id]) return;
       var e = edits[k.id];
@@ -771,6 +1038,113 @@
     );
   }
 
+  function isKitPendingSuggestion(kitId, poleToken, poleMaterial) {
+    if (!kitId) return false;
+    try {
+      var raw = JSON.parse(localStorage.getItem(PENDING_KITS_KEY) || "{}");
+      var meta = raw[String(kitId)];
+      if (!meta) return false;
+      if (meta === true) meta = { poleToken: "", poleMaterial: "", label: "" };
+
+      var wantTok = String(meta.poleToken || "").trim();
+      var wantMat = String(meta.poleMaterial || "").trim();
+      var wantAbbr = "";
+      String(meta.label || "")
+        .split("-")
+        .forEach(function (p) {
+          if (/^(8M|9M|RL|HP|S9|S11|T9|T95|T11)$/i.test(p)) {
+            wantAbbr = String(p).toUpperCase();
+            if (wantAbbr === "T9" || wantAbbr === "T95") wantAbbr = "S9";
+            if (wantAbbr === "T11") wantAbbr = "S11";
+          }
+        });
+      if (wantTok === "T9" || wantTok === "T95") wantAbbr = wantAbbr || "S9";
+      if (wantTok === "T11") wantAbbr = wantAbbr || "S11";
+      if (wantTok === "8M" || wantTok === "9M" || wantTok === "RL" || wantTok === "HP") {
+        wantAbbr = wantAbbr || wantTok;
+      }
+      if (wantTok === "S9" || wantTok === "S11") wantAbbr = wantAbbr || wantTok;
+
+      // No pole on suggestion → still mark this kit's leaves (legacy / unscoped).
+      if (!wantTok && !wantMat && !wantAbbr) {
+        return true;
+      }
+
+      var leafTok = String(poleToken || "").trim();
+      var leafMat = String(poleMaterial || "").trim();
+      var leafAbbr = "";
+      if (global.SlmKitName && global.SlmKitName.poleAbbr) {
+        leafAbbr =
+          global.SlmKitName.poleAbbr({
+            _poleMaterial: leafMat,
+            poleMaterial: leafMat,
+            _poleToken: leafTok,
+            poleToken: leafTok,
+            activePoleToken: leafTok,
+          }) || "";
+      } else {
+        leafAbbr = leafTok.toUpperCase();
+      }
+      if (wantTok && leafTok && wantTok === leafTok) return true;
+      if (wantMat && leafMat && wantMat === leafMat) return true;
+      if (
+        wantAbbr &&
+        leafAbbr &&
+        String(wantAbbr).toUpperCase() === String(leafAbbr).toUpperCase()
+      ) {
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function kitPublishStatus(k) {
+    if (!k || k.enabled === false) return "off";
+    if (!(k.lines || []).length) return "empty";
+    if (
+      isKitPendingSuggestion(
+        k.id,
+        k._poleToken || k.activePoleToken || "",
+        k._poleMaterial || ""
+      )
+    ) {
+      return "suggested";
+    }
+    if (k.complete) return "final";
+    return "draft";
+  }
+
+  function kitPublishLabel(st) {
+    if (st === "final") return "Final";
+    if (st === "suggested") return "Suggested";
+    if (st === "draft") return "Draft";
+    if (st === "off") return "Off";
+    return "Empty";
+  }
+
+  function statusPillHtml(k) {
+    var st = kitPublishStatus(k);
+    return (
+      '<span class="dk-st-status dk-st-status-' +
+      st +
+      '" title="' +
+      (st === "final"
+        ? "Finalized by admin — used in BOQ"
+        : st === "suggested"
+          ? "Suggestion waiting for admin review"
+          : st === "draft"
+            ? "Draft — suggested or not yet finalized"
+            : st === "off"
+              ? "Disabled"
+              : "No recipe lines yet") +
+      '">' +
+      esc(kitPublishLabel(st)) +
+      "</span>"
+    );
+  }
+
   function renderDetail(host) {
     var k = state.selected;
     if (!k) {
@@ -839,7 +1213,9 @@
       "</span>" +
       '<span class="dk-st-band-pill">' +
       esc(activePoleMaterial(k)) +
-      "</span></div></div>" +
+      "</span>" +
+      statusPillHtml(k) +
+      "</div></div>" +
       "<h2>" +
       esc(kitTitle(k)) +
       "</h2>" +
@@ -850,12 +1226,28 @@
       lines.length +
       " lines · Pole " +
       esc(activePoleMaterial(k)) +
+      (kitPublishStatus(k) === "draft"
+        ? " · Draft until an approver marks Final"
+        : kitPublishStatus(k) === "suggested"
+          ? " · Suggestion pending review"
+          : kitPublishStatus(k) === "final"
+            ? " · Finalized for estimate"
+            : "") +
       "</p>" +
       '<div class="dk-st-detail-actions">' +
       (canEdit()
         ? '<button type="button" class="dk-btn dk-btn-primary" id="dkEditKit">Edit kit</button>'
         : '<p class="dk-st-browse-only">Browse only on this license.</p>') +
       "</div>" +
+      (kitPublishStatus(k) === "suggested" && canApproveOnDesk()
+        ? '<div class="dk-st-review-bar" id="dkReviewBar">' +
+          '<p class="dk-st-review-label">Pending suggestion — review</p>' +
+          '<div class="dk-st-review-actions">' +
+          '<button type="button" class="dk-btn dk-btn-primary" id="dkAcceptFinal">Accept as Final</button>' +
+          '<button type="button" class="dk-btn dk-btn-ghost" id="dkAcceptDraft">Accept as Draft</button>' +
+          '<button type="button" class="dk-btn dk-btn-danger" id="dkRejectSug">Reject</button>' +
+          "</div></div>"
+        : "") +
       '<div class="dk-st-recipe">' +
       recipeGroupHtml("Materials", materials) +
       recipeGroupHtml("Labour", labour) +
@@ -869,6 +1261,29 @@
         Desk.refresh();
       });
     }
+
+    function wireReview(btnId, action, asFinal) {
+      var btn = host.querySelector(btnId);
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        var row = pendingRowForKit(k.id);
+        var ensureRow = row
+          ? Promise.resolve(row)
+          : syncPendingSuggestions(true).then(function () {
+              return pendingRowForKit(k.id);
+            });
+        ensureRow.then(function (sug) {
+          if (!sug || !sug.id) {
+            Desk.toast("No pending suggestion found for this kit — Refresh Suggested");
+            return;
+          }
+          reviewDeskSuggestion(sug.id, action, asFinal);
+        });
+      });
+    }
+    wireReview("#dkAcceptFinal", "accept", true);
+    wireReview("#dkAcceptDraft", "accept", false);
+    wireReview("#dkRejectSug", "reject", false);
   }
 
   function selectKitById(kitId) {
@@ -935,8 +1350,10 @@
         String(state.selectedPoleMaterial || "") === String(k._poleMaterial || ""));
     var n = (k.lines || []).length;
     var title = kitTitle(k);
+    var st = kitPublishStatus(k);
     return (
-      '<button type="button" class="dk-st-leaf' +
+      '<button type="button" class="dk-st-leaf is-' +
+      st +
       (selected ? " is-selected" : "") +
       '" data-id="' +
       esc(k.id) +
@@ -945,11 +1362,15 @@
       '" data-pole-token="' +
       esc(k._poleToken || "") +
       '" title="' +
-      esc(title + (k._poleMaterial ? " · " + k._poleMaterial : "")) +
+      esc(title + (k._poleMaterial ? " · " + k._poleMaterial : "") + " · " + kitPublishLabel(st)) +
       '">' +
+      '<span class="dk-st-leaf-main">' +
       '<span class="dk-st-leaf-title">' +
       esc(title) +
-      '</span><span class="dk-st-leaf-n">' +
+      "</span>" +
+      statusPillHtml(k) +
+      "</span>" +
+      '<span class="dk-st-leaf-n">' +
       n +
       "</span></button>"
     );
@@ -1013,6 +1434,46 @@
     Desk.refresh();
   }
 
+  function countStatusIn(kits) {
+    var out = { all: kits.length, draft: 0, suggested: 0, final: 0, empty: 0, off: 0 };
+    kits.forEach(function (k) {
+      var st = kitPublishStatus(k);
+      if (out[st] != null) out[st] += 1;
+    });
+    return out;
+  }
+
+  function statusFilterTabsHtml(counts) {
+    var tabs = [
+      { id: "", label: "All", n: counts.all },
+      { id: "draft", label: "Draft", n: counts.draft },
+      { id: "suggested", label: "Suggested", n: counts.suggested },
+      { id: "final", label: "Final", n: counts.final },
+    ];
+    return (
+      '<div class="dk-st-status-tabs" role="tablist" aria-label="Kit status filter">' +
+      tabs
+        .map(function (t) {
+          return (
+            '<button type="button" class="dk-st-status-tab is-' +
+            (t.id || "all") +
+            (state.statusFilter === t.id ? " is-on" : "") +
+            '" data-status-filter="' +
+            esc(t.id) +
+            '" role="tab" aria-selected="' +
+            (state.statusFilter === t.id ? "true" : "false") +
+            '">' +
+            esc(t.label) +
+            '<span class="dk-st-status-tab-n">' +
+            t.n +
+            "</span></button>"
+          );
+        })
+        .join("") +
+      "</div>"
+    );
+  }
+
   function renderBrowse(page) {
     if (state.pendingKitId) selectKitById(state.pendingKitId);
     var kits = filtered();
@@ -1022,6 +1483,12 @@
     }
     var focusNode = findNode(tree, state.focusKey) || tree;
     var focusKits = collectKits(focusNode);
+    var statusCounts = countStatusIn(focusKits);
+    var visibleKits = state.statusFilter
+      ? focusKits.filter(function (k) {
+          return kitPublishStatus(k) === state.statusFilter;
+        })
+      : focusKits;
 
     page.innerHTML =
       '<div class="dk-st-page" id="dkStPage">' +
@@ -1044,20 +1511,41 @@
       '<span class="dk-st-col-sub">' +
       esc(focusPath(focusNode)) +
       " · " +
-      focusKits.length +
+      visibleKits.length +
+      (state.statusFilter ? " / " + focusKits.length : "") +
       "</span>" +
       namingGuideHtml() +
       "</div>" +
+      statusFilterTabsHtml(statusCounts) +
       '<div class="dk-st-kit-list" id="dkKitList">' +
-      (focusKits.length
-        ? focusKits.map(leafHtml).join("")
-        : '<div class="dk-st-empty">No kits in this group.</div>') +
+      (visibleKits.length
+        ? visibleKits.map(leafHtml).join("")
+        : '<div class="dk-st-empty">' +
+          (focusKits.length
+            ? "No " +
+              (state.statusFilter || "matching") +
+              " kits in this group."
+            : "No kits in this group.") +
+          "</div>") +
       "</div></section>" +
       '<div class="dk-st-split" data-split="detail" role="separator" aria-orientation="vertical" aria-label="Resize detail" tabindex="0"></div>' +
       '<aside class="dk-st-col dk-st-col-detail" id="dkKitDetail" aria-label="Kit detail"></aside>' +
       "</div>";
 
     wireColumnResize(page.querySelector("#dkStPage"));
+
+    page.querySelectorAll("[data-status-filter]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        state.statusFilter = btn.getAttribute("data-status-filter") || "";
+        if (state.statusFilter === "suggested") {
+          syncPendingSuggestions(true).then(function () {
+            Desk.refresh();
+          });
+          return;
+        }
+        Desk.refresh();
+      });
+    });
 
     page.querySelectorAll("[data-twist]").forEach(function (btn) {
       btn.addEventListener("click", function (e) {
@@ -1165,7 +1653,16 @@
       if (!ev.data) return;
       if (state.mode !== "edit") return;
       if (ev.data.type === "slm_kit_solo_saved") {
-        Desk.toast("Kit saved");
+        Desk.toast(
+          ev.data.myKitId ? "Saved · copy in My Kits" : "Kit saved"
+        );
+        // Reload so Structures → My Kits shows the copy after leaving edit.
+        loadMatrix(true).catch(function () {});
+        return;
+      }
+      if (ev.data.type === "slm_kit_solo_suggested") {
+        Desk.toast("Suggestion sent — marked Suggested");
+        leaveEdit();
         return;
       }
       if (ev.data.type === "slm_kit_solo_done") {
@@ -1179,15 +1676,19 @@
     page.className = "dk-page";
     host.appendChild(page);
     page.innerHTML = '<div class="dk-blank"><h2>Loading structures…</h2></div>';
-    loadMatrix()
-      .then(function () {
-        page.innerHTML = "";
-        renderBrowse(page);
-      })
-      .catch(function () {
-        page.innerHTML =
-          '<div class="dk-blank"><h2>Could not load kits</h2><p>Check estimate/kit-matrix.json</p></div>';
-      });
+    var paint = function () {
+      loadMatrix()
+        .then(function () {
+          page.innerHTML = "";
+          renderBrowse(page);
+        })
+        .catch(function () {
+          page.innerHTML =
+            '<div class="dk-blank"><h2>Could not load kits</h2><p>Check estimate/kit-matrix.json</p></div>';
+        });
+    };
+    // Always pull pending from server so Suggested counts work across browsers.
+    syncPendingSuggestions(true).then(paint).catch(paint);
   }
 
   Desk.register("structures", {
@@ -1206,6 +1707,18 @@
     openKit: openKit,
     openKitEdit: openKitEdit,
   });
+
+  if (!global.__slmPendingKitsWired) {
+    global.__slmPendingKitsWired = true;
+    window.addEventListener("slm-pending-kits-changed", function () {
+      if (Desk.active && Desk.active() === "structures") Desk.refresh();
+    });
+    window.addEventListener("storage", function (ev) {
+      if (ev.key === PENDING_KITS_KEY && Desk.active && Desk.active() === "structures") {
+        Desk.refresh();
+      }
+    });
+  }
 
   global.SlmStructuresDesk = {
     openKit: openKit,

@@ -214,6 +214,11 @@
     if (!show && activeId === "licenses") go("map");
   }
 
+  function refreshSessionCard() {
+    var L = global.SlmLicense;
+    if (L && typeof L.refreshBadge === "function") L.refreshBadge();
+  }
+
   function wireShell() {
     document.querySelectorAll(".dk-block-head").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -226,9 +231,11 @@
     wireShell();
     wireApkDownload();
     syncAdminNav();
+    refreshSessionCard();
     window.addEventListener("slm-license-changed", function () {
       wireApkDownload();
       syncAdminNav();
+      refreshSessionCard();
     });
     window.addEventListener("hashchange", function () {
       var hash = (location.hash || "").replace(/^#/, "");

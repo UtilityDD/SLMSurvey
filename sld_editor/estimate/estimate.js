@@ -2,6 +2,8 @@
   const STORAGE_KEY = "slm_estimate_kits_v7";
   /** Full definitions for user-created kits (survive matrix regenerate). */
   const CUSTOM_KITS_KEY = "slm_estimate_custom_kits_v1";
+  /** Shared with Structures desk: kit_id → pending suggestion meta. */
+  const PENDING_KITS_KEY = "slm_pending_kit_suggestions_v1";
 
   const state = {
     ratebook: null,
@@ -15,6 +17,12 @@
     suggestions: [],
     selectedSuggestionId: null,
     pendingSuggestionCount: 0,
+    /** From last suggestions-list response (cross-checks local prefs). */
+    serverCanApprove: false,
+    /** kit_id → true while a suggestion waits for admin review */
+    pendingKitIds: new Set(),
+    /** kit_id → { poleToken, poleMaterial, label } */
+    pendingKitMeta: {},
     licenses: [],
     boqSurvey: null,
     boqReport: null,
@@ -59,15 +67,187 @@
   function kitStatus(kit) {
     if (!kit.enabled) return "off";
     if (!(kit.lines || []).length) return "empty";
+    // Structures stamps _poleMaterial on each pole leaf; Estimate board does not.
+    const leafScoped = !!(kit._poleMaterial || kit._poleToken);
+    if (
+      kit.id &&
+      isPendingSuggested(
+        kit.id,
+        leafScoped ? kit._poleToken || kit.activePoleToken || kit.poleToken || "" : null,
+        leafScoped ? kit._poleMaterial || "" : null
+      )
+    ) {
+      return "suggested";
+    }
     if (kit.complete) return "final";
     return "draft";
   }
 
   function statusLabel(st) {
     if (st === "final") return "Final";
+    if (st === "suggested") return "Suggested";
     if (st === "draft") return "Draft";
     if (st === "off") return "Off";
     return "Empty";
+  }
+
+  function suggestionStatusLabel(st) {
+    if (st === "pending") return "Pending review";
+    if (st === "accepted") return "Accepted";
+    if (st === "rejected") return "Rejected";
+    return String(st || "—");
+  }
+
+  /** kit_id → { poleToken, poleMaterial, label } for pending suggestions */
+  function persistPendingKitIds() {
+    const obj = {};
+    state.pendingKitMeta = state.pendingKitMeta || {};
+    Object.keys(state.pendingKitMeta).forEach((id) => {
+      obj[id] = state.pendingKitMeta[id];
+    });
+    try {
+      localStorage.setItem(PENDING_KITS_KEY, JSON.stringify(obj));
+      window.dispatchEvent(new CustomEvent("slm-pending-kits-changed"));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function loadPendingKitIdsFromStorage() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(PENDING_KITS_KEY) || "{}");
+      state.pendingKitMeta = {};
+      Object.keys(raw || {}).forEach((id) => {
+        const v = raw[id];
+        if (!v) return;
+        state.pendingKitMeta[id] =
+          v === true ? { poleToken: "", poleMaterial: "", label: "" } : v;
+      });
+      state.pendingKitIds = new Set(Object.keys(state.pendingKitMeta));
+    } catch (_) {
+      state.pendingKitMeta = {};
+      state.pendingKitIds = new Set();
+    }
+  }
+
+  function poleAbbrFromLabel(label) {
+    const parts = String(label || "").split("-");
+    const hit = parts.find((p) =>
+      /^(8M|9M|RL|HP|S9|S11|T9|T95|T11)$/i.test(String(p || "").trim())
+    );
+    return hit ? String(hit).toUpperCase().replace("T95", "S9").replace("T9", "S9").replace("T11", "S11") : "";
+  }
+
+  function pendingMetaFor(kitId) {
+    if (!kitId) return null;
+    const meta = (state.pendingKitMeta || {})[String(kitId)];
+    return meta || null;
+  }
+
+  /** True when this kit (optionally this pole leaf) has a pending suggestion. */
+  function isPendingSuggested(kitId, poleToken, poleMaterial) {
+    const meta = pendingMetaFor(kitId);
+    if (!meta) return false;
+    // Kit-level row (Estimate board): any pending on this id.
+    if (poleToken == null && poleMaterial == null) return true;
+
+    let wantTok = String(meta.poleToken || "").trim();
+    let wantMat = String(meta.poleMaterial || "").trim();
+    let wantAbbr = poleAbbrFromLabel(meta.label);
+    if (wantTok && POLE_TOKEN_TO_ABBR[wantTok]) {
+      wantAbbr = wantAbbr || POLE_TOKEN_TO_ABBR[wantTok];
+    }
+    // Suggestion has no pole scope → show on every pole leaf of this kit.
+    if (!wantTok && !wantMat && !wantAbbr) return true;
+    const leafTok = String(poleToken || "").trim();
+    const leafMat = String(poleMaterial || "").trim();
+    const leafAbbr =
+      (window.SlmKitName &&
+        window.SlmKitName.poleAbbr &&
+        window.SlmKitName.poleAbbr({
+          _poleMaterial: leafMat,
+          poleMaterial: leafMat,
+          _poleToken: leafTok,
+          poleToken: leafTok,
+          activePoleToken: leafTok,
+        })) ||
+      String(leafTok || "").toUpperCase();
+    if (wantTok && leafTok && wantTok === leafTok) return true;
+    if (wantMat && leafMat && wantMat === leafMat) return true;
+    if (
+      wantAbbr &&
+      leafAbbr &&
+      String(wantAbbr).toUpperCase() === String(leafAbbr).toUpperCase()
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  const POLE_TOKEN_TO_ABBR = {
+    "8M": "8M",
+    "9M": "9M",
+    RL: "RL",
+    HP: "HP",
+    WF: "HP",
+    T9: "S9",
+    T95: "S9",
+    T11: "S11",
+    S9: "S9",
+    S11: "S11",
+  };
+
+  function setPendingKitsFromSuggestions(rows) {
+    const next = {};
+    (rows || []).forEach((s) => {
+      if (!s || s.status !== "pending" || !s.kit_id) return;
+      const prop = s.proposed || {};
+      next[String(s.kit_id)] = {
+        poleToken: String(prop.poleToken || prop.pole_token || "").trim(),
+        poleMaterial: String(prop.poleMaterial || prop.pole_material || "").trim(),
+        label: String(s.kit_label || "").trim(),
+      };
+    });
+    state.pendingKitMeta = next;
+    state.pendingKitIds = new Set(Object.keys(next));
+    persistPendingKitIds();
+  }
+
+  function markKitPending(kitId, meta) {
+    if (!kitId) return;
+    state.pendingKitMeta = state.pendingKitMeta || {};
+    state.pendingKitMeta[String(kitId)] = {
+      poleToken: String((meta && meta.poleToken) || "").trim(),
+      poleMaterial: String((meta && meta.poleMaterial) || "").trim(),
+      label: String((meta && meta.label) || "").trim(),
+    };
+    state.pendingKitIds.add(String(kitId));
+    persistPendingKitIds();
+  }
+
+  function clearKitPending(kitId) {
+    if (!kitId) return;
+    if (state.pendingKitMeta) delete state.pendingKitMeta[String(kitId)];
+    state.pendingKitIds.delete(String(kitId));
+    persistPendingKitIds();
+  }
+
+  function refreshActiveKitStatusPill() {
+    const pill = $("editorStatusPill");
+    if (!pill || !state.activeKitId) return;
+    const kit = state.kitsById[state.activeKitId];
+    if (!kit) return;
+    const st = kitStatus(kit);
+    pill.textContent = statusLabel(st);
+    pill.className =
+      "ed-status-pill" +
+      (st === "final"
+        ? " is-final"
+        : st === "suggested"
+          ? " is-suggested"
+          : st === "empty" || st === "off"
+            ? " is-empty"
+            : " is-draft");
   }
 
   function kitTitle(kit) {
@@ -209,11 +389,13 @@
         id: k.id,
         family: k.family || "structure",
         custom: true,
+        myKit: k.myKit !== false,
+        sourceKitId: k.sourceKitId || null,
         voltage: k.voltage || "",
         customLabel: k.customLabel || k.label || "",
         label: k.customLabel || k.label || "",
         structure: k.structure || "CUSTOM",
-        structureLabel: k.structureLabel || "Custom",
+        structureLabel: k.structureLabel || "My Kits",
         location: k.location || null,
         locationLabel: k.locationLabel || null,
         arrangement: k.arrangement || null,
@@ -227,11 +409,12 @@
         extensionLabel: k.extensionLabel || null,
         qtyBasis: k.qtyBasis || "per_structure",
         poleHeightHint: k.poleHeightHint || "",
+        poleToken: k.poleToken || "",
         notes: k.notes || "",
         enabled: k.enabled !== false,
         complete: !!k.complete,
         lines: k.lines || [],
-        hint: k.hint || "User-defined structure kit",
+        hint: k.hint || "Saved on this PC — Structures → My Kits",
       }));
     saveCustomKits(customs);
     if (state.matrix) state.matrix.customKits = customs;
@@ -283,6 +466,79 @@
     return `CUSTOM|STR|${slug}`;
   }
 
+  function isMyKit(kit) {
+    if (!kit) return false;
+    if (kit.myKit || kit.custom) return true;
+    const id = String(kit.id || "");
+    return id.startsWith("MYKIT|") || id.startsWith("CUSTOM|");
+  }
+
+  /** Stable My Kits id for a catalog kit (re-save updates the same copy). */
+  function myKitIdFor(sourceKit) {
+    if (isMyKit(sourceKit)) return sourceKit.id;
+    return "MYKIT|" + String(sourceKit.id || "");
+  }
+
+  /**
+   * Upsert a Structures → My Kits copy from the current kit recipe.
+   * Catalog kits keep their overlay; a separate custom copy is what the desk groups.
+   */
+  function upsertMyKitCopy(sourceKit) {
+    if (!sourceKit?.id) return null;
+    const id = myKitIdFor(sourceKit);
+    const existing = state.kitsById[id];
+    const label =
+      (existing && (existing.customLabel || existing.label)) ||
+      kitTitle(sourceKit);
+    const lines = (sourceKit.lines || []).map((l) => ({
+      code: l.code,
+      qty: Number(l.qty) || 0,
+      type: l.type,
+    }));
+    const copy = {
+      ...(existing || {}),
+      id,
+      family: sourceKit.family || "structure",
+      custom: true,
+      myKit: true,
+      sourceKitId: isMyKit(sourceKit) ? sourceKit.sourceKitId || null : sourceKit.id,
+      voltage: sourceKit.voltage || existing?.voltage || "",
+      customLabel: label,
+      label,
+      structure: "CUSTOM",
+      structureLabel: "My Kits",
+      location: sourceKit.location || null,
+      locationLabel: sourceKit.locationLabel || sourceKit.location || null,
+      arrangement: sourceKit.arrangement || null,
+      arrangementLabel: sourceKit.arrangementLabel || null,
+      conductorId: sourceKit.conductorId || null,
+      conductorShort: sourceKit.conductorShort || null,
+      conductorName: sourceKit.conductorName || null,
+      wireCount: sourceKit.wireCount || null,
+      wireLabel: sourceKit.wireLabel || null,
+      extension: sourceKit.extension || null,
+      extensionLabel: sourceKit.extensionLabel || null,
+      qtyBasis: sourceKit.qtyBasis || "per_structure",
+      poleHeightHint:
+        sourceKit.poleHeightHint ||
+        sourceKit._poleMaterial ||
+        sourceKit.poleLabel ||
+        "",
+      poleToken:
+        sourceKit.activePoleToken ||
+        sourceKit._poleToken ||
+        sourceKit.poleToken ||
+        "",
+      enabled: sourceKit.enabled !== false,
+      complete: !!sourceKit.complete,
+      lines,
+      notes: sourceKit.notes || "",
+      hint: "Saved on this PC — Structures → My Kits",
+    };
+    state.kitsById[id] = copy;
+    return copy;
+  }
+
   function createCustomStructure(fields) {
     const label = String(fields.customLabel || "").trim();
     if (!label) {
@@ -294,11 +550,12 @@
       id: newCustomKitId(),
       family: "structure",
       custom: true,
+      myKit: true,
       voltage,
       customLabel: label,
       label,
       structure: "CUSTOM",
-      structureLabel: "Custom",
+      structureLabel: "My Kits",
       location: fields.location || null,
       locationLabel: fields.location || null,
       arrangement: null,
@@ -356,8 +613,18 @@
   }
 
   function countByStatus(kits) {
-    const out = { empty: 0, draft: 0, final: 0, off: 0, total: kits.length };
-    for (const k of kits) out[kitStatus(k)] += 1;
+    const out = {
+      empty: 0,
+      draft: 0,
+      suggested: 0,
+      final: 0,
+      off: 0,
+      total: kits.length,
+    };
+    for (const k of kits) {
+      const st = kitStatus(k);
+      if (out[st] != null) out[st] += 1;
+    }
     return out;
   }
 
@@ -459,6 +726,7 @@
       parts.push(`${fams.size} families`);
     }
     if (s.final) parts.push(`${s.final} final`);
+    if (s.suggested) parts.push(`${s.suggested} suggested`);
     if (s.draft) parts.push(`${s.draft} draft`);
     if (s.empty) parts.push(`${s.empty} empty`);
     el.textContent = parts.join(" · ");
@@ -630,21 +898,61 @@
       ? `<span class="est-kit-code" title="Kit code">${escapeHtml(code)}</span>`
       : "";
     return `
-      <button type="button" class="est-row ${st === "off" ? "disabled-row" : ""}" data-open="${escapeAttr(kit.id)}">
+      <button type="button" class="est-row is-${st}${st === "off" ? " disabled-row" : ""}" data-open="${escapeAttr(kit.id)}">
         <span class="est-row-main">
           ${codeHtml}
           <span class="est-row-title">${escapeHtml(kitTitle(kit))}</span>
           ${poleHtml}
           <span class="est-row-meta">${escapeHtml(bits.filter(Boolean).join(" · "))}</span>
         </span>
-        <span class="est-badge ${st}">${statusLabel(st)}</span>
+        <span class="est-badge ${st}" title="${
+          st === "final"
+            ? "Finalized by admin"
+            : st === "suggested"
+              ? "Suggestion waiting for admin review"
+              : st === "draft"
+                ? "Draft — not yet finalized"
+                : ""
+        }">${statusLabel(st)}</span>
       </button>
     `;
+  }
+
+  function syncStatusFilterTabs() {
+    const host = $("statusFilterTabs");
+    const sel = $("filterStatus");
+    if (!host) return;
+    const current = sel?.value || "";
+    // Counts from current filters except status.
+    const prev = sel ? sel.value : "";
+    if (sel) sel.value = "";
+    const { rows } = filteredBoardRows();
+    if (sel) sel.value = prev;
+    const counts = countByStatus(rows);
+    const map = {
+      "": counts.total,
+      draft: counts.draft,
+      suggested: counts.suggested,
+      final: counts.final,
+    };
+    host.querySelectorAll("[data-status]").forEach((btn) => {
+      const st = btn.getAttribute("data-status") || "";
+      btn.classList.toggle("is-on", st === current);
+      btn.setAttribute("aria-selected", st === current ? "true" : "false");
+      let n = btn.querySelector(".est-status-tab-n");
+      if (!n) {
+        n = document.createElement("span");
+        n.className = "est-status-tab-n";
+        btn.appendChild(n);
+      }
+      n.textContent = String(map[st] != null ? map[st] : 0);
+    });
   }
 
   function renderBoard() {
     const { rows, tabTotal } = filteredBoardRows();
     renderBoardSummary(rows, tabTotal);
+    syncStatusFilterTabs();
 
     const list = $("boardList");
     const customBtn = $("btnAddCustomStructure");
@@ -697,7 +1005,7 @@
           <button type="button" class="est-family-head" data-family-toggle="${escapeAttr(fk)}">
             <span class="est-family-chevron" aria-hidden="true">${expanded ? "▾" : "▸"}</span>
             <span class="est-family-title">${escapeHtml(familyHeading(fk, sample))}</span>
-            <span class="est-family-meta">${famRows.length} kits · ${s.final || 0} final · ${s.draft || 0} draft</span>
+            <span class="est-family-meta">${famRows.length} kits · ${s.final || 0} final · ${s.suggested || 0} suggested · ${s.draft || 0} draft</span>
             <span class="est-family-poles">${poleSet
               .map((t) => `<span class="est-pole-chip">${escapeHtml(t)}</span>`)
               .join("")}</span>
@@ -995,12 +1303,17 @@
     }
     const pill = $("editorStatusPill");
     if (pill) {
-      const empty = !(kit.lines || []).length;
-      const final = !!kit.complete;
-      pill.textContent = empty ? "Empty" : final ? "Final" : "Draft";
+      const st = kitStatus(kit);
+      pill.textContent = statusLabel(st);
       pill.className =
         "ed-status-pill" +
-        (final ? " is-final" : empty ? " is-empty" : "");
+        (st === "final"
+          ? " is-final"
+          : st === "suggested"
+            ? " is-suggested"
+            : st === "empty" || st === "off"
+              ? " is-empty"
+              : " is-draft");
     }
     renderEditorPoleVariants(kit);
     $("kitEnabled").checked = !!state.draft.enabled;
@@ -1039,12 +1352,14 @@
     if (!btn) return;
     const L = window.SlmLicense;
     const licensedOff = !L || !L.enabled;
-    const can = licensedOff || !!(L && L.canSuggest());
-    btn.classList.toggle("hidden", !can);
-    btn.disabled = !can;
-    btn.title = can
+    // Approvers/admins edit + Mark Final directly — no suggest step.
+    const suggestorOnly =
+      !licensedOff && !!(L && L.canSuggest()) && !(L && L.canApprove());
+    btn.classList.toggle("hidden", !suggestorOnly);
+    btn.disabled = !suggestorOnly;
+    btn.title = suggestorOnly
       ? "Send this kit change for approval"
-      : "Needs can_suggest on your license";
+      : "Approvers save and Mark Final — suggestion not needed";
   }
 
   function updateEditorAuthUi() {
@@ -1071,7 +1386,7 @@
     if (saveBtn) {
       saveBtn.disabled = !canEdit;
       saveBtn.title = canEdit
-        ? "Save kit changes on this computer"
+        ? "Save a copy under Structures → My Kits on this PC"
         : "Needs Suggest or Approve on your license";
     }
   }
@@ -1107,7 +1422,7 @@
     const chips = $("estPermChips");
     let roleLabel = "Browse only";
     if (licensedOff) roleLabel = "Dev mode (licensing off) — all tools enabled";
-    else if (canApprove && canSuggest) roleLabel = "Admin — suggest, approve, publish";
+    else if (canApprove && canSuggest) roleLabel = "Admin — edit, approve, publish";
     else if (canApprove) roleLabel = "Approver — review suggestions & publish";
     else if (canSuggest) roleLabel = "Suggestor — edit kits & suggest changes";
     else roleLabel = "Viewer — browse catalog only";
@@ -1425,10 +1740,13 @@
   async function saveKit() {
     if (!state.activeKitId || !state.draft) return;
     const kit = state.kitsById[state.activeKitId];
+    const alreadyMine = isMyKit(kit);
     const ok = await window.SlmDialog.confirm({
-      title: "Save kit?",
-      message: `Save changes to “${kitTitle(kit)}”?`,
-      okLabel: "Save",
+      title: alreadyMine ? "Update My Kit?" : "Save on this PC?",
+      message: alreadyMine
+        ? `Update “${kitTitle(kit)}” under Structures → My Kits?`
+        : `Save “${kitTitle(kit)}”?\n\nA copy will appear under Structures → My Kits on this computer.`,
+      okLabel: alreadyMine ? "Update" : "Save to My Kits",
     });
     if (!ok) return;
     kit.enabled = $("kitEnabled").checked;
@@ -1448,12 +1766,22 @@
       toast("Add items before marking Final");
       return;
     }
+    if (alreadyMine) kit.myKit = true;
+    const copy = upsertMyKitCopy(kit);
     saveEdits();
     state.draft._dirty = false;
     renderStats();
     renderEditorSummary();
-    toast(kit.complete ? "Saved · Final" : "Saved · Draft");
-    notifySoloParent("slm_kit_solo_saved", { complete: !!kit.complete });
+    const statusBit = kit.complete ? "Final" : "Draft";
+    toast(
+      alreadyMine
+        ? `Updated My Kits · ${statusBit}`
+        : `Saved · ${statusBit} · copy in My Kits`
+    );
+    notifySoloParent("slm_kit_solo_saved", {
+      complete: !!kit.complete,
+      myKitId: copy?.id || null,
+    });
   }
 
   function seedConductor() {
@@ -2156,10 +2484,18 @@
     });
   }
 
+  function canApproveSuggestions() {
+    const L = window.SlmLicense;
+    if (!L || !L.enabled) return true;
+    return !!(L.canApprove() || state.serverCanApprove);
+  }
+
   function canUseSuggestionsUi() {
     const L = window.SlmLicense;
-    if (!L || !L.enabled) return false;
-    return !!(L.canSuggest() || L.canApprove());
+    // Local/dev (licensing off): always show inbox for testing.
+    if (!L || !L.enabled) return true;
+    // Approvers review; suggestors can open inbox to track their sends.
+    return !!(L.canSuggest() || L.canApprove() || state.serverCanApprove);
   }
 
   function updateSuggestionsTabVisibility() {
@@ -2489,10 +2825,21 @@
     }
     // Prefer draft (unsaved) so user can suggest without local Save.
     // Suggestions never set Final — only you mark Final after Accept.
+    const poleTok = String(
+      state.draft.activePoleToken || activePoleFilter() || kit.poleToken || ""
+    ).trim();
+    const poleVariant = (kit.poleVariants || []).find(
+      (v) => v.poleToken === poleTok
+    );
     const proposed = {
       enabled: $("kitEnabled")?.checked ?? !!state.draft.enabled,
       complete: false,
       notes: ($("kitNotes")?.value || state.draft.notes || "").trim(),
+      poleToken: poleTok,
+      poleMaterial: String(
+        (poleVariant && (poleVariant.poleLabel || poleVariant.poleMaterial)) ||
+          ""
+      ).trim(),
       lines: (state.draft.lines || []).map((l) => ({
         code: l.code,
         qty: Number(l.qty) || 0,
@@ -2515,13 +2862,21 @@
       return;
     }
     const message = String(messageRaw || "").trim();
+    const suggestLabel = kitTitle(
+      Object.assign({}, kit, {
+        poleToken: poleTok || kit.poleToken,
+        activePoleToken: poleTok || kit.poleToken,
+        _poleToken: poleTok,
+        _poleMaterial: proposed.poleMaterial,
+      })
+    );
     const btn = $("btnSuggestKit");
     if (btn) btn.disabled = true;
     try {
       const json = await catalogPost("/functions/v1/catalog-suggest", {
         kit_id: kit.id,
         kit_family: kit.family,
-        kit_label: kitTitle(kit),
+        kit_label: suggestLabel,
         base_version_label: String(state.matrix?.seedVersion ?? state.matrix?.version ?? ""),
         proposed,
         message,
@@ -2530,7 +2885,19 @@
         toast(`Suggest failed: ${json.error || "unknown"}`);
         return;
       }
-      toast("Suggestion sent for review");
+      markKitPending(kit.id, {
+        poleToken: proposed.poleToken,
+        poleMaterial: proposed.poleMaterial,
+        label: suggestLabel,
+      });
+      toast("Suggestion sent — kit marked Suggested until reviewed");
+      refreshActiveKitStatusPill();
+      renderBoard();
+      renderStats();
+      notifySoloParent("slm_kit_solo_suggested", {
+        pending: true,
+        poleToken: proposed.poleToken,
+      });
       refreshPendingBadge();
     } catch (err) {
       console.error(err);
@@ -2541,14 +2908,23 @@
   }
 
   async function refreshPendingBadge() {
-    if (!window.SlmLicense?.canApprove() && !window.SlmLicense?.canSuggest()) return;
+    const L = window.SlmLicense;
+    if (L?.enabled && !L.canApprove() && !L.canSuggest()) return;
+    if (!L?.enabled) return;
     try {
       const json = await catalogPost("/functions/v1/catalog-suggestions-list", {
         status: "pending",
       });
       if (json.ok) {
+        if (json.can_approve != null) state.serverCanApprove = !!json.can_approve;
         state.pendingSuggestionCount = json.pending_count ?? (json.suggestions || []).length;
+        setPendingKitsFromSuggestions(json.suggestions || []);
         updateSuggestionsTabVisibility();
+        refreshActiveKitStatusPill();
+        if (state.tab === "structure" || state.tab === "conductor" || state.tab === "addon") {
+          renderBoard();
+          renderStats();
+        }
       }
     } catch (_) {
       /* ignore */
@@ -2576,14 +2952,33 @@
         list.innerHTML = `<div class="est-empty">Failed: ${escapeHtml(json.error || "unknown")}</div>`;
         return;
       }
+      if (json.can_approve != null) state.serverCanApprove = !!json.can_approve;
       state.suggestions = json.suggestions || [];
       state.pendingSuggestionCount = json.pending_count ?? 0;
+      // Keep pending-kit map in sync even when filter is not "pending".
+      if (status === "pending" || !status) {
+        setPendingKitsFromSuggestions(
+          (json.suggestions || []).filter((s) => s.status === "pending")
+        );
+      } else {
+        await refreshPendingBadge();
+      }
       updateSuggestionsTabVisibility();
+      // Auto-select first row so Accept / Reject actions are visible immediately.
+      if (
+        !state.selectedSuggestionId ||
+        !state.suggestions.some((s) => s.id === state.selectedSuggestionId)
+      ) {
+        state.selectedSuggestionId = state.suggestions[0]?.id || null;
+      }
       renderSuggestionList();
-      if (state.selectedSuggestionId) {
-        const still = state.suggestions.find((s) => s.id === state.selectedSuggestionId);
-        if (still) renderSuggestionDetail(still);
-        else state.selectedSuggestionId = null;
+      refreshActiveKitStatusPill();
+      renderBoard();
+      renderStats();
+      const still = state.suggestions.find((s) => s.id === state.selectedSuggestionId);
+      if (still) renderSuggestionDetail(still);
+      else if (detail) {
+        detail.innerHTML = `<p class="ed-help muted">No suggestions in this filter.</p>`;
       }
     } catch (err) {
       console.error(err);
@@ -2599,22 +2994,21 @@
       list.innerHTML = `<div class="est-empty">No suggestions in this filter.</div>`;
       return;
     }
-    const canApprove = !!(window.SlmLicense && window.SlmLicense.canApprove());
     list.innerHTML = rows
       .map((s) => {
         const active = s.id === state.selectedSuggestionId ? " active" : "";
+        const st = s.status || "pending";
         const lines = Array.isArray(s.proposed?.lines) ? s.proposed.lines.length : 0;
         return `
-        <button type="button" class="sug-row${active}" data-sug-id="${escapeAttr(s.id)}">
+        <button type="button" class="sug-row status-${escapeAttr(st)}${active}" data-sug-id="${escapeAttr(s.id)}">
           <div class="sug-row-top">
             <strong>${escapeHtml(s.kit_label || s.kit_id)}</strong>
-            <span class="est-chip ${s.status}">${escapeHtml(s.status)}</span>
+            <span class="est-chip ${escapeAttr(st)}" title="${escapeAttr(suggestionStatusLabel(st))}">${escapeHtml(suggestionStatusLabel(st))}</span>
           </div>
           <div class="sug-row-meta">
             ${escapeHtml(s.submitter_code || "—")} · ${lines} lines
             ${s.message ? " · " + escapeHtml(s.message.slice(0, 80)) : ""}
           </div>
-          ${canApprove && s.status === "pending" ? "" : ""}
         </button>`;
       })
       .join("");
@@ -2666,42 +3060,56 @@
     const kit = state.kitsById[s.kit_id];
     const currentLines = kit?.lines || [];
     const proposed = s.proposed || {};
-    const canApprove =
-      !!(window.SlmLicense && window.SlmLicense.canApprove()) && s.status === "pending";
+    const canApprove = canApproveSuggestions() && s.status === "pending";
     detail.innerHTML = `
+      ${
+        canApprove
+          ? `<div class="sug-detail-actions sug-detail-actions-bar">
+                <button type="button" class="est-btn est-btn-primary" id="btnAcceptFinalSug">Accept as Final</button>
+                <button type="button" class="est-btn est-btn-ghost" id="btnAcceptSug">Accept as Draft</button>
+                <button type="button" class="est-btn est-btn-danger" id="btnRejectSug">Reject</button>
+              </div>`
+          : s.status === "pending"
+            ? `<p class="sug-flow-note sug-flow-pending">Waiting for an approver (needs can_approve on license).</p>`
+            : ""
+      }
       <div class="sug-detail-head">
         <div>
           <h3>${escapeHtml(s.kit_label || s.kit_id)}</h3>
           <p class="ed-help">
             From <strong>${escapeHtml(s.submitter_code || "—")}</strong>
-            · ${escapeHtml(s.status)}
-            · kit <code>${escapeHtml(s.kit_id)}</code>
-            ${!kit ? " · <em>kit not in local matrix</em>" : ""}
+            · <span class="est-chip ${escapeAttr(s.status || "")}">${escapeHtml(suggestionStatusLabel(s.status))}</span>
           </p>
+          ${
+            s.status === "accepted"
+              ? `<p class="sug-flow-note sug-flow-accepted">Merged into the kit. Publish to app when ready for phones.</p>`
+              : s.status === "pending" && canApprove
+                ? `<p class="sug-flow-note sug-flow-pending">Review the diff, then Accept or Reject.</p>`
+                : s.status === "rejected"
+                  ? `<p class="sug-flow-note sug-flow-rejected">Rejected — kit was not changed.</p>`
+                  : ""
+          }
           ${s.message ? `<p class="sug-message">${escapeHtml(s.message)}</p>` : ""}
-          ${s.review_note ? `<p class="sug-message">Review note: ${escapeHtml(s.review_note)}</p>` : ""}
+          ${s.review_note ? `<p class="sug-message">Note: ${escapeHtml(s.review_note)}</p>` : ""}
         </div>
-        ${
-          canApprove
-            ? `<div class="sug-detail-actions">
-                <button type="button" class="est-btn est-btn-ghost" id="btnRejectSug">Reject</button>
-                <button type="button" class="est-btn est-btn-primary" id="btnAcceptSug">Accept into maker</button>
-              </div>`
-            : ""
-        }
       </div>
       <div class="sug-diff">${linesDiffHtml(currentLines, proposed.lines || [])}</div>
     `;
-    $("btnAcceptSug")?.addEventListener("click", () => reviewSuggestion(s.id, "accept"));
+    $("btnAcceptFinalSug")?.addEventListener("click", () =>
+      reviewSuggestion(s.id, "accept", { asFinal: true })
+    );
+    $("btnAcceptSug")?.addEventListener("click", () =>
+      reviewSuggestion(s.id, "accept", { asFinal: false })
+    );
     $("btnRejectSug")?.addEventListener("click", () => reviewSuggestion(s.id, "reject"));
   }
 
-  function applyProposedToKit(kitId, proposed) {
+  function applyProposedToKit(kitId, proposed, opts) {
     const kit = state.kitsById[kitId];
     if (!kit || !proposed) return false;
+    const asFinal = !!(opts && opts.asFinal);
     kit.enabled = proposed.enabled !== false;
-    // Accepted suggestion → Draft until you tick Final yourself.
-    kit.complete = false;
+    kit.complete = asFinal;
     kit.notes = String(proposed.notes || "");
     kit.lines = Array.isArray(proposed.lines)
       ? proposed.lines.map((l) => ({
@@ -2710,12 +3118,15 @@
           type: l.type,
         }))
       : [];
+    if (asFinal && !kit.lines.length) kit.complete = false;
+    upsertMyKitCopy(kit);
     saveEdits();
     return true;
   }
 
-  async function reviewSuggestion(id, action) {
-    if (!window.SlmLicense?.canApprove()) {
+  async function reviewSuggestion(id, action, opts) {
+    opts = opts || {};
+    if (!canApproveSuggestions()) {
       toast("Your license cannot approve");
       return;
     }
@@ -2731,11 +3142,13 @@
       if (note === null) return;
       review_note = String(note || "").trim();
     } else {
+      const asFinal = !!opts.asFinal;
       const ok = await window.SlmDialog.confirm({
-        title: "Accept into maker?",
-        message:
-          "Merge this suggestion into your local kit edits. Phones update only after Publish to app.",
-        okLabel: "Accept & merge",
+        title: asFinal ? "Accept as Final?" : "Accept as Draft?",
+        message: asFinal
+          ? "Merge into the kit and mark Final. Phones update only after Publish to app."
+          : "Merge into the kit as Draft. You can Mark Final later.",
+        okLabel: asFinal ? "Accept as Final" : "Accept as Draft",
       });
       if (!ok) return;
     }
@@ -2750,11 +3163,25 @@
         return;
       }
       if (action === "accept") {
-        const ok = applyProposedToKit(json.kit_id, json.proposed);
-        toast(ok ? "Merged as Draft — tick Final when you’re happy" : "Accepted (kit missing locally)");
+        const ok = applyProposedToKit(json.kit_id, json.proposed, {
+          asFinal: !!opts.asFinal,
+        });
+        clearKitPending(json.kit_id);
+        toast(
+          ok
+            ? opts.asFinal
+              ? "Accepted as Final — Publish when ready"
+              : "Accepted as Draft"
+            : "Accepted (kit missing locally)"
+        );
         renderStats();
+        renderBoard();
+        refreshActiveKitStatusPill();
       } else {
+        clearKitPending(json.kit_id);
         toast("Suggestion rejected");
+        renderBoard();
+        refreshActiveKitStatusPill();
       }
       state.selectedSuggestionId = null;
       await loadSuggestions();
@@ -2989,6 +3416,7 @@
     if (window.SlmLicense) {
       await window.SlmLicense.ensureLicensed();
     }
+    loadPendingKitIdsFromStorage();
 
     const [ratebook, matrix] = await Promise.all([
       fetch("./ratebook.json").then((r) => r.json()),
@@ -3043,10 +3471,22 @@
       tab.addEventListener("click", () => showTab(tab.dataset.tab));
     });
     ["boardSearch", "filterVoltage", "filterStructure", "filterConductor", "filterWire", "filterDtrCapacity", "filterLocation", "filterArrangement", "filterExtension", "filterPole", "filterStatus", "filterOrigin", "boardViewMode"].forEach((id) => {
-      const el = $(id);
-      if (!el) return;
-      el.addEventListener("input", renderBoard);
-      el.addEventListener("change", renderBoard);
+      $(id)?.addEventListener("input", () => {
+        if (id !== "boardViewMode") state.expandedFamilies.clear();
+        renderBoard();
+      });
+      $(id)?.addEventListener("change", () => {
+        if (id !== "boardViewMode") state.expandedFamilies.clear();
+        renderBoard();
+      });
+    });
+    $("statusFilterTabs")?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-status]");
+      if (!btn) return;
+      const sel = $("filterStatus");
+      if (sel) sel.value = btn.getAttribute("data-status") || "";
+      state.expandedFamilies.clear();
+      renderBoard();
     });
     $("filterShowDtr")?.addEventListener("change", renderBoard);
     $("btnCloseEditor").addEventListener("click", () => closeEditor());
@@ -3114,12 +3554,7 @@
         if ($("kitComplete")) $("kitComplete").checked = state.draft.complete;
         markDraftDirty();
         renderEditorSummary();
-        const pill = $("editorStatusPill");
-        if (pill) {
-          pill.textContent = state.draft.complete ? "Final" : "Draft";
-          pill.className =
-            "ed-status-pill" + (state.draft.complete ? " is-final" : "");
-        }
+        refreshActiveKitStatusPill();
       }
     });
     $("kitComplete")?.addEventListener("change", () => {

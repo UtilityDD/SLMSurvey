@@ -754,6 +754,36 @@
 
     openKitModal._kitId = live.id;
 
+    function isPendingSuggested(kitId) {
+      try {
+        var raw = JSON.parse(
+          localStorage.getItem("slm_pending_kit_suggestions_v1") || "{}"
+        );
+        var meta = raw[String(kitId)];
+        if (!meta) return false;
+        // Map modal is kit-level (one recipe); any pending on id counts.
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    var st = "empty";
+    if (live.enabled === false) st = "off";
+    else if (isPendingSuggested(live.id)) st = "suggested";
+    else if ((live.lines || []).length && live.complete) st = "final";
+    else if ((live.lines || []).length) st = "draft";
+    var stLabel =
+      st === "final"
+        ? "Final"
+        : st === "suggested"
+          ? "Suggested"
+          : st === "draft"
+            ? "Draft"
+            : st === "off"
+              ? "Off"
+              : "Empty";
+
     if (editing) {
       root.innerHTML =
         '<div class="dk-modal-card dk-kit-edit-card">' +
@@ -778,15 +808,27 @@
         '<div class="dk-modal-card dk-modal-wide dk-kit-view-card">' +
         '<div class="dk-modal-head">' +
         '<div class="dk-modal-head-text">' +
+        '<div class="dk-kit-view-title-row">' +
         "<h2>" +
         esc(title) +
-        "</h2>" +
+        '</h2><span class="dk-st-status dk-st-status-' +
+        st +
+        '">' +
+        esc(stLabel) +
+        "</span></div>" +
         '<p class="dk-modal-sub">' +
         esc(live.id || "") +
         " · " +
         lines.length +
         " line" +
         (lines.length === 1 ? "" : "s") +
+        (st === "draft"
+          ? " · Draft until Final"
+          : st === "suggested"
+            ? " · Suggestion pending review"
+            : st === "final"
+              ? " · Finalized"
+              : "") +
         "</p>" +
         "</div>" +
         '<button type="button" class="dk-icon-btn" id="dkKitClose" title="Close">×</button>' +
@@ -851,7 +893,8 @@
         if (!ev.data) return;
         if (
           ev.data.type !== "slm_kit_solo_done" &&
-          ev.data.type !== "slm_kit_solo_saved"
+          ev.data.type !== "slm_kit_solo_saved" &&
+          ev.data.type !== "slm_kit_solo_suggested"
         ) {
           return;
         }
@@ -860,6 +903,9 @@
         if (ev.data.type === "slm_kit_solo_saved") {
           Desk.toast("Kit saved");
           return;
+        }
+        if (ev.data.type === "slm_kit_solo_suggested") {
+          Desk.toast("Suggestion sent — marked Suggested");
         }
         var id = ev.data.kitId || openKitModal._kitId;
         if (!id) return;
