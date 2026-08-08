@@ -956,7 +956,15 @@
 
     const list = $("boardList");
     const customBtn = $("btnAddCustomStructure");
-    if (customBtn) customBtn.classList.toggle("hidden", state.tab !== "structure");
+    if (customBtn) {
+      const L = window.SlmLicense;
+      const canEdit =
+        !L || !L.enabled || !!(L.canEditKits && L.canEditKits());
+      customBtn.classList.toggle(
+        "hidden",
+        !canEdit || state.tab !== "structure"
+      );
+    }
 
     if (!rows.length) {
       list.innerHTML = `<div class="est-empty">No kits match. Clear search or adjust filters.</div>`;
@@ -1267,7 +1275,7 @@
     const licensedOff = !L || !L.enabled;
     const canEdit = licensedOff || !!(L.canEditKits && L.canEditKits());
     if (!canEdit) {
-      toast("Your license cannot edit kits (needs Suggest or Approve)");
+      toast("View-only license — kit editing is not available");
       return;
     }
     state.activeKitId = kitId;
@@ -1370,6 +1378,7 @@
     const finalWrap = $("kitFinalWrap");
     const finalBox = $("kitFinal");
     if (finalWrap) {
+      finalWrap.classList.toggle("hidden", !canEdit);
       finalWrap.classList.toggle("is-locked", !canApprove);
       finalWrap.title = canApprove
         ? "Mark ready for estimates (approvers)"
@@ -1384,11 +1393,22 @@
     }
     const saveBtn = $("btnSaveKit");
     if (saveBtn) {
+      saveBtn.classList.toggle("hidden", !canEdit);
       saveBtn.disabled = !canEdit;
       saveBtn.title = canEdit
         ? "Save a copy under Structures → My Kits on this PC"
         : "Needs Suggest or Approve on your license";
     }
+    // Hide Add Items tab for view-only licenses.
+    document.querySelectorAll('.ed-view-tab[data-ed-view="add"]').forEach((tab) => {
+      tab.classList.toggle("hidden", !canEdit);
+    });
+    if (!canEdit) {
+      $("edMorePanel")?.classList.add("hidden");
+      if (state.editorView === "add") setEditorView("review");
+    }
+    const moreBtn = $("btnEdMore");
+    if (moreBtn) moreBtn.classList.toggle("hidden", !canEdit);
   }
 
   function setBtnEnabled(el, enabled, whenOffTitle, whenOnTitle) {
@@ -1397,6 +1417,11 @@
     el.classList.toggle("is-disabled", !enabled);
     if (!enabled && whenOffTitle) el.title = whenOffTitle;
     else if (enabled && whenOnTitle) el.title = whenOnTitle;
+  }
+
+  function setElHidden(el, hidden) {
+    if (!el) return;
+    el.classList.toggle("hidden", !!hidden);
   }
 
   function hasPublishKeyConfigured() {
@@ -1417,6 +1442,7 @@
     const canEditKits = licensedOff ? true : !!(L && L.canEditKits && L.canEditKits());
     // Dev mode (no Supabase): treat as full admin for local testing.
     const canPublish = licensedOff ? true : canApprove;
+    const isViewer = !licensedOff && !canEditKits;
 
     const roleEl = $("estPermRole");
     const chips = $("estPermChips");
@@ -1437,6 +1463,28 @@
         <span class="est-chip ${canApprove ? "complete" : "disabled"}">Approve ${canApprove ? "ON" : "OFF"}</span>
         <span class="est-chip ${canPublish ? "complete" : "disabled"}">Publish ${canPublish ? "ON" : "OFF"}</span>
       `;
+    }
+
+    // Simple viewers: hide edit/suggest menus entirely (not merely disabled).
+    setElHidden($("btnExportKits"), isViewer);
+    setElHidden($("btnImportKits"), isViewer);
+    setElHidden($("btnResetKits"), isViewer);
+    setElHidden($("btnPublishCatalog"), isViewer || !canPublish);
+    setElHidden($("btnAddCustomStructure"), isViewer || state.tab !== "structure");
+    document.querySelectorAll(".est-status-tab.is-draft, .est-status-tab.is-suggested").forEach((tab) => {
+      setElHidden(tab, isViewer);
+    });
+    if (isViewer) {
+      const sel = $("filterStatus");
+      const cur = sel ? sel.value : "";
+      if (cur === "draft" || cur === "suggested") {
+        if (sel) sel.value = "";
+        document.querySelectorAll(".est-status-tab").forEach((t) => t.classList.remove("is-on"));
+        const allTab = document.querySelector('.est-status-tab[data-status=""]');
+        if (allTab) allTab.classList.add("is-on");
+        renderBoard();
+        renderStats();
+      }
     }
 
     setBtnEnabled(

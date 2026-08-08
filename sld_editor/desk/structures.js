@@ -1226,18 +1226,22 @@
       lines.length +
       " lines · Pole " +
       esc(activePoleMaterial(k)) +
-      (kitPublishStatus(k) === "draft"
-        ? " · Draft until an approver marks Final"
-        : kitPublishStatus(k) === "suggested"
-          ? " · Suggestion pending review"
-          : kitPublishStatus(k) === "final"
-            ? " · Finalized for estimate"
-            : "") +
+      (canEdit()
+        ? kitPublishStatus(k) === "draft"
+          ? " · Draft until an approver marks Final"
+          : kitPublishStatus(k) === "suggested"
+            ? " · Suggestion pending review"
+            : kitPublishStatus(k) === "final"
+              ? " · Finalized for estimate"
+              : ""
+        : kitPublishStatus(k) === "final"
+          ? " · Finalized for estimate"
+          : "") +
       "</p>" +
       '<div class="dk-st-detail-actions">' +
       (canEdit()
         ? '<button type="button" class="dk-btn dk-btn-primary" id="dkEditKit">Edit kit</button>'
-        : '<p class="dk-st-browse-only">Browse only on this license.</p>') +
+        : "") +
       "</div>" +
       (kitPublishStatus(k) === "suggested" && canApproveOnDesk()
         ? '<div class="dk-st-review-bar" id="dkReviewBar">' +
@@ -1446,10 +1450,22 @@
   function statusFilterTabsHtml(counts) {
     var tabs = [
       { id: "", label: "All", n: counts.all },
-      { id: "draft", label: "Draft", n: counts.draft },
-      { id: "suggested", label: "Suggested", n: counts.suggested },
       { id: "final", label: "Final", n: counts.final },
     ];
+    // Draft / Suggested are maker workflow — hide from simple viewers.
+    if (canEdit()) {
+      tabs.splice(
+        1,
+        0,
+        { id: "draft", label: "Draft", n: counts.draft },
+        { id: "suggested", label: "Suggested", n: counts.suggested }
+      );
+    } else if (
+      state.statusFilter === "draft" ||
+      state.statusFilter === "suggested"
+    ) {
+      state.statusFilter = "";
+    }
     return (
       '<div class="dk-st-status-tabs" role="tablist" aria-label="Kit status filter">' +
       tabs

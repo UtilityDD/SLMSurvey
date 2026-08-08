@@ -196,7 +196,10 @@
 
   Desk.register("rates", {
     tools: function () {
-      return [
+      var L = global.SlmLicense;
+      var canRules =
+        !L || !L.enabled || !!(L.canApprove && L.canApprove());
+      var items = [
         {
           label: "Materials",
           active: state.tab === "materials",
@@ -224,7 +227,9 @@
             Desk.refresh();
           },
         },
-        {
+      ];
+      if (canRules) {
+        items.push({
           label: "Phone rules",
           active: state.tab === "rules",
           onClick: function () {
@@ -235,8 +240,11 @@
             }
             Desk.refresh();
           },
-        },
-      ];
+        });
+      } else if (state.tab === "rules") {
+        state.tab = "materials";
+      }
+      return items;
     },
     render: render,
   });
